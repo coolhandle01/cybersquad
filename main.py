@@ -22,6 +22,7 @@ import argparse
 import logging
 import os
 import sys
+from typing import Any
 
 try:
     from dotenv import load_dotenv
@@ -67,7 +68,7 @@ def check_env() -> None:
         sys.exit(1)
 
 
-def dry_run_summary(crew: object) -> None:
+def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     """Print a human-readable summary of the crew without executing."""
     print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("  BOUNTY SQUAD — DRY RUN  ")

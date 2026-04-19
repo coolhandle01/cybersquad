@@ -122,4 +122,21 @@ Three jobs run on every push:
 - **test** — `pytest -m unit` with 70% coverage floor
 - **sast** — `bandit`, `semgrep`
 
-`ruff check --fix` and `ruff format` resolve most lint issues automatically. For type errors, check that new functions have annotated parameters and return types. For bandit S-rule suppressions, use `# noqa: S<code>` only when the finding is a genuine false positive and add a comment explaining why.
+**Run all three locally before pushing:**
+
+```bash
+# Lint
+ruff check . && ruff format --check . && mypy . --ignore-missing-imports
+
+# Tests
+H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit --cov --cov-report=term-missing
+
+# SAST (install once: pip install bandit[toml])
+bandit -c pyproject.toml -r . -q
+```
+
+`ruff check --fix` and `ruff format` resolve most lint issues automatically. For mypy errors, ensure all public functions have annotated parameters and return types. For bandit findings, suppress with `# nosec B<code>` (not `# noqa`) and keep the accompanying `# noqa: S<code>` for ruff — both are needed:
+
+```python
+os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108
+```

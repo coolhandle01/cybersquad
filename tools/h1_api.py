@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import cast
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -82,13 +83,13 @@ class H1Client:
         url = f"{self._base}{path}"
         resp = self._session.get(url, params=params, timeout=30)
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict, resp.json())
 
     def _post(self, path: str, payload: dict) -> dict:
         url = f"{self._base}{path}"
         resp = self._session.post(url, json=payload, timeout=30)
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict, resp.json())
 
     # ------------------------------------------------------------------
     # Programme discovery

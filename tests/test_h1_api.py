@@ -157,3 +157,48 @@ class TestSubmitReport:
                 status = h1_client.get_report_status("12345")
 
             assert status == expected, f"State '{h1_state}' should map to {expected}"
+
+
+class TestListProgrammes:
+    def test_paginates_until_max(self, h1_client):
+        page1 = {
+            "data": [{"id": f"p{i}", "attributes": {"handle": f"h{i}"}} for i in range(5)],
+            "links": {"next": "/programs?page=2"},
+        }
+        page2 = {
+            "data": [{"id": f"p{i}", "attributes": {"handle": f"h{i}"}} for i in range(5, 10)],
+            "links": {},
+        }
+        responses = [MagicMock(), MagicMock()]
+        responses[0].json.return_value = page1
+        responses[1].json.return_value = page2
+        for r in responses:
+            r.raise_for_status = MagicMock()
+
+        with patch.object(h1_client._session, "get", side_effect=responses):
+            result = h1_client.list_programmes(page_size=5)
+
+        assert len(result) <= 10
+        assert result[0]["id"] == "p0"
+
+    def test_get_programme_policy_hits_endpoint(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": {"attributes": {"handle": "acme"}}}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
+            result = h1_client.get_programme_policy("acme")
+
+        assert result == {"data": {"attributes": {"handle": "acme"}}}
+        assert "/programs/acme" in mock_get.call_args[0][0]
+
+    def test_get_structured_scope_hits_endpoint(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": []}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
+            result = h1_client.get_structured_scope("acme")
+
+        assert result == {"data": []}
+        assert "/programs/acme/structured_scopes" in mock_get.call_args[0][0]

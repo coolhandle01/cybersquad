@@ -43,7 +43,7 @@ def recon_tool(programme_handle: str) -> dict:
     scope = h1.get_structured_scope(programme_handle)
     programme = h1.parse_programme(policy["data"], scope)
     result = run_recon(programme)
-    return result.model_dump()
+    return result.model_dump()  # type: ignore[no-any-return]
 
 
 @tool("Run Penetration Test")
@@ -85,7 +85,7 @@ def submit_report_tool(report_json: str) -> dict:
     report = DisclosureReport.model_validate_json(report_json)
     save_report(report)
     result = h1.submit_report(report)
-    return result.model_dump()
+    return result.model_dump()  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

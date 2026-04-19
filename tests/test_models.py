@@ -53,7 +53,7 @@ class TestScopeItem:
         with pytest.raises(ValidationError):
             ScopeItem(
                 asset_identifier="https://example.com",
-                asset_type="not_a_real_type",  # type: ignore[arg-type]
+                asset_type="not_a_real_type",
             )
 
 
