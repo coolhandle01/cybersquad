@@ -1,0 +1,130 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bounty-squad"
+version = "0.1.0"
+description = "Autonomous bug bounty pipeline powered by CrewAI"
+requires-python = ">=3.11"
+dependencies = [
+    "crewai>=0.80.0",
+    "crewai-tools>=0.15.0",
+    "langchain-anthropic>=0.3.0",
+    "pydantic>=2.7.0",
+    "requests>=2.32.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.14",
+    "respx>=0.21",          # mock httpx/requests at transport level
+
+    # Linting & formatting
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-requests>=2.32",
+
+    # SAST
+    "bandit[toml]>=1.7",
+    "semgrep>=1.75",
+]
+
+[project.scripts]
+bounty-squad = "main:main"
+
+[tool.setuptools]
+packages = ["tools"]
+py-modules = ["config", "models", "agents", "tasks", "crew", "main"]
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-q",
+]
+markers = [
+    "unit: fast, no I/O, no external calls",
+    "integration: hits real APIs or binaries (skipped in CI by default)",
+]
+
+# ── coverage ──────────────────────────────────────────────────────────────────
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", ".venv/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+# ── ruff ──────────────────────────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear (common footguns)
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade (modernise syntax)
+    "S",    # flake8-bandit (security — basic layer)
+    "ANN",  # flake8-annotations (type hints)
+]
+ignore = [
+    "S101",    # use of assert (fine in tests)
+    "S603",    # subprocess call — we call binaries intentionally
+    "S607",    # partial path in subprocess — binaries found via shutil.which
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "S"]   # relax annotations and security rules in tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ── mypy ──────────────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.11"
+strict = false                 # enable gradually; flip per-module as coverage grows
+warn_unused_ignores = true
+warn_return_any = true
+ignore_missing_imports = true  # crewai stubs aren't published yet
+disallow_untyped_defs = true
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ── bandit ────────────────────────────────────────────────────────────────────
+
+[tool.bandit]
+targets = ["."]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    "B404",  # import subprocess — we use it intentionally for binary wrappers
+    "B603",  # subprocess without shell=True — correct, we never use shell=True
+    "B607",  # partial executable path — resolved via shutil.which before call
+]
+severity = "medium"
+confidence = "medium"
