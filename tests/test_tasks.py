@@ -14,6 +14,22 @@ from tasks import _PROMPTS_DIR, _load, build_tasks  # noqa: E402
 pytestmark = pytest.mark.unit
 
 
+class _FakeTask:
+    """Drop-in stand-in for crewai.Task that skips pydantic validation."""
+
+    def __init__(
+        self,
+        description: str,
+        expected_output: str,
+        agent: object,
+        context: list | None = None,
+    ) -> None:
+        self.description = description
+        self.expected_output = expected_output
+        self.agent = agent
+        self.context = context or []
+
+
 class TestLoad:
     def test_returns_description_and_output(self) -> None:
         desc, out = _load("programme-manager.md")
@@ -28,7 +44,9 @@ class TestLoad:
             assert desc, f"{path.name} has empty description"
             assert out, f"{path.name} has empty expected_output"
 
-    def test_missing_separator_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_missing_separator_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         bad = tmp_path / "bad.md"
         bad.write_text("just a description, no separator")
         monkeypatch.setattr("tasks._PROMPTS_DIR", tmp_path)
@@ -48,17 +66,20 @@ class TestBuildTasks:
         ]
         return {role: MagicMock(name=role) for role in roles}
 
-    def test_returns_six_tasks_in_order(self) -> None:
+    def test_returns_six_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("tasks.Task", _FakeTask)
         tasks = build_tasks(self._agents())
         assert len(tasks) == 6
 
-    def test_each_task_has_description_and_output(self) -> None:
+    def test_each_task_has_description_and_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("tasks.Task", _FakeTask)
         tasks = build_tasks(self._agents())
         for task in tasks:
             assert task.description
             assert task.expected_output
 
-    def test_context_chaining_wired(self) -> None:
+    def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("tasks.Task", _FakeTask)
         tasks = build_tasks(self._agents())
         select, recon, pentest, triage, write, submit = tasks
         assert recon.context == [select]
