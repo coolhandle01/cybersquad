@@ -80,14 +80,16 @@ Use `StrEnum` (not `(str, Enum)`) for string enumerations — ruff rule UP042 en
 
 ### Agents
 
-Always construct the LLM explicitly:
+Always construct the LLM explicitly using `crewai.LLM`:
 
 ```python
-from langchain_anthropic import ChatAnthropic
-llm = ChatAnthropic(model=config.llm.model, temperature=config.llm.temperature, max_tokens=config.llm.max_tokens)
+from crewai import LLM
+llm = LLM(model=config.llm.model, temperature=config.llm.temperature, max_tokens=config.llm.max_tokens)
 ```
 
-Passing a model name string to CrewAI's `Agent(llm=...)` silently ignores `temperature` and `max_tokens`.
+The model name must include the provider prefix for litellm routing, e.g.
+`anthropic/claude-sonnet-4-20250514`. Passing a bare model string directly to
+`Agent(llm=...)` silently ignores `temperature` and `max_tokens`.
 
 ### Prompts
 

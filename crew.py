@@ -6,8 +6,7 @@ Call build_crew() to get a fully wired crew, then crew.kickoff() to run it.
 
 from __future__ import annotations
 
-from crewai import Crew, Process
-from langchain_anthropic import ChatAnthropic
+from crewai import LLM, Crew, Process
 
 from config import config
 from squad import SquadMember
@@ -40,7 +39,7 @@ def build_crew(verbose: bool | None = None) -> Crew:
     """
     be_verbose = verbose if verbose is not None else config.verbose
 
-    llm = ChatAnthropic(  # type: ignore[call-arg]
+    llm = LLM(
         model=config.llm.model,
         temperature=config.llm.temperature,
         max_tokens=config.llm.max_tokens,
