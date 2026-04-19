@@ -46,10 +46,13 @@ Bounty Squad is a six-agent CrewAI pipeline that autonomously selects HackerOne 
 | `main.py` | CLI entrypoint. Calls `check_env()` before importing crew — keep it that way. |
 | `config.py` | All env-var reading lives here. Singleton: `from config import config`. |
 | `models.py` | Pydantic contracts between agents. Change these carefully — they cross agent boundaries. |
-| `agents.py` | Agent definitions + `@tool`-decorated wrappers. LLM is `ChatAnthropic`, not a string. |
-| `tasks.py` | Loads `prompts/*.md` and wires tasks to agents. Thin — keep it that way. |
-| `crew.py` | Assembles the `Crew`. No module-level side effects. |
-| `prompts/*.md` | One file per agent role. Split on `\n---\n`: description above, expected output below. |
+| `crew.py` | Assembles the `Crew`: builds LLM, agents, tasks, wires approval gates. No module-level side effects. |
+| `tasks.py` | Pipeline wiring — context dependencies and `CHECKPOINT_INDICES`. Thin — keep it that way. |
+| `squad/__init__.py` | `SquadMember` ABC. Default `build_agent()` reads `agent.md`; `build_task()` reads `prompt.md`. |
+| `squad/<member>/agent.md` | Role, goal, backstory — 3 sections separated by `---`. Edit to tune agent behaviour. |
+| `squad/<member>/prompt.md` | Task description and expected output — 2 sections separated by `---`. |
+| `squad/<member>/__init__.py` | Tool functions (`@tool`) + `SquadMember` subclass declaring `slug` and `tools`. |
+| `tools/approval.py` | `CliApprovalGate` and `make_approval_callback`. The two approval checkpoints are in `tasks.py`. |
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
 | `tools/recon_tools.py` | Wraps subfinder, httpx, nmap. Contains the scope guard. |
 | `tools/vuln_tools.py` | Wraps nuclei, sqlmap, custom checks. |
@@ -77,14 +80,16 @@ Use `StrEnum` (not `(str, Enum)`) for string enumerations — ruff rule UP042 en
 
 ### Agents
 
-Always construct the LLM explicitly:
+Always construct the LLM explicitly using `crewai.LLM`:
 
 ```python
-from langchain_anthropic import ChatAnthropic
-llm = ChatAnthropic(model=config.llm.model, temperature=config.llm.temperature, max_tokens=config.llm.max_tokens)
+from crewai import LLM
+llm = LLM(model=config.llm.model, temperature=config.llm.temperature, max_tokens=config.llm.max_tokens)
 ```
 
-Passing a model name string to CrewAI's `Agent(llm=...)` silently ignores `temperature` and `max_tokens`.
+The model name must include the provider prefix for litellm routing, e.g.
+`anthropic/claude-sonnet-4-20250514`. Passing a bare model string directly to
+`Agent(llm=...)` silently ignores `temperature` and `max_tokens`.
 
 ### Prompts
 
@@ -126,12 +131,13 @@ Coverage floor is 70%. Every new public function in `tools/` needs a test. Every
 
 ## Adding a new agent
 
-1. Define a new `@tool`-decorated function in `agents.py` (or a new file in `tools/`).
-2. Add a new `Agent(...)` entry to `build_agents()` in `agents.py`.
-3. Create `prompts/<role-name>.md` with description and expected output separated by `---`.
-4. Add a `Task(...)` to `build_tasks()` in `tasks.py`, wiring `context` dependencies.
-5. Add the task to the returned list in the correct pipeline position.
-6. Add unit tests covering the new tool's logic.
+1. Create `squad/<role-name>/` with three files:
+   - `__init__.py` — `@tool` functions + `SquadMember` subclass with `slug` and `tools`
+   - `agent.md` — role, goal, backstory (3 sections, `---` separated)
+   - `prompt.md` — task description, expected output (2 sections, `---` separated)
+2. Add the new class to `_SQUAD` in `crew.py`.
+3. Wire its task into `build_tasks()` in `tasks.py` with correct `context` dependencies.
+4. Add unit tests covering the new tool's logic.
 
 ---
 

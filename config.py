@@ -27,7 +27,7 @@ class LLMConfig:
     """LLM / CrewAI configuration."""
 
     model: str = field(
-        default_factory=lambda: os.getenv("CREWAI_MODEL", "claude-sonnet-4-20250514")
+        default_factory=lambda: os.getenv("CREWAI_MODEL", "anthropic/claude-sonnet-4-20250514")
     )
     temperature: float = field(
         default_factory=lambda: float(os.getenv("CREWAI_TEMPERATURE", "0.2"))

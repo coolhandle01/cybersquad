@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from crewai import Agent
+from typing import ClassVar
+
 from crewai.tools import tool
 
 from squad import SquadMember
@@ -23,25 +24,4 @@ def submit_report_tool(report_json: str) -> dict:
 
 class DisclosureCoordinator(SquadMember):
     slug = "disclosure_coordinator"
-
-    @classmethod
-    def build_agent(cls, llm: object, verbose: bool = False) -> Agent:
-        return Agent(
-            role="Disclosure Coordinator",
-            goal=(
-                "Submit finalised disclosure reports to HackerOne via the API, "
-                "confirm successful receipt, and log submission metadata for "
-                "tracking and follow-up."
-            ),
-            backstory=(
-                "You are a disclosure coordinator who has managed the responsible "
-                "disclosure lifecycle for over 300 vulnerabilities. You are calm "
-                "under pressure, precise with API payloads, and you maintain "
-                "meticulous records of every submission status. Nothing slips "
-                "through your process."
-            ),
-            tools=[submit_report_tool],
-            allow_delegation=False,
-            llm=llm,
-            verbose=verbose,
-        )
+    tools: ClassVar[list] = [submit_report_tool]

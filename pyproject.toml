@@ -10,10 +10,10 @@ requires-python = ">=3.11"
 dependencies = [
     "crewai>=0.80.0",
     "crewai-tools>=0.15.0",
-    "langchain-anthropic>=0.3.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
     "python-dotenv>=1.0.0",
+    "rich>=13.0",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +39,7 @@ bounty-squad = "main:main"
 
 [tool.setuptools]
 packages = ["tools"]
-py-modules = ["config", "models", "agents", "tasks", "crew", "main"]
+py-modules = ["config", "models", "tasks", "crew", "main"]
 
 # ── pytest ────────────────────────────────────────────────────────────────────
 

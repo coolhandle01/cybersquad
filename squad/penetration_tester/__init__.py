@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from crewai import Agent
+from typing import ClassVar
+
 from crewai.tools import tool
 
 from squad import SquadMember
@@ -24,25 +25,4 @@ def pentest_tool(recon_result_json: str) -> list[dict]:
 
 class PenetrationTester(SquadMember):
     slug = "penetration_tester"
-
-    @classmethod
-    def build_agent(cls, llm: object, verbose: bool = False) -> Agent:
-        return Agent(
-            role="Penetration Tester",
-            goal=(
-                "Execute targeted vulnerability scans across the discovered attack "
-                "surface, employing nuclei, sqlmap, and bespoke checks to surface "
-                "exploitable weaknesses whilst respecting rate limits and scope boundaries."
-            ),
-            backstory=(
-                "You are an offensive security engineer with certifications in OSCP, "
-                "CREST CRT, and eWPT. You approach every engagement methodically — "
-                "running the right tool for the right target — and you never fire a "
-                "payload at an asset that is out of scope. You are efficient, precise, "
-                "and deeply familiar with the OWASP Top 10."
-            ),
-            tools=[pentest_tool],
-            allow_delegation=False,
-            llm=llm,
-            verbose=verbose,
-        )
+    tools: ClassVar[list] = [pentest_tool]

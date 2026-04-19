@@ -6,11 +6,27 @@ Call build_crew() to get a fully wired crew, then crew.kickoff() to run it.
 
 from __future__ import annotations
 
-from crewai import Crew, Process
+from crewai import LLM, Crew, Process
 
-from agents import build_agents
 from config import config
-from tasks import build_tasks
+from squad import SquadMember
+from squad.disclosure_coordinator import DisclosureCoordinator
+from squad.osint_analyst import OsintAnalyst
+from squad.penetration_tester import PenetrationTester
+from squad.programme_manager import ProgrammeManager
+from squad.technical_author import TechnicalAuthor
+from squad.vulnerability_researcher import VulnerabilityResearcher
+from tasks import CHECKPOINT_INDICES, build_tasks
+from tools.approval import CliApprovalGate, make_approval_callback
+
+_SQUAD: list[type[SquadMember]] = [
+    ProgrammeManager,
+    OsintAnalyst,
+    PenetrationTester,
+    VulnerabilityResearcher,
+    TechnicalAuthor,
+    DisclosureCoordinator,
+]
 
 
 def build_crew(verbose: bool | None = None) -> Crew:
@@ -23,8 +39,15 @@ def build_crew(verbose: bool | None = None) -> Crew:
     """
     be_verbose = verbose if verbose is not None else config.verbose
 
-    agents = build_agents(verbose=be_verbose)
+    llm = LLM(
+        model=config.llm.model,
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
+    )
+    agents = {m.slug: m.build_agent(llm, be_verbose) for m in _SQUAD}
     tasks = build_tasks(agents)
+
+    approval_callback = make_approval_callback(CliApprovalGate(), CHECKPOINT_INDICES)
 
     return Crew(
         agents=list(agents.values()),
@@ -33,9 +56,5 @@ def build_crew(verbose: bool | None = None) -> Crew:
         verbose=be_verbose,
         memory=False,
         embedder=None,
+        task_callback=approval_callback,
     )
-
-
-# FIX: removed module-level `crew = build_crew()` — it ran at import time,
-# triggering env reads before main.py's check_env() had a chance to validate
-# required credentials and exit cleanly. Callers must use build_crew() directly.

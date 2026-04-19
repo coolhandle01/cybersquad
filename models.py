@@ -165,3 +165,47 @@ class SubmissionResult(BaseModel):
     h1_url: str | None = None
     submitted_at: datetime | None = None
     error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Operational metrics (emitted after every pipeline run)
+# ---------------------------------------------------------------------------
+
+
+class RunMetrics(BaseModel):
+    """Token usage, cost, and effectiveness summary for one pipeline run."""
+
+    run_id: str
+    started_at: datetime
+    completed_at: datetime
+    duration_seconds: float
+    llm_model: str
+    programme_handle: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+    findings_raw: int = 0
+    findings_verified: int = 0
+    submitted: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Benchmark targets (known-vulnerable environments for squad self-evaluation)
+# ---------------------------------------------------------------------------
+
+
+class BenchmarkTarget(BaseModel):
+    """A known-vulnerable target used to measure squad recall and precision.
+
+    Populate from benchmarks/*.json. Platforms: 'thm', 'htb', 'local'.
+    VPN/API access is the caller's responsibility — the squad treats the
+    base_url as a normal in-scope asset.
+    """
+
+    name: str
+    platform: str
+    base_url: str
+    known_vulnerabilities: list[str]
+    difficulty: str = "medium"
+    notes: str = ""

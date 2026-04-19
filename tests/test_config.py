@@ -91,3 +91,19 @@ class TestScanConfig:
 
         c = ScanConfig()
         assert c.sqlmap_output_dir == "/var/tmp/sqlmap"
+
+
+class TestAppConfig:
+    def test_reports_dir_configurable(self, monkeypatch):
+        monkeypatch.setenv("REPORTS_DIR", "/var/reports")
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.reports_dir == "/var/reports"
+
+    def test_verbose_defaults_false(self, monkeypatch):
+        monkeypatch.delenv("VERBOSE", raising=False)
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.verbose is False
