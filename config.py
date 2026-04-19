@@ -81,6 +81,9 @@ class AppConfig:
     scan: ScanConfig = field(default_factory=ScanConfig)
     reports_dir: str = field(default_factory=lambda: os.getenv("REPORTS_DIR", "./reports"))
     verbose: bool = field(default_factory=lambda: os.getenv("VERBOSE", "false").lower() == "true")
+    human_approval: bool = field(
+        default_factory=lambda: os.getenv("HUMAN_APPROVAL", "true").lower() == "true"
+    )
 
 
 # Singleton — import this everywhere rather than re-instantiating

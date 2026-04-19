@@ -17,13 +17,19 @@ from squad.technical_author import TechnicalAuthor
 from squad.vulnerability_researcher import VulnerabilityResearcher
 
 
-def build_tasks(agents: dict) -> list[Task]:
+def build_tasks(agents: dict, human_approval: bool = False) -> list[Task]:
     select = ProgrammeManager.build_task(agents["programme_manager"])
-    recon = OsintAnalyst.build_task(agents["osint_analyst"], context=[select])
+    # Checkpoint 1: human reviews selected programme and approves scanning
+    recon = OsintAnalyst.build_task(
+        agents["osint_analyst"], context=[select], human_input=human_approval
+    )
     pentest = PenetrationTester.build_task(agents["penetration_tester"], context=[recon])
     triage = VulnerabilityResearcher.build_task(
         agents["vulnerability_researcher"], context=[pentest, select]
     )
-    write = TechnicalAuthor.build_task(agents["technical_author"], context=[triage, select])
+    # Checkpoint 2: human reads draft report and approves submission
+    write = TechnicalAuthor.build_task(
+        agents["technical_author"], context=[triage, select], human_input=human_approval
+    )
     submit = DisclosureCoordinator.build_task(agents["disclosure_coordinator"], context=[write])
     return [select, recon, pentest, triage, write, submit]

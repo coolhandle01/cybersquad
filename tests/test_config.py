@@ -91,3 +91,19 @@ class TestScanConfig:
 
         c = ScanConfig()
         assert c.sqlmap_output_dir == "/var/tmp/sqlmap"
+
+
+class TestAppConfig:
+    def test_human_approval_defaults_true(self, monkeypatch):
+        monkeypatch.delenv("HUMAN_APPROVAL", raising=False)
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.human_approval is True
+
+    def test_human_approval_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("HUMAN_APPROVAL", "false")
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.human_approval is False

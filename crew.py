@@ -24,7 +24,7 @@ def build_crew(verbose: bool | None = None) -> Crew:
     be_verbose = verbose if verbose is not None else config.verbose
 
     agents = build_agents(verbose=be_verbose)
-    tasks = build_tasks(agents)
+    tasks = build_tasks(agents, human_approval=config.human_approval)
 
     return Crew(
         agents=list(agents.values()),

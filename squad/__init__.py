@@ -42,7 +42,13 @@ class SquadMember(ABC):
         return _parse_prompt(path.read_text(encoding="utf-8"), str(path))
 
     @classmethod
-    def build_task(cls, agent: Agent, context: list[Task] | None = None) -> Task:
+    def build_task(
+        cls,
+        agent: Agent,
+        context: list[Task] | None = None,
+        *,
+        human_input: bool = False,
+    ) -> Task:
         """Create a Task wired to the given agent and optional upstream context."""
         description, expected_output = cls.load_prompt()
         return Task(
@@ -50,4 +56,5 @@ class SquadMember(ABC):
             expected_output=expected_output,
             agent=agent,
             context=context or [],
+            human_input=human_input,
         )

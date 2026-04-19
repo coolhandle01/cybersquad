@@ -39,11 +39,13 @@ class _FakeTask:
         expected_output: str,
         agent: object,
         context: list | None = None,
+        human_input: bool = False,
     ) -> None:
         self.description = description
         self.expected_output = expected_output
         self.agent = agent
         self.context = context or []
+        self.human_input = human_input
 
 
 class TestParsePrompt:
