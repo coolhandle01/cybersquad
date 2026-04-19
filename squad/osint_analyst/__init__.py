@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from crewai import Agent
+from typing import ClassVar
+
 from crewai.tools import tool
 
 from squad import SquadMember
@@ -26,24 +27,4 @@ def recon_tool(programme_handle: str) -> dict:
 
 class OsintAnalyst(SquadMember):
     slug = "osint_analyst"
-
-    @classmethod
-    def build_agent(cls, llm: object, verbose: bool = False) -> Agent:
-        return Agent(
-            role="OSINT Analyst",
-            goal=(
-                "Build a comprehensive, in-scope attack surface map for the target "
-                "programme — subdomains, live endpoints, open ports, and technology "
-                "stack — using only passive and semi-passive reconnaissance techniques."
-            ),
-            backstory=(
-                "You are an OSINT specialist who has mapped the attack surfaces of "
-                "hundreds of organisations. You are meticulous about staying within "
-                "authorised scope, and you document everything with the precision of "
-                "a cartographer. You know every subdomain enumeration trick in the book."
-            ),
-            tools=[recon_tool],
-            allow_delegation=False,
-            llm=llm,
-            verbose=verbose,
-        )
+    tools: ClassVar[list] = [recon_tool]
