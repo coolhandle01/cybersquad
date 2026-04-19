@@ -2,6 +2,35 @@
 
 This file is for AI assistants working on this codebase. It covers the architecture, conventions, safety invariants, and the things most likely to trip you up.
 
+**Read `README.md` first.** Setup, install, env vars, and how to run the pipeline all live there. This file only covers what the README doesn't.
+
+---
+
+## Before you push — non-negotiable
+
+1. **Work inside a virtualenv with the full dev deps installed.**
+
+   ```bash
+   python -m venv .venv
+   .venv/bin/pip install -e ".[dev]"
+   ```
+
+   If you skip this, `mypy` will silently pass locally because it can't resolve `crewai`, `crewai.tools`, or `langchain_anthropic` — and CI will then fail on type errors you never saw. Every other tool is similarly affected. **No venv, no valid local signal.**
+
+2. **Run the entire CI stack locally, in order, before every push.** A ruff pass alone is not enough. The full set:
+
+   ```bash
+   .venv/bin/ruff check .
+   .venv/bin/ruff format --check .
+   .venv/bin/mypy . --ignore-missing-imports
+   H1_API_USERNAME=test H1_API_TOKEN=test .venv/bin/pytest -m unit --cov --cov-report=term-missing
+   .venv/bin/bandit -c pyproject.toml -r . -q
+   ```
+
+   All five must pass. If any fail, fix before pushing — never "push and let CI tell me".
+
+3. **Never push a change you haven't actually executed.** A passing mypy run after a `type: ignore` removal means nothing if the file wasn't reachable. Run the tests.
+
 ---
 
 ## What this project does
@@ -116,27 +145,22 @@ Coverage floor is 70%. Every new public function in `tools/` needs a test. Every
 
 ## CI
 
-Three jobs run on every push:
+Three jobs run on every push: `lint` (ruff + mypy), `test` (pytest, 70% coverage floor), and `sast` (bandit + semgrep). The local commands in the "Before you push" section above mirror them exactly — use those.
 
-- **lint** — `ruff check`, `ruff format --check`, `mypy`
-- **test** — `pytest -m unit` with 70% coverage floor
-- **sast** — `bandit`, `semgrep`
+Notes on fixing findings:
 
-**Run all three locally before pushing:**
+- **ruff** — `ruff check --fix` and `ruff format` resolve most issues automatically.
+- **mypy** — ensure all public functions have annotated parameters and return types. If a real dep (crewai, pydantic) has incomplete stubs and you need to suppress a false positive, use a targeted `# type: ignore[<code>]` rather than a blanket ignore.
+- **bandit** — suppress with `# nosec B<code>` (bandit's own directive, *not* `# noqa`). Keep the accompanying `# noqa: S<code>` for ruff — both are needed:
 
-```bash
-# Lint
-ruff check . && ruff format --check . && mypy . --ignore-missing-imports
+  ```python
+  os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108
+  ```
 
-# Tests
-H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit --cov --cov-report=term-missing
+- **GitHub Actions pins** — every action must be pinned to a full-length commit SHA, not a tag. Branch protection enforces this. Add the version as a trailing comment for readability:
 
-# SAST (install once: pip install bandit[toml])
-bandit -c pyproject.toml -r . -q
-```
+  ```yaml
+  - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+  ```
 
-`ruff check --fix` and `ruff format` resolve most lint issues automatically. For mypy errors, ensure all public functions have annotated parameters and return types. For bandit findings, suppress with `# nosec B<code>` (not `# noqa`) and keep the accompanying `# noqa: S<code>` for ruff — both are needed:
-
-```python
-os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108
-```
+- **upload-artifact v4 and hidden files** — `.coverage` and other dotfiles are skipped by default. Set `include-hidden-files: true` on the step.
