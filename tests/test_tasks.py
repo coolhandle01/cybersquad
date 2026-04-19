@@ -1,17 +1,33 @@
-"""tests/test_tasks.py — unit tests for tasks.py prompt loader and task builder."""
+"""tests/test_tasks.py — unit tests for squad assembly and task wiring."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 pytest.importorskip("crewai")
 
-from tasks import _PROMPTS_DIR, _load, build_tasks  # noqa: E402
+import squad  # noqa: E402
+from squad import SquadMember, _parse_prompt  # noqa: E402
+from squad.disclosure_coordinator import DisclosureCoordinator  # noqa: E402
+from squad.osint_analyst import OsintAnalyst  # noqa: E402
+from squad.penetration_tester import PenetrationTester  # noqa: E402
+from squad.programme_manager import ProgrammeManager  # noqa: E402
+from squad.technical_author import TechnicalAuthor  # noqa: E402
+from squad.vulnerability_researcher import VulnerabilityResearcher  # noqa: E402
+from tasks import build_tasks  # noqa: E402
 
 pytestmark = pytest.mark.unit
+
+_ALL_MEMBERS: list[type[SquadMember]] = [
+    ProgrammeManager,
+    OsintAnalyst,
+    PenetrationTester,
+    VulnerabilityResearcher,
+    TechnicalAuthor,
+    DisclosureCoordinator,
+]
 
 
 class _FakeTask:
@@ -30,28 +46,30 @@ class _FakeTask:
         self.context = context or []
 
 
-class TestLoad:
-    def test_returns_description_and_output(self) -> None:
-        desc, out = _load("programme-manager.md")
-        assert desc
-        assert out
-        assert "---" not in desc
-        assert "---" not in out
+class TestParsePrompt:
+    def test_splits_on_separator(self) -> None:
+        desc, out = _parse_prompt("description\n---\noutput", "test")
+        assert desc == "description"
+        assert out == "output"
 
-    def test_all_prompt_files_load(self) -> None:
-        for path in Path(_PROMPTS_DIR).glob("*.md"):
-            desc, out = _load(path.name)
-            assert desc, f"{path.name} has empty description"
-            assert out, f"{path.name} has empty expected_output"
+    def test_strips_whitespace(self) -> None:
+        desc, out = _parse_prompt("  desc  \n---\n  out  ", "test")
+        assert desc == "desc"
+        assert out == "out"
 
-    def test_missing_separator_raises(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        bad = tmp_path / "bad.md"
-        bad.write_text("just a description, no separator")
-        monkeypatch.setattr("tasks._PROMPTS_DIR", tmp_path)
+    def test_missing_separator_raises(self) -> None:
         with pytest.raises(ValueError, match="must contain a '---' separator"):
-            _load("bad.md")
+            _parse_prompt("no separator here", "test.md")
+
+
+class TestLoadPrompt:
+    def test_all_members_load_successfully(self) -> None:
+        for member in _ALL_MEMBERS:
+            desc, out = member.load_prompt()
+            assert desc, f"{member.__name__} has empty description"
+            assert out, f"{member.__name__} has empty expected_output"
+            assert "---" not in desc
+            assert "---" not in out
 
 
 class TestBuildTasks:
@@ -67,19 +85,19 @@ class TestBuildTasks:
         return {role: MagicMock(name=role) for role in roles}
 
     def test_returns_six_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tasks.Task", _FakeTask)
+        monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
         assert len(tasks) == 6
 
     def test_each_task_has_description_and_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tasks.Task", _FakeTask)
+        monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
         for task in tasks:
             assert task.description
             assert task.expected_output
 
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("tasks.Task", _FakeTask)
+        monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
         select, recon, pentest, triage, write, submit = tasks
         assert recon.context == [select]
