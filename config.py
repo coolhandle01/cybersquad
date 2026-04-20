@@ -4,6 +4,7 @@ Load secrets from environment variables; never hardcode credentials.
 """
 
 import os
+import tempfile
 from dataclasses import dataclass, field
 
 
@@ -65,7 +66,10 @@ class ScanConfig:
     sqlmap_level: int = field(default_factory=lambda: int(os.getenv("SQLMAP_LEVEL", "2")))
     sqlmap_risk: int = field(default_factory=lambda: int(os.getenv("SQLMAP_RISK", "1")))
     sqlmap_output_dir: str = field(
-        default_factory=lambda: os.getenv("SQLMAP_OUTPUT_DIR", "/tmp/sqlmap-output")  # nosec B108  # noqa: S108
+        default_factory=lambda: os.getenv(
+            "SQLMAP_OUTPUT_DIR",
+            os.path.join(tempfile.gettempdir(), "sqlmap-output"),
+        )
     )
     min_severity: str = field(default_factory=lambda: os.getenv("MIN_SEVERITY", "medium"))
     request_delay: float = field(default_factory=lambda: float(os.getenv("SCAN_DELAY", "0.5")))
