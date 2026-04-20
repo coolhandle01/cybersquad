@@ -71,8 +71,6 @@ def check_env() -> None:
 
 def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     """Render the crew layout as rich tables without executing."""
-    from tasks import CHECKPOINT_INDICES
-
     console.rule("[bold cyan]BOUNTY SQUAD — DRY RUN[/bold cyan]")
     console.print()
 
@@ -90,15 +88,14 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     tasks_table.add_column("#", style="dim", width=3)
     tasks_table.add_column("Agent", style="cyan")
     tasks_table.add_column("Task")
-    tasks_table.add_column("Checkpoint")
+    tasks_table.add_column("Human review")
     for i, task in enumerate(crew.tasks):
-        checkpoint = CHECKPOINT_INDICES.get(i)
-        cp_cell = f"[yellow]▶ {checkpoint}[/yellow]" if checkpoint else ""
+        review_cell = "[yellow]▶ pauses for feedback[/yellow]" if task.human_input else ""
         tasks_table.add_row(
             str(i + 1),
             task.agent.role,
             task.description[:72].strip() + "…",
-            cp_cell,
+            review_cell,
         )
     console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))
     console.print()

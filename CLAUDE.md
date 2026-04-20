@@ -46,13 +46,12 @@ Bounty Squad is a six-agent CrewAI pipeline that autonomously selects HackerOne 
 | `main.py` | CLI entrypoint. Calls `check_env()` before importing crew — keep it that way. |
 | `config.py` | All env-var reading lives here. Singleton: `from config import config`. |
 | `models.py` | Pydantic contracts between agents. Change these carefully — they cross agent boundaries. |
-| `crew.py` | Assembles the `Crew`: builds LLM, agents, tasks, wires approval gates. No module-level side effects. |
-| `tasks.py` | Pipeline wiring — context dependencies and `CHECKPOINT_INDICES`. Thin — keep it that way. |
+| `crew.py` | Assembles the `Crew`: builds LLM, agents, tasks. No module-level side effects. |
+| `tasks.py` | Pipeline wiring — context dependencies and `human_input` gates. Thin — keep it that way. |
 | `squad/__init__.py` | `SquadMember` ABC. Default `build_agent()` reads `agent.md`; `build_task()` reads `prompt.md`. |
 | `squad/<member>/agent.md` | Role, goal, backstory — 3 sections separated by `---`. Edit to tune agent behaviour. |
 | `squad/<member>/prompt.md` | Task description and expected output — 2 sections separated by `---`. |
 | `squad/<member>/__init__.py` | Tool functions (`@tool`) + `SquadMember` subclass declaring `slug` and `tools`. |
-| `tools/approval.py` | `CliApprovalGate` and `make_approval_callback`. The two approval checkpoints are in `tasks.py`. |
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
 | `tools/recon_tools.py` | Wraps subfinder, httpx, nmap. Contains the scope guard. |
 | `tools/vuln_tools.py` | Wraps nuclei, sqlmap, custom checks. |
@@ -109,7 +108,7 @@ A bare `host.endswith(pattern)` would allow `evil.notexample.com` to match `exam
 
 **Automated-scanning gate** — `parse_programme()` in `h1_api.py` sets `allows_automated_scanning=False` when the policy text contains keywords like "no automated" or "automated scanning prohibited". The Programme Manager is instructed to discard such programmes. Do not remove or weaken this check.
 
-**Import order in `main.py`** — `check_env()` must run before `build_crew()` is imported or called. The crew import triggers `agents.py`, which imports `config`, which reads env vars. If credentials are missing, `check_env()` should exit cleanly before that happens.
+**Import order in `main.py`** — `check_env()` must run before `build_crew()` is imported or called. The crew import triggers `crew.py`, which imports `config`, which reads env vars. If credentials are missing, `check_env()` should exit cleanly before that happens.
 
 **No module-level side effects in `crew.py`** — the old `crew = build_crew()` at module level has been deliberately removed. Do not re-introduce it.
 

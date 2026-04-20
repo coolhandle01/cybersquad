@@ -39,11 +39,13 @@ class _FakeTask:
         expected_output: str,
         agent: object,
         context: list | None = None,
+        human_input: bool = False,
     ) -> None:
         self.description = description
         self.expected_output = expected_output
         self.agent = agent
         self.context = context or []
+        self.human_input = human_input
 
 
 class TestParsePrompt:
@@ -105,3 +107,12 @@ class TestBuildTasks:
         assert triage.context == [pentest, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
+
+    def test_human_input_gates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        tasks = build_tasks(self._agents())
+        select, recon, pentest, triage, write, submit = tasks
+        assert select.human_input is True
+        assert write.human_input is True
+        for task in (recon, pentest, triage, submit):
+            assert task.human_input is False

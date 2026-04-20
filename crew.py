@@ -16,8 +16,7 @@ from squad.penetration_tester import PenetrationTester
 from squad.programme_manager import ProgrammeManager
 from squad.technical_author import TechnicalAuthor
 from squad.vulnerability_researcher import VulnerabilityResearcher
-from tasks import CHECKPOINT_INDICES, build_tasks
-from tools.approval import CliApprovalGate, make_approval_callback
+from tasks import build_tasks
 
 _SQUAD: list[type[SquadMember]] = [
     ProgrammeManager,
@@ -47,8 +46,6 @@ def build_crew(verbose: bool | None = None) -> Crew:
     agents = {m.slug: m.build_agent(llm, be_verbose) for m in _SQUAD}
     tasks = build_tasks(agents)
 
-    approval_callback = make_approval_callback(CliApprovalGate(), CHECKPOINT_INDICES)
-
     return Crew(
         agents=list(agents.values()),
         tasks=tasks,
@@ -56,5 +53,4 @@ def build_crew(verbose: bool | None = None) -> Crew:
         verbose=be_verbose,
         memory=False,
         embedder=None,
-        task_callback=approval_callback,
     )

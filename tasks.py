@@ -4,8 +4,9 @@ tasks.py — Pipeline task wiring.
 Delegates prompt loading and Task construction to each SquadMember class.
 Context chaining lives here because it is a pipeline concern, not a per-member one.
 
-CHECKPOINT_INDICES maps zero-based task indices to approval checkpoint names.
-The crew's task_callback triggers the ApprovalGate after each indexed task.
+human_input=True on a task tells CrewAI to pause after the agent finishes and
+prompt the operator for feedback before advancing. Empty feedback (Enter) accepts
+the result; typed feedback re-invokes the agent with that guidance.
 """
 
 from __future__ import annotations
@@ -19,22 +20,18 @@ from squad.programme_manager import ProgrammeManager
 from squad.technical_author import TechnicalAuthor
 from squad.vulnerability_researcher import VulnerabilityResearcher
 
-# Zero-based task index → checkpoint name.
-# After task 0 (programme selection): operator approves initiating a scan.
-# After task 4 (report writing): operator approves submitting to H1.
-CHECKPOINT_INDICES: dict[int, str] = {
-    0: "scan-approval",
-    4: "submission-approval",
-}
-
 
 def build_tasks(agents: dict) -> list[Task]:
-    select = ProgrammeManager.build_task(agents["programme_manager"])
+    # Pauses for operator review before any scanning begins.
+    select = ProgrammeManager.build_task(agents["programme_manager"], human_input=True)
     recon = OsintAnalyst.build_task(agents["osint_analyst"], context=[select])
     pentest = PenetrationTester.build_task(agents["penetration_tester"], context=[recon])
     triage = VulnerabilityResearcher.build_task(
         agents["vulnerability_researcher"], context=[pentest, select]
     )
-    write = TechnicalAuthor.build_task(agents["technical_author"], context=[triage, select])
+    # Pauses for operator review before the report is submitted to H1.
+    write = TechnicalAuthor.build_task(
+        agents["technical_author"], context=[triage, select], human_input=True
+    )
     submit = DisclosureCoordinator.build_task(agents["disclosure_coordinator"], context=[write])
     return [select, recon, pentest, triage, write, submit]
