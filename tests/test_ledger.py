@@ -21,12 +21,16 @@ from tools.ledger import (
     list_submissions,
     read_campaign,
     read_findings,
+    read_kickoff,
     read_retro,
+    read_review,
     read_submission,
     update_submission,
     write_campaign,
     write_findings,
+    write_kickoff,
     write_retro,
+    write_review,
     write_submission,
 )
 
@@ -212,3 +216,33 @@ class TestRetroIO:
 
     def test_read_missing_returns_none(self, data_dir: str) -> None:
         assert read_retro(data_dir, "acme-corp", "2026-04-20") is None
+
+
+# ---------------------------------------------------------------------------
+# kickoff.md
+# ---------------------------------------------------------------------------
+
+
+class TestKickoffIO:
+    def test_write_then_read(self, data_dir: str) -> None:
+        write_kickoff("# Kickoff\n\nReady.", data_dir, "acme-corp", "2026-04-20")
+        content = read_kickoff(data_dir, "acme-corp", "2026-04-20")
+        assert content == "# Kickoff\n\nReady."
+
+    def test_read_missing_returns_none(self, data_dir: str) -> None:
+        assert read_kickoff(data_dir, "acme-corp", "2026-04-20") is None
+
+
+# ---------------------------------------------------------------------------
+# review.md
+# ---------------------------------------------------------------------------
+
+
+class TestReviewIO:
+    def test_write_then_read(self, data_dir: str) -> None:
+        write_review("# Review\n\n$500 earned.", data_dir, "acme-corp", "2026-04-20")
+        content = read_review(data_dir, "acme-corp", "2026-04-20")
+        assert content == "# Review\n\n$500 earned."
+
+    def test_read_missing_returns_none(self, data_dir: str) -> None:
+        assert read_review(data_dir, "acme-corp", "2026-04-20") is None

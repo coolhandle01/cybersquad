@@ -206,6 +206,48 @@ def read_retro(data_dir: str, handle: str, campaign_date: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# kickoff.md
+# ---------------------------------------------------------------------------
+
+
+def write_kickoff(content: str, data_dir: str, handle: str, campaign_date: str) -> Path:
+    """Write the kickoff markdown file for a campaign."""
+    path = campaign_dir(data_dir, handle, campaign_date) / "kickoff.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    logger.debug("Wrote kickoff.md → %s", path)
+    return path
+
+
+def read_kickoff(data_dir: str, handle: str, campaign_date: str) -> str | None:
+    path = campaign_dir(data_dir, handle, campaign_date) / "kickoff.md"
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# review.md
+# ---------------------------------------------------------------------------
+
+
+def write_review(content: str, data_dir: str, handle: str, campaign_date: str) -> Path:
+    """Write the sprint review markdown file for a campaign."""
+    path = campaign_dir(data_dir, handle, campaign_date) / "review.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    logger.debug("Wrote review.md → %s", path)
+    return path
+
+
+def read_review(data_dir: str, handle: str, campaign_date: str) -> str | None:
+    path = campaign_dir(data_dir, handle, campaign_date) / "review.md"
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Log helpers
 # ---------------------------------------------------------------------------
 

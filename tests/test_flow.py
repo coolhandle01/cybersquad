@@ -132,6 +132,7 @@ class TestBuildPreviousContext:
         with (
             patch("flow.list_campaigns", return_value=[meta]),
             patch("tools.ledger.read_retro", return_value=None),
+            patch("tools.ledger.read_review", return_value=None),
             patch("flow.list_submissions", return_value=[_sub()]),
         ):
             ctx = flow._build_previous_context("acme-corp")
@@ -143,10 +144,22 @@ class TestBuildPreviousContext:
         with (
             patch("flow.list_campaigns", return_value=[meta]),
             patch("tools.ledger.read_retro", return_value="# Retro notes"),
+            patch("tools.ledger.read_review", return_value=None),
             patch("flow.list_submissions", return_value=[]),
         ):
             ctx = flow._build_previous_context("acme-corp")
         assert "Retro notes" in ctx
+
+    def test_includes_review_when_present(self, flow: BountyFlow) -> None:
+        meta = CampaignMeta(handle="acme-corp", campaign_date="2026-04-01")
+        with (
+            patch("flow.list_campaigns", return_value=[meta]),
+            patch("tools.ledger.read_retro", return_value=None),
+            patch("tools.ledger.read_review", return_value="# Review notes"),
+            patch("flow.list_submissions", return_value=[]),
+        ):
+            ctx = flow._build_previous_context("acme-corp")
+        assert "Review notes" in ctx
 
     def test_caps_at_three_campaigns(self, flow: BountyFlow) -> None:
         metas = [
@@ -155,6 +168,7 @@ class TestBuildPreviousContext:
         with (
             patch("flow.list_campaigns", return_value=metas),
             patch("tools.ledger.read_retro", return_value=None),
+            patch("tools.ledger.read_review", return_value=None),
             patch("flow.list_submissions", return_value=[]),
         ):
             ctx = flow._build_previous_context("acme-corp")
@@ -258,6 +272,59 @@ class TestPollAndUpdateSubmissions:
             mock_h1.list_reports.return_value = []
             flow._poll_and_update_submissions()
             mock_update.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _generate_kickoff_stub
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateKickoffStub:
+    def test_contains_handle_and_date(self, flow: BountyFlow) -> None:
+        content = flow._generate_kickoff_stub()
+        assert "acme-corp" in content
+        assert "2026-04-20" in content
+
+    def test_contains_sprint_plan_placeholder(self, flow: BountyFlow) -> None:
+        assert "Sprint plan" in flow._generate_kickoff_stub()
+
+
+# ---------------------------------------------------------------------------
+# _generate_review_stub
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateReviewStub:
+    def test_contains_handle_and_date(self, flow: BountyFlow) -> None:
+        with patch("flow.list_submissions", return_value=[]):
+            content = flow._generate_review_stub()
+        assert "acme-corp" in content
+        assert "2026-04-20" in content
+
+    def test_shows_cost_and_token_totals(self, flow: BountyFlow) -> None:
+        with patch("flow.list_submissions", return_value=[]):
+            content = flow._generate_review_stub()
+        assert "1,000" in content  # total_tokens formatted
+        assert "$0.05" in content  # total_cost_usd
+
+    def test_sums_bounties(self, flow: BountyFlow) -> None:
+        subs = [
+            _sub("1001").model_copy(update={"bounty_awarded_usd": 300.0}),
+            _sub("1002").model_copy(update={"bounty_awarded_usd": 200.0}),
+        ]
+        with patch("flow.list_submissions", return_value=subs):
+            content = flow._generate_review_stub()
+        assert "$500.00" in content  # total bounty
+
+    def test_pending_shown_when_no_bounty(self, flow: BountyFlow) -> None:
+        with patch("flow.list_submissions", return_value=[_sub()]):
+            content = flow._generate_review_stub()
+        assert "pending" in content
+
+    def test_contains_feedback_section(self, flow: BountyFlow) -> None:
+        with patch("flow.list_submissions", return_value=[]):
+            content = flow._generate_review_stub()
+        assert "Feedback" in content
 
 
 # ---------------------------------------------------------------------------

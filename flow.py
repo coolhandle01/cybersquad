@@ -1,20 +1,22 @@
 """
 flow.py — BountyFlow: the campaign loop that drives the Bounty Squad.
 
-The Flow orchestrates the Crew across three recurring phases:
+The Flow orchestrates the Crew across four Scrum-style phases per campaign:
 
-  kickoff  — Programme Manager selects a target and briefs the squad.
-  standup  — The full crew hunts: recon → scan → triage → write → submit.
-  retro    — Squad debriefs, writes campaign files, updates submission status.
+  select_programme — Programme Manager picks the next eligible target.
+  campaign_kickoff — Squad reviews history and agrees a sprint plan; human approves.
+  standup          — Full crew hunts: recon → scan → triage → write → submit.
+                     Loops until the token budget or submission cap is reached.
+  campaign_review  — Stakeholder-facing sprint review; bounties reported; human gates.
+  campaign_retro   — Team-internal lessons-learned debrief; hold-off date set.
 
-After retro the Flow loops back to kickoff with a new target, running
+After retro the Flow loops back to select_programme with a new target, running
 indefinitely until interrupted.  CampaignState persists across phases so a
 restart resumes the current campaign rather than starting from scratch.
 
 Stop conditions (evaluated at the start of each standup):
   - Token budget for this sprint exhausted
   - Maximum submissions for this programme reached
-  - do_not_revisit_before not yet elapsed (skips programme entirely)
 """
 
 from __future__ import annotations
@@ -34,7 +36,9 @@ from tools.ledger import (
     list_submissions,
     update_submission,
     write_campaign,
+    write_kickoff,
     write_retro,
+    write_review,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +57,7 @@ class CampaignState(FlowState):
     # Cross-campaign tracking
     attempted_handles: list[str] = Field(default_factory=list)
 
-    # Sprint counters (reset each standup)
+    # Sprint counters (reset each select_programme)
     sprint_tokens: int = 0
     sprint_submissions: int = 0
 
@@ -73,98 +77,134 @@ class CampaignState(FlowState):
 
 
 class BountyFlow(Flow[CampaignState]):
-    """Continuous campaign loop: kickoff → standup → retro → kickoff → …"""
+    """Continuous campaign loop: select → kickoff → standup → review → retro → select → …"""
 
-    # ── Phase 1: Kickoff ──────────────────────────────────────────────────
+    # ── Phase 1: Select programme ─────────────────────────────────────────
 
     @start()
     def select_programme(self) -> str:
         """
-        Programme Manager selects the next eligible target and briefs the squad.
+        Programme Manager picks the next eligible target.
 
-        Reads previous campaign files so the squad knows what was already found,
-        what the attack surface looked like, and what was submitted last time.
+        Excludes recently-attempted programmes and those still within their
+        do_not_revisit_before hold.  Initialises campaign.json on disk.
         """
-        logger.info("=== KICKOFF ===")
+        logger.info("=== SELECT PROGRAMME ===")
 
-        # Build context from previous campaigns for this handle (if revisiting)
-        previous_context = self._build_previous_context(self.state.handle)
-
-        # Import here to avoid circular deps at module level
         from crew import build_crew
 
         crew = build_crew()
 
-        # TODO: update Programme Manager prompt to accept:
-        #   - exclude_handles: programmes to skip this round
-        #   - previous_context: retro notes and surface from last campaign
+        # TODO: update PM prompt to emit structured output with handle
         result = crew.kickoff(
             inputs={
-                "phase": "kickoff",
+                "phase": "select_programme",
                 "exclude_handles": self.state.attempted_handles,
-                "previous_context": previous_context,
             }
         )
 
-        # Extract selected programme handle from crew output
-        # TODO: make Programme Manager emit structured output with handle
         self.state.handle = self._extract_handle(result)
         self.state.campaign_date = date.today().isoformat()
         self.state.sprint_tokens = 0
         self.state.sprint_submissions = 0
 
-        # Initialise campaign.json on disk
         meta = CampaignMeta(
             handle=self.state.handle,
             campaign_date=self.state.campaign_date,
-            phase="kickoff",
+            phase="select_programme",
         )
         write_campaign(meta, config.reports_dir)
 
         logger.info(
             "Target selected: %s  campaign: %s", self.state.handle, self.state.campaign_date
         )
-        return "standup"
+        return "campaign_kickoff"
 
-    # ── Phase 2: Standup (the hunt) ───────────────────────────────────────
+    # ── Phase 2: Kickoff ──────────────────────────────────────────────────
 
-    @listen("select_programme")
+    @listen("campaign_kickoff")
+    def campaign_kickoff(self) -> None:
+        """
+        Squad reviews history and agrees on a plan for the sprint.
+
+        Programme Manager briefs the team with reviews and retros from the
+        last three campaigns on this programme.  human_input=True on the PM
+        task gates progress so the operator can approve the plan or redirect
+        the squad before hunting begins.
+        Output: kickoff.md
+        """
+        logger.info("=== KICKOFF  %s / %s ===", self.state.handle, self.state.campaign_date)
+
+        previous_context = self._build_previous_context(self.state.handle)
+
+        from crew import build_crew
+
+        crew = build_crew()
+
+        # TODO: route to a PM kickoff task with human_input=True
+        result = crew.kickoff(
+            inputs={
+                "phase": "campaign_kickoff",
+                "programme_handle": self.state.handle,
+                "campaign_date": self.state.campaign_date,
+                "previous_context": previous_context,
+            }
+        )
+
+        self._update_counters(result)
+
+        write_kickoff(
+            self._generate_kickoff_stub(),
+            config.reports_dir,
+            self.state.handle,
+            self.state.campaign_date,
+        )
+
+        meta = CampaignMeta(
+            handle=self.state.handle,
+            campaign_date=self.state.campaign_date,
+            phase="kickoff",
+            total_tokens=self.state.total_tokens,
+            cost_usd=self.state.total_cost_usd,
+        )
+        write_campaign(meta, config.reports_dir)
+
+        logger.info("Kickoff complete — squad is briefed and ready")
+
+    # ── Phase 3: Standup (hunt loop) ──────────────────────────────────────
+
+    @listen(campaign_kickoff)
     def standup(self) -> None:
         """
         Full crew hunt: OSINT → scan → triage → write → submit.
 
         Bounded by token budget and max-submissions-per-sprint stop conditions.
-        Writes each submission to disk as submissions/<report_id>.json.
+        TechnicalAuthor task has human_input=True so the operator can review
+        each report draft before it is submitted.
+        Writes each submission to submissions/<report_id>.json.
         """
         logger.info("=== STANDUP  %s / %s ===", self.state.handle, self.state.campaign_date)
 
         if self._over_budget():
-            logger.info("Token budget exhausted — skipping standup, going to retro")
+            logger.info("Token budget exhausted — skipping standup")
             return
 
         from crew import build_crew
 
         crew = build_crew()
 
-        # Read previous context for this programme
-        previous_context = self._build_previous_context(self.state.handle)
-
-        # TODO: parameterise crew phases so only the hunting agents run here
         result = crew.kickoff(
             inputs={
                 "phase": "standup",
                 "programme_handle": self.state.handle,
                 "campaign_date": self.state.campaign_date,
-                "previous_context": previous_context,
+                "previous_context": self._build_previous_context(self.state.handle),
                 "max_submissions": self.state.max_submissions_per_sprint,
             }
         )
 
-        # TODO: extract structured SubmissionResult list from crew output
-        # For now, update counters from result metadata
         self._update_counters(result)
 
-        # Update campaign.json phase
         meta = CampaignMeta(
             handle=self.state.handle,
             campaign_date=self.state.campaign_date,
@@ -174,15 +214,15 @@ class BountyFlow(Flow[CampaignState]):
         )
         write_campaign(meta, config.reports_dir)
 
-    # ── Router: decide whether to keep hunting or wrap up ─────────────────
+    # ── Router: keep hunting or move to review ────────────────────────────
 
     @router(standup)
     def assess(self) -> str:
         """
-        After standup: keep hunting the same programme or move to retro?
+        After each standup: continue hunting or move to sprint review?
 
-        Continues hunting if we haven't hit the submission cap and we're still
-        within budget.  Otherwise triggers retro.
+        Loops back to standup while submissions are below the cap and the token
+        budget is not exhausted.  Routes to campaign_review when done.
         """
         if (
             self.state.sprint_submissions < self.state.max_submissions_per_sprint
@@ -191,32 +231,96 @@ class BountyFlow(Flow[CampaignState]):
             logger.info("Still within budget — continuing standup")
             return "standup"
 
-        logger.info("Sprint complete — moving to retro")
-        return "retro"
+        logger.info("Sprint complete — moving to review")
+        return "campaign_review"
 
-    # ── Phase 3: Retro ────────────────────────────────────────────────────
+    # ── Phase 4: Sprint review (stakeholder-facing) ───────────────────────
 
-    @listen("retro")
-    def retro(self) -> None:
+    @listen("campaign_review")
+    def campaign_review(self) -> None:
         """
-        Squad debrief: poll H1 for status updates, write retro.md and
-        findings.json, set do_not_revisit_before, loop back to kickoff.
+        Stakeholder sprint review: cost, submissions, and bounties earned.
+
+        Polls H1 for the latest report statuses, produces review.md, then
+        gates on human_input=True so the operator can acknowledge results and
+        leave feedback before the retrospective.
+        Output: review.md
+        """
+        logger.info("=== REVIEW  %s / %s ===", self.state.handle, self.state.campaign_date)
+
+        self._poll_and_update_submissions()
+
+        from crew import build_crew
+
+        crew = build_crew()
+
+        # TODO: route to a PM review task with human_input=True
+        result = crew.kickoff(
+            inputs={
+                "phase": "campaign_review",
+                "programme_handle": self.state.handle,
+                "campaign_date": self.state.campaign_date,
+            }
+        )
+
+        self._update_counters(result)
+
+        write_review(
+            self._generate_review_stub(),
+            config.reports_dir,
+            self.state.handle,
+            self.state.campaign_date,
+        )
+
+        meta = CampaignMeta(
+            handle=self.state.handle,
+            campaign_date=self.state.campaign_date,
+            phase="review",
+            total_tokens=self.state.total_tokens,
+            cost_usd=self.state.total_cost_usd,
+        )
+        write_campaign(meta, config.reports_dir)
+
+        logger.info("Review complete — moving to retro")
+
+    # ── Phase 5: Retrospective (team-internal) ────────────────────────────
+
+    @listen(campaign_review)
+    def campaign_retro(self) -> None:
+        """
+        Team-internal debrief: lessons learned and surface notes.
+
+        No human gate — the squad records what they learned for the next time
+        this programme is targeted.  Sets do_not_revisit_before and marks the
+        campaign complete.
+        Output: retro.md
         """
         logger.info("=== RETRO  %s / %s ===", self.state.handle, self.state.campaign_date)
 
-        # Poll H1 for current status of all submissions from this campaign
-        self._poll_and_update_submissions()
+        from crew import build_crew
 
-        # Run a lightweight retro crew pass to produce retro.md
-        # TODO: wire in a Programme Manager retro task that reads findings and
-        #       produces a markdown debrief
-        retro_content = self._generate_retro_stub()
-        write_retro(retro_content, config.reports_dir, self.state.handle, self.state.campaign_date)
+        crew = build_crew()
 
-        # Mark programme as attempted; set revisit hold-off
+        # TODO: route to a PM retro task
+        result = crew.kickoff(
+            inputs={
+                "phase": "campaign_retro",
+                "programme_handle": self.state.handle,
+                "campaign_date": self.state.campaign_date,
+            }
+        )
+
+        self._update_counters(result)
+
+        write_retro(
+            self._generate_retro_stub(),
+            config.reports_dir,
+            self.state.handle,
+            self.state.campaign_date,
+        )
+
         self.state.attempted_handles.append(self.state.handle)
 
-        # Finalise campaign.json
         revisit_after = config.scan.revisit_hold_days
         meta = CampaignMeta(
             handle=self.state.handle,
@@ -237,8 +341,9 @@ class BountyFlow(Flow[CampaignState]):
             self.state.total_cost_usd,
         )
 
-    # Loop back after retro
-    @router(retro)
+    # ── Loop back ─────────────────────────────────────────────────────────
+
+    @router(campaign_retro)
     def next_campaign(self) -> str:
         """Reset sprint counters and loop back to programme selection."""
         self.state.handle = ""
@@ -252,7 +357,7 @@ class BountyFlow(Flow[CampaignState]):
     # ---------------------------------------------------------------------------
 
     def _build_previous_context(self, handle: str) -> str:
-        """Assemble retro notes and surface data from prior campaigns."""
+        """Assemble review notes, retro notes, and stats from prior campaigns."""
         if not handle:
             return ""
         campaigns = list_campaigns(config.reports_dir, handle)
@@ -261,15 +366,20 @@ class BountyFlow(Flow[CampaignState]):
 
         parts: list[str] = []
         for campaign in campaigns[:3]:  # last 3 campaigns
-            from tools.ledger import read_retro
+            from tools.ledger import read_retro, read_review
 
+            review = read_review(config.reports_dir, handle, campaign.campaign_date)
             retro = read_retro(config.reports_dir, handle, campaign.campaign_date)
             subs = list_submissions(config.reports_dir, handle, campaign.campaign_date)
-            parts.append(
+            section = (
                 f"## Campaign {campaign.campaign_date}\n"
                 f"Submissions: {len(subs)}  Cost: ${campaign.cost_usd:.4f}\n"
-                + (f"\n{retro}" if retro else "")
             )
+            if review:
+                section += f"\n### Review\n{review}\n"
+            if retro:
+                section += f"\n### Retro\n{retro}\n"
+            parts.append(section)
         return "\n\n".join(parts)
 
     def _over_budget(self) -> bool:
@@ -328,8 +438,45 @@ class BountyFlow(Flow[CampaignState]):
     def _extract_handle(self, result: object) -> str:
         """Extract programme handle from crew output. TODO: structured output."""
         raw = str(getattr(result, "raw", result))
-        # Placeholder — Programme Manager prompt update will make this reliable
         return raw.strip().split()[0] if raw.strip() else "unknown"
+
+    def _generate_kickoff_stub(self) -> str:
+        """Minimal kickoff.md until the crew kickoff task is wired in."""
+        lines = [
+            f"# Kickoff — {self.state.handle} / {self.state.campaign_date}",
+            "",
+            "## Sprint plan",
+            "",
+            "_To be populated by the Programme Manager at kickoff._",
+        ]
+        return "\n".join(lines)
+
+    def _generate_review_stub(self) -> str:
+        """Minimal review.md until the crew review task is wired in."""
+        subs = list_submissions(config.reports_dir, self.state.handle, self.state.campaign_date)
+        total_bounty = sum(s.bounty_awarded_usd or 0.0 for s in subs)
+        lines = [
+            f"# Sprint Review — {self.state.handle} / {self.state.campaign_date}",
+            "",
+            "## Summary",
+            "",
+            "| Metric | Value |",
+            "|---|---|",
+            f"| Submissions | {len(subs)} |",
+            f"| Tokens spent | {self.state.total_tokens:,} |",
+            f"| Estimated cost | ${self.state.total_cost_usd:.4f} |",
+            f"| Bounties awarded | ${total_bounty:.2f} |",
+            "",
+            "## Submissions",
+        ]
+        for s in subs:
+            bounty = f"${s.bounty_awarded_usd:.2f}" if s.bounty_awarded_usd else "pending"
+            lines.append(
+                f"- [{s.h1_report_id}]({s.h1_url}) **{s.title}**"
+                f" — {s.severity} — {s.status} {bounty}"
+            )
+        lines += ["", "## Feedback", "", "_Operator feedback to be recorded here._"]
+        return "\n".join(lines)
 
     def _generate_retro_stub(self) -> str:
         """Minimal retro.md until the crew retro task is wired in."""
