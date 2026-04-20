@@ -37,7 +37,7 @@ At each approval gate the pipeline pauses, renders a summary of what the agent p
 
 ## Requirements
 
-**Python 3.11+**
+**Python 3.12+**
 
 **External binaries** — install and ensure each is on your `PATH`:
 

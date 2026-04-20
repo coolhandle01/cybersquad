@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "bounty-squad"
 version = "0.1.0"
 description = "Autonomous bug bounty pipeline powered by CrewAI"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "crewai>=0.80.0",
     "crewai-tools>=0.15.0",
@@ -73,7 +73,7 @@ exclude_lines = [
 # ── ruff ──────────────────────────────────────────────────────────────────────
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
@@ -104,7 +104,7 @@ indent-style = "space"
 # ── mypy ──────────────────────────────────────────────────────────────────────
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = false                 # enable gradually; flip per-module as coverage grows
 warn_unused_ignores = true
 warn_return_any = true
