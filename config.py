@@ -69,6 +69,9 @@ class ScanConfig:
     )
     min_severity: str = field(default_factory=lambda: os.getenv("MIN_SEVERITY", "medium"))
     request_delay: float = field(default_factory=lambda: float(os.getenv("SCAN_DELAY", "0.5")))
+    revisit_hold_days: int = field(
+        default_factory=lambda: int(os.getenv("REVISIT_HOLD_DAYS", "30"))
+    )
 
 
 @dataclass

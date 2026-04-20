@@ -95,6 +95,34 @@ class H1Client:
     # Programme discovery
     # ------------------------------------------------------------------
 
+    def list_reports(
+        self,
+        programme_handle: str | None = None,
+        state: str | None = None,
+        page_size: int = 25,
+        max_results: int = 100,
+    ) -> list[dict]:
+        """
+        Return raw report data from /reports, optionally filtered by programme
+        handle and/or state (new, triaged, resolved, duplicate, not-applicable,
+        informative).  Paginates up to max_results.
+        """
+        params: dict = {"page[size]": page_size}
+        if programme_handle:
+            params["filter[program][handle][]"] = programme_handle
+        if state:
+            params["filter[state][]"] = state
+
+        results: list[dict] = []
+        path: str | None = "/reports"
+        while path and len(results) < max_results:
+            data = self._get(path, params)
+            results.extend(data.get("data", []))
+            path = data.get("links", {}).get("next")
+            params = {}
+
+        return results[:max_results]
+
     def list_programmes(self, page_size: int = 25) -> list[dict]:
         """
         Return raw programme data from /programs.

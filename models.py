@@ -6,7 +6,7 @@ Each model represents a discrete artefact that agents pass to one another.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -188,6 +188,65 @@ class RunMetrics(BaseModel):
     findings_raw: int = 0
     findings_verified: int = 0
     submitted: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Campaign data — persisted to the filesystem under DATA_DIR
+# ---------------------------------------------------------------------------
+
+
+class ReconSurface(BaseModel):
+    """Snapshot of the attack surface discovered during a campaign."""
+
+    subdomains: list[str] = Field(default_factory=list)
+    endpoints: list[str] = Field(default_factory=list)
+    open_ports: dict[str, list[int]] = Field(default_factory=dict)
+    technologies: list[str] = Field(default_factory=list)
+    notable: str = ""
+    scanned_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CampaignMeta(BaseModel):
+    """campaign.json — top-level record for one hunt against one programme."""
+
+    handle: str
+    campaign_date: str  # YYYY-MM-DD — also the folder name
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: datetime | None = None
+    phase: str = "kickoff"  # kickoff | standup | retro | complete
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    do_not_revisit_before: date | None = None
+    surface: ReconSurface = Field(default_factory=ReconSurface)
+
+
+class SubmissionRecord(BaseModel):
+    """submissions/<report_id>.json — one H1 report submission."""
+
+    h1_report_id: str
+    h1_url: str
+    programme_handle: str
+    campaign_date: str
+    title: str
+    vuln_class: str
+    severity: Severity
+    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    status: SubmissionStatus = SubmissionStatus.SUBMITTED
+    bounty_awarded_usd: float | None = None
+    bounty_updated_at: datetime | None = None
+
+
+class FindingRecord(BaseModel):
+    """Entry in findings.json — a finding the squad chose not to submit."""
+
+    title: str
+    vuln_class: str
+    target: str
+    severity: Severity
+    tool: str = ""
+    reason_not_submitted: str = ""
+    note: str = ""
+    discovered_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # ---------------------------------------------------------------------------
