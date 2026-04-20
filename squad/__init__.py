@@ -76,9 +76,11 @@ class SquadMember(ABC):
         agent: Agent,
         context: list[Task] | None = None,
         human_input: bool = False,
+        prompt_file: str = "prompt.md",
     ) -> Task:
         """Create a Task wired to the given agent and optional upstream context."""
-        description, expected_output = cls.load_prompt()
+        path = cls._member_dir() / prompt_file
+        description, expected_output = _parse_prompt(path.read_text(encoding="utf-8"), str(path))
         return Task(
             description=description,
             expected_output=expected_output,

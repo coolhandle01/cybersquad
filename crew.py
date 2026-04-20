@@ -18,8 +18,8 @@ from squad.technical_author import TechnicalAuthor
 from squad.vulnerability_researcher import VulnerabilityResearcher
 from tasks import build_tasks
 
-_SQUAD: list[type[SquadMember]] = [
-    ProgrammeManager,
+_PM_SQUAD: list[type[SquadMember]] = [ProgrammeManager]
+_HUNT_SQUAD: list[type[SquadMember]] = [
     OsintAnalyst,
     PenetrationTester,
     VulnerabilityResearcher,
@@ -28,11 +28,13 @@ _SQUAD: list[type[SquadMember]] = [
 ]
 
 
-def build_crew(verbose: bool | None = None) -> Crew:
+def build_crew(phase: str = "standup", verbose: bool | None = None) -> Crew:
     """
     Instantiate agents and tasks, then wire them into a sequential Crew.
 
     Args:
+        phase:   Campaign phase to build tasks for.
+                 Defaults to "standup" (full hunt pipeline).
         verbose: Override config.verbose for this run.
                  Defaults to the value in config.py.
     """
@@ -43,8 +45,10 @@ def build_crew(verbose: bool | None = None) -> Crew:
         temperature=config.llm.temperature,
         max_tokens=config.llm.max_tokens,
     )
-    agents = {m.slug: m.build_agent(llm, be_verbose) for m in _SQUAD}
-    tasks = build_tasks(agents)
+
+    squad = _HUNT_SQUAD if phase == "standup" else _PM_SQUAD
+    agents = {m.slug: m.build_agent(llm, be_verbose) for m in squad}
+    tasks = build_tasks(agents, phase=phase)
 
     return Crew(
         agents=list(agents.values()),

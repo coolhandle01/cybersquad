@@ -93,9 +93,8 @@ class BountyFlow(Flow[CampaignState]):
 
         from crew import build_crew
 
-        crew = build_crew()
+        crew = build_crew(phase="select_programme")
 
-        # TODO: update PM prompt to emit structured output with handle
         result = crew.kickoff(
             inputs={
                 "phase": "select_programme",
@@ -139,9 +138,8 @@ class BountyFlow(Flow[CampaignState]):
 
         from crew import build_crew
 
-        crew = build_crew()
+        crew = build_crew(phase="campaign_kickoff")
 
-        # TODO: route to a PM kickoff task with human_input=True
         result = crew.kickoff(
             inputs={
                 "phase": "campaign_kickoff",
@@ -154,7 +152,7 @@ class BountyFlow(Flow[CampaignState]):
         self._update_counters(result)
 
         write_kickoff(
-            self._generate_kickoff_stub(),
+            str(getattr(result, "raw", "")) or self._generate_kickoff_stub(),
             config.reports_dir,
             self.state.handle,
             self.state.campaign_date,
@@ -191,7 +189,7 @@ class BountyFlow(Flow[CampaignState]):
 
         from crew import build_crew
 
-        crew = build_crew()
+        crew = build_crew(phase="standup")
 
         result = crew.kickoff(
             inputs={
@@ -250,23 +248,41 @@ class BountyFlow(Flow[CampaignState]):
 
         self._poll_and_update_submissions()
 
+        subs = list_submissions(config.reports_dir, self.state.handle, self.state.campaign_date)
+        total_bounty = sum(s.bounty_awarded_usd or 0.0 for s in subs)
+        submissions_text = (
+            "\n".join(
+                f"- #{s.h1_report_id} **{s.title}** ({s.severity}) — {s.status}"
+                + (
+                    f" — ${s.bounty_awarded_usd:.2f}"
+                    if s.bounty_awarded_usd
+                    else " — bounty pending"
+                )
+                for s in subs
+            )
+            or "_No submissions this sprint._"
+        )
+
         from crew import build_crew
 
-        crew = build_crew()
+        crew = build_crew(phase="campaign_review")
 
-        # TODO: route to a PM review task with human_input=True
         result = crew.kickoff(
             inputs={
                 "phase": "campaign_review",
                 "programme_handle": self.state.handle,
                 "campaign_date": self.state.campaign_date,
+                "submissions": submissions_text,
+                "total_cost_usd": f"{self.state.total_cost_usd:.4f}",
+                "total_tokens": f"{self.state.total_tokens:,}",
+                "total_bounty_usd": f"{total_bounty:.2f}",
             }
         )
 
         self._update_counters(result)
 
         write_review(
-            self._generate_review_stub(),
+            str(getattr(result, "raw", "")) or self._generate_review_stub(),
             config.reports_dir,
             self.state.handle,
             self.state.campaign_date,
@@ -297,23 +313,38 @@ class BountyFlow(Flow[CampaignState]):
         """
         logger.info("=== RETRO  %s / %s ===", self.state.handle, self.state.campaign_date)
 
+        subs = list_submissions(config.reports_dir, self.state.handle, self.state.campaign_date)
+        submissions_text = (
+            "\n".join(
+                f"- #{s.h1_report_id} **{s.title}** ({s.severity}) — {s.status}"
+                + (
+                    f" — ${s.bounty_awarded_usd:.2f}"
+                    if s.bounty_awarded_usd
+                    else " — bounty pending"
+                )
+                for s in subs
+            )
+            or "_No submissions this sprint._"
+        )
+
         from crew import build_crew
 
-        crew = build_crew()
+        crew = build_crew(phase="campaign_retro")
 
-        # TODO: route to a PM retro task
         result = crew.kickoff(
             inputs={
                 "phase": "campaign_retro",
                 "programme_handle": self.state.handle,
                 "campaign_date": self.state.campaign_date,
+                "submissions": submissions_text,
+                "previous_context": self._build_previous_context(self.state.handle),
             }
         )
 
         self._update_counters(result)
 
         write_retro(
-            self._generate_retro_stub(),
+            str(getattr(result, "raw", "")) or self._generate_retro_stub(),
             config.reports_dir,
             self.state.handle,
             self.state.campaign_date,

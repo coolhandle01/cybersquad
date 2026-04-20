@@ -1,3 +1,5 @@
+Target programme: {programme_handle}
+
 Using the programme selected in the previous task, run full OSINT
 reconnaissance against all in-scope assets:
   - Enumerate subdomains using subfinder
