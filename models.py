@@ -188,6 +188,10 @@ class RunMetrics(BaseModel):
     findings_raw: int = 0
     findings_verified: int = 0
     submitted: bool = False
+    h1_report_id: str | None = None
+    h1_report_url: str | None = None
+    # Set to None until H1 awards the bounty; update manually or via a follow-up poll.
+    bounty_awarded_usd: float | None = None
 
 
 # ---------------------------------------------------------------------------
