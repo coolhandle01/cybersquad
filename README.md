@@ -9,17 +9,22 @@ An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAII
 ## How it works
 
 ```
-Programme Manager ──▶ OSINT Analyst ──▶ Penetration Tester
-                                                │
-                                    [scan-approval gate]
-                                                │
-                                                ▼
-Disclosure Coordinator ◀── Technical Author ◀── Vulnerability Researcher
-        │
-[submission-approval gate]
-        │
-        ▼
-  HackerOne API
+Programme Manager ──▶ [selection gate] ──▶ OSINT Analyst ──▶ Penetration Tester
+                                                                        │
+                                                                        ▼
+                                          [triage gate] ◀── Vulnerability Researcher
+                                                 │
+                                                 ▼
+                                         Technical Author
+                                                 │
+                                                 ▼
+                                       [submission gate]
+                                                 │
+                                                 ▼
+                                      Disclosure Coordinator
+                                                 │
+                                                 ▼
+                                           HackerOne API
 ```
 
 At each approval gate the pipeline pauses, renders a summary of what the agent produced, and waits for your explicit confirmation before continuing.
@@ -111,7 +116,7 @@ python main.py
 python main.py --verbose
 ```
 
-The pipeline pauses twice: once after programme selection (before any scanning begins) and once after the report is written (before submission to H1). At each checkpoint a summary panel is displayed and you must explicitly approve to continue.
+The pipeline pauses three times: after programme selection (before any scanning begins), after triage (before spending tokens on report writing), and after the report is written (before submission to H1). At each checkpoint a summary panel is displayed and you must explicitly approve to continue.
 
 Generated reports are saved to `REPORTS_DIR` as Markdown files.
 
@@ -123,7 +128,7 @@ Generated reports are saved to `REPORTS_DIR` as Markdown files.
 cybersquad/
 ├── main.py            # CLI entrypoint
 ├── crew.py            # Assembles LLM, agents, tasks, and approval gates
-├── tasks.py           # Pipeline wiring and checkpoint index definitions
+├── tasks.py           # Pipeline wiring — context chaining and approval gates
 ├── config.py          # Env-var-backed configuration (singleton: config.*)
 ├── models.py          # Pydantic data contracts between agents
 │
@@ -138,7 +143,6 @@ cybersquad/
 │       └── expected_output.md # Task expected output
 │
 ├── tools/
-│   ├── approval.py    # CliApprovalGate and make_approval_callback
 │   ├── h1_api.py      # HackerOne REST client
 │   ├── metrics.py     # Token usage and cost tracking
 │   ├── recon_tools.py # subfinder / httpx / nmap wrappers + scope guard
