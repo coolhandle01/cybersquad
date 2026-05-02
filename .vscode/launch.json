@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug main.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "H1_API_USERNAME": "test",
+                "H1_API_TOKEN": "test",
+                "VERBOSE": "true"
+            }
+        },
+        {
+            "name": "Debug main.py with args",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": ["--verbose", "--dry-run"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "H1_API_USERNAME": "test",
+                "H1_API_TOKEN": "test",
+                "VERBOSE": "true"
+            }
+        }
+    ]
+}
