@@ -45,7 +45,7 @@ class SubmissionStatus(StrEnum):
 
 
 # ---------------------------------------------------------------------------
-# Programme selection (Scout → everyone)
+# Programme selection (Programme Manager → everyone)
 # ---------------------------------------------------------------------------
 
 

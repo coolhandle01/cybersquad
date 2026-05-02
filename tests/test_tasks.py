@@ -100,7 +100,9 @@ class TestBuildTasks:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
         select, recon, pentest, triage, write, submit = tasks
+        # Three gates: after selection, after triage, after writing.
         assert select.human_input is True
+        assert triage.human_input is True
         assert write.human_input is True
-        for task in (recon, pentest, triage, submit):
+        for task in (recon, pentest, submit):
             assert task.human_input is False

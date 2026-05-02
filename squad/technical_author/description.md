@@ -5,10 +5,13 @@ disclosure report in Markdown:
   - Full vulnerability details (type, severity, CVSS, CWE, target)
   - A clear technical description written for a developer audience
   - Numbered, reproducible steps to demonstrate the issue
-  - Sanitised evidence (no live exploit payloads)
-  - A realistic, specific impact statement
-  - Actionable, specific remediation advice referencing OWASP or CWE
+  - Sanitised evidence (no live exploit payloads, no credentials,
+    no data belonging to other users)
+  - A realistic, specific impact statement grounded in what an attacker
+    can actually do with the finding
+  - Actionable, specific remediation advice citing the relevant OWASP
+    guidance (https://owasp.org) or CWE entry (https://cwe.mitre.org)
 
-Write with precision and professionalism. Triage teams award bounties
-faster for clear reports. If there are multiple findings, prioritise
-the highest-severity one for submission in this run.
+The quality bar is a report that HackerOne triages on first read without
+requesting clarification. If there are multiple findings, prioritise the
+highest-severity one for submission in this run.
