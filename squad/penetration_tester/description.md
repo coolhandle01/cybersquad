@@ -7,8 +7,3 @@ vulnerability scans:
 Respect the configured request rate limit. Do not attempt exploits
 beyond proof-of-concept. Capture tool output as evidence.
 Return all raw findings regardless of confidence — triage comes next.
-
----
-
-A JSON array of RawFinding objects, each with title, vuln_class,
-target, evidence snippet, tool name, and severity hint.

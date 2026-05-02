@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from pathlib import Path
 
 from crewai.tools import tool
 
@@ -24,6 +24,8 @@ def get_scope_tool(handle: str) -> dict:
     return {"policy": policy, "scope": scope}
 
 
-class ProgrammeManager(SquadMember):
-    slug = "programme_manager"
-    tools: ClassVar[list] = [list_programmes_tool, get_scope_tool]
+MEMBER = SquadMember(
+    slug="programme_manager",
+    dir=Path(__file__).parent,
+    tools=[list_programmes_tool, get_scope_tool],
+)

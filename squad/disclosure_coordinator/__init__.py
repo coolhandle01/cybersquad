@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from pathlib import Path
 
 from crewai.tools import tool
 
@@ -22,6 +22,8 @@ def submit_report_tool(report_json: str) -> dict:
     return result.model_dump()
 
 
-class DisclosureCoordinator(SquadMember):
-    slug = "disclosure_coordinator"
-    tools: ClassVar[list] = [submit_report_tool]
+MEMBER = SquadMember(
+    slug="disclosure_coordinator",
+    dir=Path(__file__).parent,
+    tools=[submit_report_tool],
+)

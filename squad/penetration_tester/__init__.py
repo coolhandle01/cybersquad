@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from pathlib import Path
 
 from crewai.tools import tool
 
@@ -23,6 +23,8 @@ def pentest_tool(recon_result_json: str) -> list[dict]:
     return [f.model_dump() for f in findings]
 
 
-class PenetrationTester(SquadMember):
-    slug = "penetration_tester"
-    tools: ClassVar[list] = [pentest_tool]
+MEMBER = SquadMember(
+    slug="penetration_tester",
+    dir=Path(__file__).parent,
+    tools=[pentest_tool],
+)

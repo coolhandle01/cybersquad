@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from squad import SquadMember
 
-
-class TechnicalAuthor(SquadMember):
-    slug = "technical_author"
-    # inherits tools = [] from SquadMember — works from context alone
+MEMBER = SquadMember(
+    slug="technical_author",
+    dir=Path(__file__).parent,
+)

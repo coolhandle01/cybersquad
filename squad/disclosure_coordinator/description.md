@@ -7,9 +7,3 @@ Submit the finalised disclosure report to HackerOne via the API:
 
 If submission fails, log the error in full and do not retry —
 flag for human review instead.
-
----
-
-A submission summary containing: programme handle, report title,
-severity, H1 report ID, submission URL, timestamp, and status.
-Or a detailed error report if submission failed.

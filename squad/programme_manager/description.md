@@ -9,8 +9,3 @@ Evaluate each candidate on the following criteria:
 Discard any programme that prohibits automated scanning.
 Select the single highest-scoring programme and output its handle,
 name, bounty table, and in-scope asset list.
-
----
-
-A JSON object containing the selected programme's handle, name,
-maximum bounty amounts by severity, and a list of in-scope asset identifiers.

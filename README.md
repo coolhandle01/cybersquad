@@ -128,11 +128,14 @@ cybersquad/
 ├── models.py          # Pydantic data contracts between agents
 │
 ├── squad/             # One sub-package per agent
-│   ├── __init__.py    # SquadMember ABC — default build_agent() and build_task()
+│   ├── __init__.py    # SquadMember dataclass + build_agent() / build_task() helpers
 │   └── <member>/
-│       ├── __init__.py   # @tool functions + SquadMember subclass
-│       ├── agent.md      # Role, goal, backstory (edit to tune behaviour)
-│       └── prompt.md     # Task description and expected output
+│       ├── __init__.py        # @tool functions + MEMBER = SquadMember(...) constant
+│       ├── role.md            # Agent role line
+│       ├── goal.md            # Agent goal (edit to tune behaviour)
+│       ├── backstory.md       # Agent backstory
+│       ├── description.md     # Task description
+│       └── expected_output.md # Task expected output
 │
 ├── tools/
 │   ├── approval.py    # CliApprovalGate and make_approval_callback
@@ -178,14 +181,14 @@ All five must pass. CI runs the same checks on every push.
 
 ### Adding a new agent
 
-1. Create `squad/<role>/` with `__init__.py`, `agent.md`, and `prompt.md`.
-2. Add the class to `_SQUAD` in `crew.py`.
+1. Create `squad/<role>/` with `__init__.py` (declaring a `MEMBER = SquadMember(...)` constant) and the five prose files: `role.md`, `goal.md`, `backstory.md`, `description.md`, `expected_output.md`.
+2. Import `MEMBER` into `_SQUAD` in `crew.py`.
 3. Wire its task into `build_tasks()` in `tasks.py` with the correct `context` dependencies.
 4. Add unit tests for any new tool functions.
 
 ### Tuning prompts
 
-Edit `squad/<member>/agent.md` (role, goal, backstory) or `squad/<member>/prompt.md` (task description, expected output). No Python changes required. Verify with `--dry-run` and note the rationale in your PR.
+Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `backstory.md` (Agent) or `description.md`, `expected_output.md` (Task). No Python changes required. Verify with `--dry-run` and note the rationale in your PR.
 
 ---
 

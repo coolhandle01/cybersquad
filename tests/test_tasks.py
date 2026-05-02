@@ -9,24 +9,24 @@ import pytest
 pytest.importorskip("crewai")
 
 import squad  # noqa: E402
-from squad import SquadMember, _parse_prompt  # noqa: E402
-from squad.disclosure_coordinator import DisclosureCoordinator  # noqa: E402
-from squad.osint_analyst import OsintAnalyst  # noqa: E402
-from squad.penetration_tester import PenetrationTester  # noqa: E402
-from squad.programme_manager import ProgrammeManager  # noqa: E402
-from squad.technical_author import TechnicalAuthor  # noqa: E402
-from squad.vulnerability_researcher import VulnerabilityResearcher  # noqa: E402
+from squad import SquadMember  # noqa: E402
+from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR  # noqa: E402
+from squad.osint_analyst import MEMBER as OSINT_ANALYST  # noqa: E402
+from squad.penetration_tester import MEMBER as PENETRATION_TESTER  # noqa: E402
+from squad.programme_manager import MEMBER as PROGRAMME_MANAGER  # noqa: E402
+from squad.technical_author import MEMBER as TECHNICAL_AUTHOR  # noqa: E402
+from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER  # noqa: E402
 from tasks import build_tasks  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
-_ALL_MEMBERS: list[type[SquadMember]] = [
-    ProgrammeManager,
-    OsintAnalyst,
-    PenetrationTester,
-    VulnerabilityResearcher,
-    TechnicalAuthor,
-    DisclosureCoordinator,
+_ALL_MEMBERS: list[SquadMember] = [
+    PROGRAMME_MANAGER,
+    OSINT_ANALYST,
+    PENETRATION_TESTER,
+    VULNERABILITY_RESEARCHER,
+    TECHNICAL_AUTHOR,
+    DISCLOSURE_COORDINATOR,
 ]
 
 
@@ -48,30 +48,18 @@ class _FakeTask:
         self.human_input = human_input
 
 
-class TestParsePrompt:
-    def test_splits_on_separator(self) -> None:
-        desc, out = _parse_prompt("description\n---\noutput", "test")
-        assert desc == "description"
-        assert out == "output"
-
-    def test_strips_whitespace(self) -> None:
-        desc, out = _parse_prompt("  desc  \n---\n  out  ", "test")
-        assert desc == "desc"
-        assert out == "out"
-
-    def test_missing_separator_raises(self) -> None:
-        with pytest.raises(ValueError, match="must contain a '---' separator"):
-            _parse_prompt("no separator here", "test.md")
-
-
-class TestLoadPrompt:
-    def test_all_members_load_successfully(self) -> None:
+class TestSquadMemberRead:
+    def test_all_members_load_prose(self) -> None:
         for member in _ALL_MEMBERS:
-            desc, out = member.load_prompt()
-            assert desc, f"{member.__name__} has empty description"
-            assert out, f"{member.__name__} has empty expected_output"
-            assert "---" not in desc
-            assert "---" not in out
+            for name in ("role", "goal", "backstory", "description", "expected_output"):
+                value = member.read(name)
+                assert value, f"{member.slug}/{name}.md is empty"
+                assert "---" not in value, f"{member.slug}/{name}.md still contains '---'"
+
+    def test_missing_file_raises(self, tmp_path) -> None:
+        member = SquadMember(slug="missing", dir=tmp_path, tools=[])
+        with pytest.raises(FileNotFoundError):
+            member.read("role")
 
 
 class TestBuildTasks:

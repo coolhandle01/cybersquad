@@ -188,24 +188,3 @@ class RunMetrics(BaseModel):
     findings_raw: int = 0
     findings_verified: int = 0
     submitted: bool = False
-
-
-# ---------------------------------------------------------------------------
-# Benchmark targets (known-vulnerable environments for squad self-evaluation)
-# ---------------------------------------------------------------------------
-
-
-class BenchmarkTarget(BaseModel):
-    """A known-vulnerable target used to measure squad recall and precision.
-
-    Populate from benchmarks/*.json. Platforms: 'thm', 'htb', 'local'.
-    VPN/API access is the caller's responsibility — the squad treats the
-    base_url as a normal in-scope asset.
-    """
-
-    name: str
-    platform: str
-    base_url: str
-    known_vulnerabilities: list[str]
-    difficulty: str = "medium"
-    notes: str = ""

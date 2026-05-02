@@ -48,10 +48,10 @@ Bounty Squad is a six-agent CrewAI pipeline that autonomously selects HackerOne 
 | `models.py` | Pydantic contracts between agents. Change these carefully — they cross agent boundaries. |
 | `crew.py` | Assembles the `Crew`: builds LLM, agents, tasks. No module-level side effects. |
 | `tasks.py` | Pipeline wiring — context dependencies and `human_input` gates. Thin — keep it that way. |
-| `squad/__init__.py` | `SquadMember` ABC. Default `build_agent()` reads `agent.md`; `build_task()` reads `prompt.md`. |
-| `squad/<member>/agent.md` | Role, goal, backstory — 3 sections separated by `---`. Edit to tune agent behaviour. |
-| `squad/<member>/prompt.md` | Task description and expected output — 2 sections separated by `---`. |
-| `squad/<member>/__init__.py` | Tool functions (`@tool`) + `SquadMember` subclass declaring `slug` and `tools`. |
+| `squad/__init__.py` | `SquadMember` dataclass + `build_agent()` / `build_task()` helpers. Each helper reads prose from a single-purpose `.md` file. |
+| `squad/<member>/{role,goal,backstory}.md` | Three single-purpose files driving the CrewAI Agent. Edit to tune agent behaviour. |
+| `squad/<member>/{description,expected_output}.md` | Two single-purpose files driving the Task description and expected output. |
+| `squad/<member>/__init__.py` | Tool functions (`@tool`) + a module-level `MEMBER = SquadMember(...)` constant. |
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
 | `tools/recon_tools.py` | Wraps subfinder, httpx, nmap. Contains the scope guard. |
 | `tools/vuln_tools.py` | Wraps nuclei, sqlmap, custom checks. |
@@ -92,7 +92,7 @@ The model name must include the provider prefix for litellm routing, e.g.
 
 ### Prompts
 
-Each file in `prompts/` must contain exactly one `---` separator on its own line. Everything above is the task `description`; everything below is `expected_output`. The loader in `tasks.py` will raise `ValueError` if the separator is missing.
+Each agent's prose lives in five single-purpose markdown files inside its package: `role.md`, `goal.md`, `backstory.md`, `description.md`, `expected_output.md`. `SquadMember.read("<name>")` loads `<name>.md` and strips whitespace. Missing files raise `FileNotFoundError` at agent/task build time. No separators, no parsing.
 
 ---
 
@@ -130,11 +130,11 @@ Coverage floor is 70%. Every new public function in `tools/` needs a test. Every
 
 ## Adding a new agent
 
-1. Create `squad/<role-name>/` with three files:
-   - `__init__.py` — `@tool` functions + `SquadMember` subclass with `slug` and `tools`
-   - `agent.md` — role, goal, backstory (3 sections, `---` separated)
-   - `prompt.md` — task description, expected output (2 sections, `---` separated)
-2. Add the new class to `_SQUAD` in `crew.py`.
+1. Create `squad/<role-name>/` with:
+   - `__init__.py` — `@tool` functions + `MEMBER = SquadMember(slug=..., dir=Path(__file__).parent, tools=[...])`
+   - `role.md`, `goal.md`, `backstory.md` — drive the CrewAI Agent
+   - `description.md`, `expected_output.md` — drive the Task
+2. Import the new `MEMBER` into `_SQUAD` in `crew.py`.
 3. Wire its task into `build_tasks()` in `tasks.py` with correct `context` dependencies.
 4. Add unit tests covering the new tool's logic.
 

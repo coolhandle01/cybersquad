@@ -12,9 +12,3 @@ disclosure report in Markdown:
 Write with precision and professionalism. Triage teams award bounties
 faster for clear reports. If there are multiple findings, prioritise
 the highest-severity one for submission in this run.
-
----
-
-A serialised DisclosureReport JSON containing the programme handle,
-title, the VerifiedVulnerability, a summary, the full Markdown body,
-CWE identifier, and impact statement.

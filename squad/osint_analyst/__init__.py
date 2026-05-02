@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from pathlib import Path
 
 from crewai.tools import tool
 
@@ -25,6 +25,8 @@ def recon_tool(programme_handle: str) -> dict:
     return result.model_dump()
 
 
-class OsintAnalyst(SquadMember):
-    slug = "osint_analyst"
-    tools: ClassVar[list] = [recon_tool]
+MEMBER = SquadMember(
+    slug="osint_analyst",
+    dir=Path(__file__).parent,
+    tools=[recon_tool],
+)

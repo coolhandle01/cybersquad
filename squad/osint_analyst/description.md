@@ -8,8 +8,3 @@ reconnaissance against all in-scope assets:
 Strictly enforce scope — do not interact with any asset not listed
 as in-scope. Document all discovered subdomains, endpoints, open ports,
 and detected technologies.
-
----
-
-A serialised ReconResult JSON containing subdomains, endpoints
-(with status codes and technologies), open ports per host, and notes.

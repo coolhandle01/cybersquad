@@ -1,88 +1,61 @@
 """
-squad/__init__.py — Abstract base for every Bounty Squad member.
+squad/__init__.py — shared SquadMember dataclass + agent/task builders.
 
-Each sub-package declares its tools and slug. All prose lives in markdown:
-  agent.md   — role / goal / backstory  (3 sections, '---' separated)
-  prompt.md  — task description / expected output  (2 sections, '---' separated)
+Each sub-package declares one module-level ``MEMBER = SquadMember(...)`` constant.
+Prose lives in five single-purpose markdown files alongside it:
 
-Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py.
+    role.md             goal.md             backstory.md
+    description.md      expected_output.md
+
+Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.py.
 """
 
 from __future__ import annotations
 
-import inspect
-from abc import ABC
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import Any
 
 from crewai import Agent, Task
 
 
-def _parse_prompt(text: str, source: str) -> tuple[str, str]:
-    """Split prompt.md text on the first '\\n---\\n' separator."""
-    parts = text.split("\n---\n", 1)
-    if len(parts) != 2:  # noqa: PLR2004
-        raise ValueError(f"{source} must contain a '---' separator")
-    return parts[0].strip(), parts[1].strip()
+@dataclass(frozen=True)
+class SquadMember:
+    """A single Bounty Squad member: identity, tools, and prose location."""
+
+    slug: str
+    dir: Path
+    tools: list[Any] = field(default_factory=list)
+
+    def read(self, name: str) -> str:
+        """Read ``<dir>/<name>.md`` and return its stripped contents."""
+        return (self.dir / f"{name}.md").read_text(encoding="utf-8").strip()
 
 
-def _parse_agent_md(text: str, source: str) -> tuple[str, str, str]:
-    """Split agent.md text on the first two '\\n---\\n' separators."""
-    parts = text.split("\n---\n", 2)
-    if len(parts) != 3:  # noqa: PLR2004
-        raise ValueError(f"{source} must contain exactly 2 '---' separators")
-    return parts[0].strip(), parts[1].strip(), parts[2].strip()
+def build_agent(member: SquadMember, llm: object, verbose: bool = False) -> Agent:
+    """Construct a CrewAI Agent from the member's role/goal/backstory files."""
+    return Agent(
+        role=member.read("role"),
+        goal=member.read("goal"),
+        backstory=member.read("backstory"),
+        tools=member.tools,
+        allow_delegation=False,
+        llm=llm,
+        verbose=verbose,
+    )
 
 
-class SquadMember(ABC):
-    """Interface every Bounty Squad member must satisfy."""
-
-    slug: ClassVar[str]
-    tools: ClassVar[list] = []
-
-    @classmethod
-    def _member_dir(cls) -> Path:
-        return Path(inspect.getfile(cls)).parent
-
-    @classmethod
-    def load_agent_md(cls) -> tuple[str, str, str]:
-        """Read (role, goal, backstory) from this member's agent.md."""
-        path = cls._member_dir() / "agent.md"
-        return _parse_agent_md(path.read_text(encoding="utf-8"), str(path))
-
-    @classmethod
-    def load_prompt(cls) -> tuple[str, str]:
-        """Read (description, expected_output) from this member's prompt.md."""
-        path = cls._member_dir() / "prompt.md"
-        return _parse_prompt(path.read_text(encoding="utf-8"), str(path))
-
-    @classmethod
-    def build_agent(cls, llm: object, verbose: bool = False) -> Agent:
-        """Construct a CrewAI Agent from agent.md and cls.tools."""
-        role, goal, backstory = cls.load_agent_md()
-        return Agent(
-            role=role,
-            goal=goal,
-            backstory=backstory,
-            tools=cls.tools,
-            allow_delegation=False,
-            llm=llm,
-            verbose=verbose,
-        )
-
-    @classmethod
-    def build_task(
-        cls,
-        agent: Agent,
-        context: list[Task] | None = None,
-        human_input: bool = False,
-    ) -> Task:
-        """Create a Task wired to the given agent and optional upstream context."""
-        description, expected_output = cls.load_prompt()
-        return Task(
-            description=description,
-            expected_output=expected_output,
-            agent=agent,
-            context=context or [],
-            human_input=human_input,
-        )
+def build_task(
+    member: SquadMember,
+    agent: Agent,
+    context: list[Task] | None = None,
+    human_input: bool = False,
+) -> Task:
+    """Create a Task from the member's description/expected_output files."""
+    return Task(
+        description=member.read("description"),
+        expected_output=member.read("expected_output"),
+        agent=agent,
+        context=context or [],
+        human_input=human_input,
+    )
