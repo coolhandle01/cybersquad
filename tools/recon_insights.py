@@ -482,6 +482,7 @@ __all__ = [
     "save_host_notes",
     "save_host_ports",
     "save_host_score",
+    "save_host_urls",
     "save_insight",
     "save_tls_certificate",
     "tls_path",
