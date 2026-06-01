@@ -84,7 +84,30 @@ def _parse_cve(cve: dict[str, Any]) -> CveEntry:
         cvss_score=cvss_score,
         cvss_vector=cvss_vector,
         description=descriptions[0] if descriptions else "",
+        cwe_ids=_parse_cwe_ids(cve.get("weaknesses", [])),
     )
+
+
+def _parse_cwe_ids(weaknesses: list[dict[str, Any]]) -> list[int]:
+    """Extract the numeric CWE ids NVD attributes to a CVE (its ``weaknesses``).
+
+    Each weakness carries ``description`` entries like ``{"value": "CWE-89"}``;
+    NVD also emits non-numeric placeholders (``NVD-CWE-noinfo`` /
+    ``NVD-CWE-Other``) which are dropped. Returns de-duplicated ids in first-seen
+    order so the authoritative CPE -> CVE -> CWE link is preserved verbatim.
+    """
+    ids: list[int] = []
+    for weakness in weaknesses:
+        if not isinstance(weakness, dict):
+            continue
+        for desc in weakness.get("description", []):
+            value = desc.get("value", "") if isinstance(desc, dict) else ""
+            prefix, _, suffix = value.partition("-")
+            if prefix == "CWE" and suffix.isdigit():
+                cwe_id = int(suffix)
+                if cwe_id not in ids:
+                    ids.append(cwe_id)
+    return ids
 
 
 def _get_cves(params: dict[str, str | int], cache_key: tuple[str, str]) -> list[CveEntry]:

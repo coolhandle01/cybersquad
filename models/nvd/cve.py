@@ -18,3 +18,9 @@ class CveEntry(BaseModel):
     cvss_score: float | None = None
     cvss_vector: str | None = None
     description: str = ""
+    # CWE ids NVD attributes to this CVE (its ``weaknesses``). This is the
+    # authoritative CPE -> CVE -> CWE link: the weakness comes from NVD's data,
+    # not from an agent guessing. NVD's non-numeric placeholders
+    # ("NVD-CWE-noinfo" / "NVD-CWE-Other") are dropped, so an empty list means
+    # NVD assigned no concrete CWE.
+    cwe_ids: list[int] = []
