@@ -38,13 +38,10 @@ dependencies = [
     # imported as a library only, flagged for the licence record.
     "cvss>=3.4",
     # CWE corpus: the full MITRE Common Weakness Enumeration database, bundled
-    # offline (ships the CWE XML inside the wheel - no network). Replaces the
-    # hand-copied CWE name/description text that tools/cwe_data.py used to
-    # vendor; that module now keeps only the cybersquad-specific routing
-    # (vuln_class keyword -> CWE id + OWASP cheat-sheet) and pulls name +
-    # description from this corpus at build time. MITRE keyword search does not
-    # exist as an API, so the keyword->id routing table stays local by design.
-    # MIT licence (data under MITRE's CWE Terms of Use).
+    # offline (ships the CWE XML inside the wheel - no network). Backs the
+    # ``models.mitre.CWE`` type, which validates a CWE id by corpus membership
+    # and carries MITRE's canonical name/description - no hand-vendored CWE
+    # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
     "cwe2>=3.0",
 ]
 

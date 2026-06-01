@@ -109,8 +109,7 @@ class NmapService(BaseModel):
     # FIXME(#45 / amass-integration): promote to a typed ``Cpe`` primitive in
     # ``models.primitives`` once the CVE-lookup workflow lands - CPE now sits
     # on two fields (here + ``Service.cpe``), the multi-field threshold the
-    # cybersquad-models skill sets for a primitive. Deferred alongside the
-    # existing ``CvssVector`` / ``CweId`` primitive plans.
+    # cybersquad-models skill sets for a primitive.
     cpe: str | None = Field(default=None, max_length=255)
 
 

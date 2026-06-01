@@ -90,8 +90,8 @@ class VulnProperty(BaseModel):
     """
 
     # The vulnerability identifier - "CVE-2022-22965", "CWE-89". Required: the
-    # asset's join key into NVD / MITRE. Bare str (id-shape validation is the
-    # deferred CweId / CvssVector primitive work).
+    # asset's join key into NVD / MITRE. Bare str: a CWE id resolves through
+    # the ``CWE`` type, a CVE id through NVD; this field carries either form.
     id: str = Field(min_length=1, max_length=64)
 
     # Tool-captured from the NVD feed (external source), not agent-authored.

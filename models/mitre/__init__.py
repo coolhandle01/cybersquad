@@ -3,16 +3,16 @@ models.mitre - the MITRE weakness-taxonomy vocabulary.
 
 Distinct from the OAM asset graph (``models.asset``) and from NIST's NVD /
 CVSS scoring domain (``models.nvd``). Houses the MITRE shapes - currently the
-``CWEEntry`` Common Weakness Enumeration record (and the CWE-id primitive when
-it lands).
+``CWE`` type: one class for a Common Weakness Enumeration entry, validated and
+enriched from the bundled MITRE corpus by its id.
 
-Leaf package: depends only on pydantic / stdlib, so any model module can import
+Depends on pydantic / stdlib and the ``cwe2`` corpus (the same way
+``models.nvd`` depends on the ``cvss`` library), so any model module can import
 from it without a cycle.
 """
 
 from __future__ import annotations
 
-from models.mitre.cwe import CWEEntry
-from models.mitre.cwe_id import CweId
+from models.mitre.cwe import CWE
 
-__all__ = ["CWEEntry", "CweId"]
+__all__ = ["CWE"]

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from models.mitre import CweId
 from models.nvd import CvssVector
 
 
@@ -115,14 +114,15 @@ class AuthoredDraft(BaseModel):
             " upstream to double-check."
         ),
     )
-    # CweId validates id *shape* (positive int in range) at args_schema time,
-    # not catalogue membership - a real CWE we have not vendored is still valid;
-    # the wrapper warns (not errors) on a local-catalogue miss.
-    cwe_id: CweId = Field(
+    # Bare int: the agent authors the id. ``validate_draft`` resolves it
+    # against the corpus (``CWE.get``) and warns on a miss - keeping the draft
+    # args_schema a plain int rather than a nested CWE object the LLM would
+    # have to construct.
+    cwe_id: int = Field(
         description=(
             "Numeric CWE identifier matching the entry from ``Lookup"
-            " CWE``. The validator verifies the id resolves to a real"
-            " CWE entry; an unknown id refuses upstream of the H1"
+            " CWE`` (e.g. ``89``). Validated against the MITRE corpus when"
+            " the draft is checked; an unknown id is flagged before H1"
             " submission."
         ),
     )

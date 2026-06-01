@@ -5,10 +5,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 import runtime
-from models import AuthoredDraft, CWEEntry, CweId, OWASPEntry, ProgrammeReportSummary
+from models import CWE, AuthoredDraft, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
-from tools.cwe_data import get_by_id as cwe_get_by_id
 from tools.h1_api import h1
 from tools.owasp_data import lookup as owasp_lookup
 from tools.report_tools import (
@@ -63,7 +62,7 @@ def sanitise_evidence_tool(text: str) -> SanitisationReport:
 class _TaLookupCweArgs(BaseModel):
     """Explicit args_schema for the TA's Lookup CWE tool."""
 
-    cwe_id: CweId = Field(
+    cwe_id: int = Field(
         description=(
             "The CWE id this finding maps to. For a CVE-backed finding,"
             " use the id ``NVD CVE Lookup`` returned (``CveEntry.cwe_ids``);"
@@ -76,15 +75,15 @@ class _TaLookupCweArgs(BaseModel):
 
 
 @cyber_tool("Lookup CWE", args_schema=_TaLookupCweArgs)
-def lookup_cwe_tool(cwe_id: int) -> list[CWEEntry]:
+def lookup_cwe_tool(cwe_id: int) -> list[CWE]:
     """
     Resolve a CWE id to MITRE's canonical name, description, and URL for the
     remediation section. Pass the id from NVD CVE Lookup (cwe_ids) for a
     CVE-backed finding, or the weakness-class id otherwise. Returns one entry,
     or an empty list if the id is not a real CWE.
     """
-    entry = cwe_get_by_id(cwe_id)
-    return [entry] if entry else []
+    cwe = CWE.get(cwe_id)
+    return [cwe] if cwe else []
 
 
 class _TaLookupOwaspArgs(BaseModel):

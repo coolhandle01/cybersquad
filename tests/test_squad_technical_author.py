@@ -143,13 +143,13 @@ class TestTechnicalAuthorTools:
         assert result.redactions
 
     def test_lookup_cwe_tool_finds_known_class(self) -> None:
+        from models import CWE
         from squad.technical_author import lookup_cwe_tool
-        from tools.cwe_data import CWEEntry
 
         result = lookup_cwe_tool.func(89)
         assert isinstance(result, list)
         assert result
-        assert isinstance(result[0], CWEEntry)
+        assert isinstance(result[0], CWE)
         assert result[0].cwe_id == 89
         assert "cwe.mitre.org" in result[0].url
 

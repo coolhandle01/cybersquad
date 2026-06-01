@@ -23,9 +23,9 @@ the supporting primitives:
 * ``save_report(report)`` - persist a finalised report to the configured
   reports directory (kept for Disclosure Coordinator compatibility).
 
-The CWE / OWASP citation hints come from ``tools/cwe_data.py`` and
-``tools/owasp_data.py`` rather than living inline here. The Technical Author
-looks them up via the dedicated tools.
+CWE enrichment comes from the ``models.mitre.CWE`` type (the bundled MITRE
+corpus) and OWASP cheat-sheet hints from ``tools/owasp_data.py``. The Technical
+Author looks them up via the dedicated tools.
 """
 
 from __future__ import annotations
@@ -42,9 +42,8 @@ from pydantic import BaseModel, Field
 
 import runtime
 from config import config
-from models import Severity, VerifiedVulnerability
+from models import CWE, Severity, VerifiedVulnerability
 from models.h1 import DisclosureReport
-from tools.cwe_data import get_by_id as cwe_get_by_id
 
 _SEVERITY_LABELS: dict[Severity, str] = {
     Severity.INFORMATIONAL: "None",
@@ -492,7 +491,7 @@ def validate_draft(draft: ReportDraft) -> ValidationReport:
             )
 
     # CWE
-    if cwe_get_by_id(draft.cwe_id) is None:
+    if CWE.get(draft.cwe_id) is None:
         issues.append(
             ValidationIssue(
                 section="cwe",
@@ -513,7 +512,7 @@ def validate_draft(draft: ReportDraft) -> ValidationReport:
 
 def render_draft_markdown(draft: ReportDraft) -> str:
     """Render a draft into H1 markdown using the report template."""
-    cwe = cwe_get_by_id(draft.cwe_id)
+    cwe = CWE.get(draft.cwe_id)
     cwe_name = cwe.name if cwe else "Other"
     steps = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(draft.steps_to_reproduce))
     evidence_block = textwrap.indent(draft.evidence[:_EVIDENCE_LIMIT], "  ")
@@ -627,7 +626,7 @@ def finalise_drafts(
 
     reports: list[DisclosureReport] = []
     for draft in drafts:
-        cwe = cwe_get_by_id(draft.cwe_id)
+        cwe = CWE.get(draft.cwe_id)
         vuln = VerifiedVulnerability(
             title=draft.title,
             vuln_class=draft.vuln_class,

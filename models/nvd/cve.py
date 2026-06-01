@@ -1,9 +1,8 @@
 """
 models.nvd.cve - the NVD CVE record shape, returned by VR's NVD CVE Lookup.
 
-Pairs with ``tools/cwe_data.py`` and ``tools/owasp_data.py`` as the
-external-vocabulary lookups the VR uses during triage; this is the only
-one wired to a live NVD query rather than a vendored catalogue.
+The external-vocabulary record the VR pulls during triage via a live NVD
+query (the ``models.mitre.CWE`` type enriches the ``cwe_ids`` this carries).
 """
 
 from __future__ import annotations

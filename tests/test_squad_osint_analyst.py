@@ -282,13 +282,13 @@ class TestOsintAnalystTools:
         mdetect.assert_not_called()
 
     def test_lookup_cwe_tool(self) -> None:
+        from models import CWE
         from squad.osint_analyst import lookup_cwe_tool
-        from tools.cwe_data import CWEEntry
 
         result = lookup_cwe_tool.func(79)
         assert isinstance(result, list)
         assert result
-        assert isinstance(result[0], CWEEntry)
+        assert isinstance(result[0], CWE)
         assert result[0].cwe_id == 79
 
     def test_lookup_owasp_tool(self) -> None:
