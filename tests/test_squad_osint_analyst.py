@@ -285,7 +285,7 @@ class TestOsintAnalystTools:
         from squad.osint_analyst import lookup_cwe_tool
         from tools.cwe_data import CWEEntry
 
-        result = lookup_cwe_tool.func("XSS")
+        result = lookup_cwe_tool.func(79)
         assert isinstance(result, list)
         assert result
         assert isinstance(result[0], CWEEntry)

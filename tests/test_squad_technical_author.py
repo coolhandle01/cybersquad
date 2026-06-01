@@ -146,7 +146,7 @@ class TestTechnicalAuthorTools:
         from squad.technical_author import lookup_cwe_tool
         from tools.cwe_data import CWEEntry
 
-        result = lookup_cwe_tool.func("SQLi")
+        result = lookup_cwe_tool.func(89)
         assert isinstance(result, list)
         assert result
         assert isinstance(result[0], CWEEntry)
@@ -156,7 +156,7 @@ class TestTechnicalAuthorTools:
     def test_lookup_cwe_tool_empty_for_unknown(self) -> None:
         from squad.technical_author import lookup_cwe_tool
 
-        assert lookup_cwe_tool.func("zzz-not-a-class") == []
+        assert lookup_cwe_tool.func(999999) == []
 
     def test_lookup_owasp_tool_returns_cheatsheet(self) -> None:
         from squad.technical_author import lookup_owasp_tool

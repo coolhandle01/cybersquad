@@ -5,10 +5,10 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 import runtime
-from models import AuthoredDraft, CWEEntry, OWASPEntry, ProgrammeReportSummary
+from models import AuthoredDraft, CWEEntry, CweId, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
-from tools.cwe_data import lookup as cwe_lookup
+from tools.cwe_data import get_by_id as cwe_get_by_id
 from tools.h1_api import h1
 from tools.owasp_data import lookup as owasp_lookup
 from tools.report_tools import (
@@ -63,29 +63,28 @@ def sanitise_evidence_tool(text: str) -> SanitisationReport:
 class _TaLookupCweArgs(BaseModel):
     """Explicit args_schema for the TA's Lookup CWE tool."""
 
-    query: str = Field(
+    cwe_id: CweId = Field(
         description=(
-            "Free-text query against the Common Weakness Enumeration"
-            " index. Accepts a ``vuln_class`` string (``SQLi``,"
-            " ``ReflectedXSS``), a CWE name (``Cross-Site Scripting``),"
-            " or a free-text keyword. Use to cite the canonical MITRE"
-            " definition in the remediation section - the returned"
-            " entry surfaces the matching OWASP cheat-sheet topic so"
-            " you can chain to ``Lookup OWASP Guidance``."
+            "The CWE id this finding maps to. For a CVE-backed finding,"
+            " use the id ``NVD CVE Lookup`` returned (``CveEntry.cwe_ids``);"
+            " otherwise the id of the weakness class the probe found"
+            " (e.g. ``89`` for SQL injection, ``79`` for XSS). Returns"
+            " MITRE's canonical name + description + URL to cite in the"
+            " remediation section."
         ),
     )
 
 
 @cyber_tool("Lookup CWE", args_schema=_TaLookupCweArgs)
-def lookup_cwe_tool(query: str) -> list[CWEEntry]:
+def lookup_cwe_tool(cwe_id: int) -> list[CWEEntry]:
     """
-    Find Common Weakness Enumeration entries that match a query. Pass a
-    vuln_class string ("SQLi", "ReflectedXSS"), a CWE name ("Cross-Site
-    Scripting"), or a free-text keyword. Returns each match's cwe_id, name,
-    short description, MITRE URL, and the matching OWASP cheat-sheet topic so
-    you can chain to Lookup OWASP Guidance.
+    Resolve a CWE id to MITRE's canonical name, description, and URL for the
+    remediation section. Pass the id from NVD CVE Lookup (cwe_ids) for a
+    CVE-backed finding, or the weakness-class id otherwise. Returns one entry,
+    or an empty list if the id is not a real CWE.
     """
-    return list(cwe_lookup(query))
+    entry = cwe_get_by_id(cwe_id)
+    return [entry] if entry else []
 
 
 class _TaLookupOwaspArgs(BaseModel):

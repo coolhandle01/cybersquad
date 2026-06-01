@@ -159,7 +159,7 @@ class TestSchemaAcceptReject:
         ("schema_cls", "kwargs"),
         [
             (_SanitiseEvidenceArgs, {"text": "Authorization: Bearer abc.def.ghi"}),
-            (_TaLookupCweArgs, {"query": "SQLi"}),
+            (_TaLookupCweArgs, {"cwe_id": 89}),
             (_TaLookupOwaspArgs, {"query": "sql injection"}),
             (_TaCalculateCvssArgs, {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}),
             # Shared workspace acceptance cases.
@@ -211,7 +211,7 @@ class TestSchemaAcceptReject:
         "schema_cls",
         [
             _SanitiseEvidenceArgs,  # text required
-            _TaLookupCweArgs,  # query required
+            _TaLookupCweArgs,  # cwe_id required
             _TaLookupOwaspArgs,  # query required
             _TaCalculateCvssArgs,  # vector required
             _DraftReportArgs,  # every authored field required
