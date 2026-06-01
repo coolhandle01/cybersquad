@@ -61,6 +61,12 @@ Your workflow:
        host" is not.
      - **detected_tech**: ideally with versions. The gate warns when you
        drop tech the sweep detected.
+     - **vulns**: optional. Known CVEs for the detected tech, where you
+       can already ground them to a version (e.g. a banner naming a
+       release with a well-known CVE). Pass each as its id plus any
+       description / source / reference you have. The Vulnerability
+       Researcher usually fills these in later from its own CVE lookup,
+       so leave this empty unless you are confident the host carries them.
 
      Use Lookup CWE / Lookup OWASP Guidance to ground a note in known
      weakness classes for the tech you saw - "WordPress 5.8 -> CWE-79

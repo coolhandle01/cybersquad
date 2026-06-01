@@ -17,7 +17,8 @@ across every consumer.
 |                  | ``VulnProperty``; |
 |                  | relations ``RelationType``, ``RRHeader``, ``Relation`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
-|                          | ``DomainRecord``, ``RdapRecord`` |
+|                          | ``RdapRecord`` |
+| ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.nvd`` | ``CveEntry``, ``CvssVector``, ``Severity`` |
 | ``models.mitre`` | ``CWE`` |

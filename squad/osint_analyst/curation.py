@@ -181,6 +181,10 @@ def annotate_host_tool(
       - detected_tech: ideally with versions ("Spring Boot 2.6.3" beats
         "Spring Boot"); the warning fires when the sweep saw tech that the
         annotation drops
+      - vulns: optional OAM VulnProperty annotations - known CVEs for the
+        detected tech, where they can already be grounded to a version.
+        Usually left empty here; the Vulnerability Researcher attaches
+        these later via Annotate Vulnerabilities.
 
     Returns a HostAnnotation with the relative insight path and an
     InsightValidationReport. Re-run with the issues addressed when

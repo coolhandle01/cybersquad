@@ -19,7 +19,7 @@ primitives:
   directory carries one FQDN asset's worth of evidence end-to-end.
 * ``save_insight`` / ``load_insights`` - persist insights under
   ``<run_dir>/assets/<fqdn>/insight.json``.
-* ``finalise_recon(programme, attack_graph_path)`` - load the sweep, validate every
+* ``finalise_recon(programme, attack_graph_filename)`` - load the sweep, validate every
   insight, build the canonical ``AttackGraph`` for downstream agents, and
   write ``recon.json``. Refuses on hard errors or insufficient curation.
 
