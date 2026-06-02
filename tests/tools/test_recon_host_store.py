@@ -108,19 +108,19 @@ class TestRelationPersistence:
 
 
 class TestInsightPersistence:
-    def test_save_insight_writes_per_host_file(self, make_host_insight, run_dir):
+    def test_save_insight_writes_per_host_file(self, make_host_insight, run_dir, target_apex):
         path = save_insight(make_host_insight())
-        assert path == run_dir / "assets" / "api.example.com" / "insight.json"
+        assert path == run_dir / "assets" / f"api.{target_apex}" / "insight.json"
         assert path.exists()
         loaded = HostInsight.model_validate_json(path.read_text())
-        assert loaded.hostname == "api.example.com"
+        assert loaded.hostname == f"api.{target_apex}"
 
-    def test_host_dir_is_per_fqdn_directory_under_hosts(self, run_dir):
+    def test_host_dir_is_per_fqdn_directory_under_hosts(self, run_dir, target_apex):
         # host_dir is the public hook future evidence-writing tools
         # (screenshots, scan output, response bodies) call to find the
         # per-FQDN slot.
-        d = host_dir("api.example.com")
-        assert d == run_dir / "assets" / "api.example.com"
+        d = host_dir(f"api.{target_apex}")
+        assert d == run_dir / "assets" / f"api.{target_apex}"
 
     def test_insight_path_sanitises_special_chars(self, run_dir):
         # / in the FQDN is sanitised to _ so the host's directory stays
@@ -130,11 +130,21 @@ class TestInsightPersistence:
         assert path.parent.parent.name == "assets"
         assert path.name == "insight.json"
 
-    def test_load_insights_orders_by_hostname(self, make_host_insight, run_dir):
-        save_insight(make_host_insight(hostname="zebra.example.com"))
-        save_insight(make_host_insight(hostname="aardvark.example.com"))
+    @pytest.mark.parametrize("hostname", [".", "..", "  ..  "])
+    def test_host_dir_rejects_dot_traversal(self, run_dir, hostname):
+        # The sanitiser keeps ``.`` (legitimate in an FQDN), so a dot-only
+        # host would otherwise resolve the directory up out of assets/ and
+        # clobber a run-level artefact. A host here is not always a validated
+        # FQDN (it can come from a RawFinding.target / parsed URL host), so
+        # host_dir must reject the traversal forms rather than trust the type.
+        with pytest.raises(ValueError, match=r"unsafe|escapes"):
+            host_dir(hostname)
+
+    def test_load_insights_orders_by_hostname(self, make_host_insight, run_dir, target_apex):
+        save_insight(make_host_insight(hostname=f"zebra.{target_apex}"))
+        save_insight(make_host_insight(hostname=f"aardvark.{target_apex}"))
         loaded = load_insights()
-        assert [i.hostname for i in loaded] == ["aardvark.example.com", "zebra.example.com"]
+        assert [i.hostname for i in loaded] == [f"aardvark.{target_apex}", f"zebra.{target_apex}"]
 
     def test_load_insights_empty_when_no_dir(self, run_dir):
         assert load_insights() == []
@@ -142,7 +152,7 @@ class TestInsightPersistence:
     def test_insight_path_rejects_empty_hostname(self, run_dir):
         # insight_path builds <run_dir>/hosts/<sanitised>/insight.json, so the
         # sanitisation check runs before runtime.run_dir() is needed.
-        with pytest.raises(ValueError, match="empty after sanitisation"):
+        with pytest.raises(ValueError, match="empty or unsafe after sanitisation"):
             insight_path("///")
 
 

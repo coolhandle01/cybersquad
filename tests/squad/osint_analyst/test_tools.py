@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestOsintAnalystTools:
-    def test_list_subdomains_tool_wraps_hostnames_as_fqdn(self) -> None:
+    def test_list_subdomains_tool_wraps_hostnames_as_fqdn(self, target_apex) -> None:
         # Thin wrapper: list[str] from the impl becomes list[FQDN] for the
         # agent so the typed primitive's validator fires at the wrapper
         # boundary, not inside the consumer.
@@ -27,13 +27,13 @@ class TestOsintAnalystTools:
 
         with patch(
             "squad.osint_analyst.discovery.recon_subdomains",
-            return_value=["api.example.com", "admin.example.com"],
+            return_value=[f"api.{target_apex}", f"admin.{target_apex}"],
         ) as mimpl:
             result = list_subdomains_tool.func(
                 attack_graph_path="attack_graph.json", host_filter="api"
             )
 
-        assert result == ["api.example.com", "admin.example.com"]
+        assert result == [f"api.{target_apex}", f"admin.{target_apex}"]
         mimpl.assert_called_once_with("attack_graph.json", host_filter="api")
 
     def test_list_endpoints_tool_returns_endpoint_page(self, target_apex) -> None:
@@ -66,23 +66,22 @@ class TestOsintAnalystTools:
             limit=50,
         )
 
-    def test_list_open_ports_tool_wraps_dict_as_open_ports_map(self) -> None:
+    def test_list_open_ports_tool_wraps_dict_as_open_ports_map(self, target_apex) -> None:
         # Wrapper turns the impl's ``{host: [ports]}`` into the typed
         # ``OpenPortsMap`` the agent reads back.
         from models import OpenPortsMap
         from squad.osint_analyst import list_open_ports_tool
 
+        host = f"api.{target_apex}"
         with patch(
             "squad.osint_analyst.discovery.recon_open_ports",
-            return_value={"api.example.com": [80, 443]},
+            return_value={host: [80, 443]},
         ) as mimpl:
-            result = list_open_ports_tool.func(
-                attack_graph_path="attack_graph.json", host="api.example.com"
-            )
+            result = list_open_ports_tool.func(attack_graph_path="attack_graph.json", host=host)
 
         assert isinstance(result, OpenPortsMap)
-        assert result.hosts == {"api.example.com": [80, 443]}
-        mimpl.assert_called_once_with("attack_graph.json", host="api.example.com")
+        assert result.hosts == {host: [80, 443]}
+        mimpl.assert_called_once_with("attack_graph.json", host=host)
 
     def test_run_initial_sweep_tool(self, programme_in_workspace, recon_result, tmp_path) -> None:
         from squad.osint_analyst import run_initial_sweep_tool
@@ -95,14 +94,15 @@ class TestOsintAnalystTools:
         mrun.assert_called_once_with(programme_in_workspace)
 
     def test_annotate_host_tool_writes_insight_and_returns_validation(
-        self, programme_in_workspace, recon_result, tmp_path
+        self, programme_in_workspace, recon_result, tmp_path, target_apex
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
         stage_model_json(tmp_path, "attack_graph.json", recon_result)
 
+        host = f"api.{target_apex}"
         result = annotate_host_tool.func(
-            hostname="api.example.com",
+            hostname=host,
             role="api",
             priority="high",
             notes=(
@@ -116,7 +116,7 @@ class TestOsintAnalystTools:
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is True
-        assert (tmp_path / "assets" / "api.example.com" / "insight.json").exists()
+        assert (tmp_path / "assets" / host / "insight.json").exists()
 
     def test_annotate_host_tool_surfaces_validation_issues(
         self, programme_in_workspace, recon_result, tmp_path, target_apex
@@ -185,14 +185,14 @@ class TestOsintAnalystTools:
         with pytest.raises(ValueError, match="no host insights"):
             finalise_recon_tool.func()
 
-    def test_discover_webpages_tool(self, programme_in_workspace, endpoint) -> None:
+    def test_discover_webpages_tool(self, programme_in_workspace, endpoint, target_apex) -> None:
         """Happy path: in-scope hostname passes the wrapper's scope filter,
         the body fires, the endpoint is returned.
 
         Exercises the real ``filter_in_scope`` against the fixture
-        programme (in-scope: ``example.com`` + ``*.example.com``) -
-        ``api.example.com`` matches the wildcard, so the wrapper hands
-        the body the cleaned hostname.
+        programme (in-scope: the apex + its wildcard) - an ``api.``
+        subdomain matches the wildcard, so the wrapper hands the body
+        the cleaned hostname.
         """
         from squad.osint_analyst import discover_webpages_tool
 
@@ -200,7 +200,7 @@ class TestOsintAnalystTools:
             "squad.osint_analyst.discovery.probe_endpoints_impl",
             return_value=[endpoint],
         ):
-            result = discover_webpages_tool.func(["api.example.com"])
+            result = discover_webpages_tool.func([f"api.{target_apex}"])
 
         assert isinstance(result, list)
         assert result[0].url == endpoint.url
@@ -236,12 +236,13 @@ class TestOsintAnalystTools:
         assert result == []
         mprobe.assert_not_called()
 
-    def test_discover_takeover_candidates_tool(self, programme_in_workspace) -> None:
+    def test_discover_takeover_candidates_tool(self, programme_in_workspace, target_apex) -> None:
         from squad.osint_analyst import discover_takeover_candidates_tool
         from tools.recon.dnsx import TakeoverCandidate
 
+        host = f"legacy.{target_apex}"
         candidate = TakeoverCandidate(
-            hostname="legacy.example.com",
+            hostname=host,
             cname="bucket.s3.amazonaws.com",
             reason="cname_to_vulnerable_provider",
             service="AWS S3",
@@ -250,7 +251,7 @@ class TestOsintAnalystTools:
             "squad.osint_analyst.discovery.detect_takeover_candidates",
             return_value=[candidate],
         ):
-            result = discover_takeover_candidates_tool.func(["legacy.example.com"])
+            result = discover_takeover_candidates_tool.func([host])
 
         assert isinstance(result, list)
         assert result == [candidate]

@@ -11,7 +11,13 @@ dependency and does no corpus lookup on serialisation.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
+
+# Boundary cap on the NVD-sourced description (see the field comment below).
+# Exported so the parser (``tools.nvd._parse_cve``) truncates to the same
+# length rather than letting an over-long upstream description reject the CVE -
+# one source of truth for the cap, used at the model and at the parse boundary.
+DESCRIPTION_MAX_LENGTH = 2000
 
 
 class CVE(BaseModel):
@@ -20,14 +26,20 @@ class CVE(BaseModel):
     id: str
     cvss_score: float | None = None
     cvss_vector: str | None = None
-    description: str = ""
+    # Tool-captured from the NVD feed (external source), not agent-authored,
+    # and this model is the direct return of the VR's CVE-lookup tools - so the
+    # text reaches the agent's context. Defence (cybersquad-models skill,
+    # tool-captured text): a boundary length cap so a poisoned upstream
+    # description cannot smuggle a large injection into context. Mirrors the
+    # cap on the persisted ``VulnProperty.description``.
+    description: str = Field(default="", max_length=DESCRIPTION_MAX_LENGTH)
     # CWE ids NVD attributes to this CVE (its ``weaknesses``). This is the
     # authoritative CPE -> CVE -> CWE link: the weakness comes from NVD's data,
     # not from an agent guessing. NVD's non-numeric placeholders
     # ("NVD-CWE-noinfo" / "NVD-CWE-Other") are dropped at parse time, so an empty
     # list means NVD assigned no concrete CWE. Carried as raw ids verbatim -
     # name resolution is the consumer's job (``CWE.get`` / ``Lookup CWE``).
-    cwe_ids: list[int] = []
+    cwe_ids: list[int] = Field(default_factory=list)
 
     # The canonical NVD detail page for this CVE. A computed_field (not a plain
     # property) so it serialises into model_dump - the @cyber_tool return hands

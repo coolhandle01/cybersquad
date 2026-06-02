@@ -41,7 +41,7 @@ pytestmark = pytest.mark.unit
 def sweep(programme, target_apex) -> AttackGraph:
     return AttackGraph(
         programme=programme,
-        subdomains=["api.example.com", "admin.example.com", "cdn.example.com"],
+        subdomains=[f"api.{target_apex}", f"admin.{target_apex}", f"cdn.{target_apex}"],
         endpoints=[
             Endpoint(
                 url=f"https://api.{target_apex}",
@@ -157,27 +157,27 @@ class TestValidateInsight:
 
 
 class TestUncoveredInterestingHosts:
-    def test_returns_hosts_without_insights(self, sweep):
+    def test_returns_hosts_without_insights(self, sweep, target_apex):
         # No insights yet, all interesting hosts uncovered
         uncovered = uncovered_interesting_hosts(sweep, [])
         # api / admin / cdn are 200/401/200 (interesting); dead is 500 (skip)
         assert set(uncovered) == {
-            "api.example.com",
-            "admin.example.com",
-            "cdn.example.com",
+            f"api.{target_apex}",
+            f"admin.{target_apex}",
+            f"cdn.{target_apex}",
         }
 
-    def test_drops_hosts_with_insights(self, make_host_insight, sweep):
+    def test_drops_hosts_with_insights(self, make_host_insight, sweep, target_apex):
         uncovered = uncovered_interesting_hosts(
             sweep,
-            [make_host_insight(hostname="api.example.com")],
+            [make_host_insight(hostname=f"api.{target_apex}")],
         )
-        assert "api.example.com" not in uncovered
-        assert "admin.example.com" in uncovered
+        assert f"api.{target_apex}" not in uncovered
+        assert f"admin.{target_apex}" in uncovered
 
-    def test_excludes_uninteresting_status(self, sweep):
+    def test_excludes_uninteresting_status(self, sweep, target_apex):
         uncovered = uncovered_interesting_hosts(sweep, [])
-        assert "dead.example.com" not in uncovered
+        assert f"dead.{target_apex}" not in uncovered
 
 
 # Finalisation
@@ -189,7 +189,7 @@ def _write_sweep(run_dir, sweep: AttackGraph) -> None:
 
 class TestFinaliseRecon:
     def test_writes_recon_json_for_clean_insights(
-        self, make_host_insight, sweep, programme, run_dir
+        self, make_host_insight, sweep, programme, run_dir, target_apex
     ):
         _write_sweep(run_dir, sweep)
         save_insight(make_host_insight())
@@ -197,7 +197,7 @@ class TestFinaliseRecon:
         assert path == run_dir / "recon.json"
         data = json.loads(path.read_text())
         assert len(data["host_insights"]) == 1
-        assert data["host_insights"][0]["hostname"] == "api.example.com"
+        assert data["host_insights"][0]["hostname"] == f"api.{target_apex}"
 
     def test_refuses_without_insights(self, sweep, programme, run_dir):
         _write_sweep(run_dir, sweep)
@@ -242,7 +242,7 @@ class TestMaterialiseUrls:
         from tools.recon_host_store import load_host_urls
 
         _write_sweep(run_dir, sweep)
-        save_insight(make_host_insight())  # api.example.com, HIGH
+        save_insight(make_host_insight())  # api.<apex>, HIGH
         finalise_recon(programme)
 
         urls = load_host_urls(f"api.{target_apex}")
@@ -301,12 +301,12 @@ class TestFinaliseMaterialisesHostDirs:
             }
         )
         _write_sweep(run_dir, enriched)
-        save_insight(make_host_insight())  # api.example.com, HIGH
+        save_insight(make_host_insight())  # api.<apex>, HIGH
         finalise_recon(programme)
 
         # curation facets (from the insight)
-        assert host_score_path("api.example.com").is_file()
-        assert "primary target" in notes_path("api.example.com").read_text(encoding="utf-8")
+        assert host_score_path(f"api.{target_apex}").is_file()
+        assert "primary target" in notes_path(f"api.{target_apex}").read_text(encoding="utf-8")
         # fact facets (from the sweep)
         assert load_host_ports(f"api.{target_apex}") == [443]
         assert load_host_ports(f"empty.{target_apex}") == []  # empty list -> not written

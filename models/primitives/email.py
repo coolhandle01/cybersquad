@@ -19,7 +19,7 @@ from pydantic import AfterValidator
 #
 # Used by ``models.network.Contact.email`` for the structured-registrant
 # entries pulled from RDAP (abuse / registrant / admin / technical
-# vCards). Capped at 254 chars per RFC 5321 §4.5.3.1.1 by the validator;
+# vCards). Capped at 254 chars per RFC 5321 section 4.5.3.1.1 by the validator;
 # the cap is enforced inside ``validate_email`` rather than as a
 # separate Field constraint so callers cannot bypass it via direct
 # construction.

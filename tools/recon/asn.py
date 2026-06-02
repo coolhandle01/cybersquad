@@ -64,10 +64,13 @@ def _parse_cymru_row(line: str) -> AsnRecord | None:
     rows, blanks, or malformed entries (Cymru emits "NA" for unknown
     AS numbers - we skip those rather than coerce to 0).
     """
-    parts = [p.strip() for p in line.split("|")]
+    # Split at most six times so the trailing AS-Name column stays intact even
+    # when it contains a literal "|" - an unbounded split would truncate a
+    # piped org name to the seventh field and silently drop the rest.
+    parts = [p.strip() for p in line.split("|", 6)]
     if len(parts) < 7:
         return None
-    asn_raw, ip_raw, prefix, country, _registry, _allocated, organisation = parts[:7]
+    asn_raw, ip_raw, prefix, country, _registry, _allocated, organisation = parts
     # Header row legend ("AS | IP | BGP Prefix | ...") trips the column
     # count check above but a stray padding line might not - skip when
     # the AS column isn't numeric.

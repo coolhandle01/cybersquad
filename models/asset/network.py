@@ -165,7 +165,7 @@ class AsnRecord(BaseModel):
 class ContactRole(StrEnum):
     """The RDAP entity role a ``Contact`` serves.
 
-    Subset of RFC 7483 §10.2.4. The OA-meaningful roles only - we
+    Subset of RFC 7483 section 10.2.4. The OA-meaningful roles only - we
     intentionally do not project unknown / non-standard role values
     onto an ``OTHER`` bucket; the parser drops entities whose role
     is outside this set rather than smuggle unfamiliar prose

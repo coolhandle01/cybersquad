@@ -74,11 +74,23 @@ def host_dir(hostname: FQDN) -> Path:
     Sanitises the hostname for filesystem use. The replacement is
     reversible because we never reverse it - the persisted artefacts
     inside carry the original hostname in their body.
+
+    The sanitiser keeps ``.`` (legitimate in an FQDN), so a hostname of
+    ``.`` / ``..`` would survive and resolve the directory out of (or up
+    from) ``assets/``. That matters because a host here is not always a
+    validated ``FQDN``: callers also derive it from a ``RawFinding.target``
+    (a bare ``str``) or a parsed URL host, both attacker-influenceable. We
+    reject the dot-only forms and assert the result stays inside
+    ``assets/`` so a crafted host cannot clobber a run-level artefact.
     """
+    assets = _assets_dir()
     safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
-    if not safe or safe.strip("_") == "":
-        raise ValueError("hostname is empty after sanitisation")
-    return _assets_dir() / safe
+    if not safe.strip("_") or safe in {".", ".."}:
+        raise ValueError(f"hostname is empty or unsafe after sanitisation: {hostname!r}")
+    result = assets / safe
+    if not result.resolve().is_relative_to(assets.resolve()):
+        raise ValueError(f"hostname escapes the assets directory: {hostname!r}")
+    return result
 
 
 def insight_path(hostname: FQDN) -> Path:
