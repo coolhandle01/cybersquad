@@ -102,6 +102,18 @@ case "$file_path" in
         ;;
 esac
 
+# cybersquad-oam stacks on cybersquad-models for the OAM asset layer - the
+# asset / property / relation shapes under models/asset/ that implement
+# OWASP amass's Open Asset Model. Generic model rules load first; the OAM
+# specialist (faithful-to-amass, OAM-names-win, properties-as-annotations)
+# layers on top. No in_tests guard, matching cybersquad-models: the OAM
+# contract is relevant when testing the asset shapes too.
+case "$file_path" in
+    */models/asset/*.py)
+        matches+=(cybersquad-oam)
+        ;;
+esac
+
 # Pipeline plumbing - one skill per file; no stacking.
 case "$file_path" in
     */runtime.py|*/main.py)
