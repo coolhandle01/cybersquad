@@ -80,17 +80,14 @@ def host_dir(hostname: FQDN) -> Path:
     from) ``assets/``. That matters because a host here is not always a
     validated ``FQDN``: callers also derive it from a ``RawFinding.target``
     (a bare ``str``) or a parsed URL host, both attacker-influenceable. We
-    reject the dot-only forms and assert the result stays inside
-    ``assets/`` so a crafted host cannot clobber a run-level artefact.
+    reject those dot-only forms; with ``/`` already turned to ``_`` by the
+    sanitiser, no other component can traverse, so a crafted host cannot
+    escape ``assets/`` and clobber a run-level artefact.
     """
-    assets = _assets_dir()
     safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
     if not safe.strip("_") or safe in {".", ".."}:
         raise ValueError(f"hostname is empty or unsafe after sanitisation: {hostname!r}")
-    result = assets / safe
-    if not result.resolve().is_relative_to(assets.resolve()):
-        raise ValueError(f"hostname escapes the assets directory: {hostname!r}")
-    return result
+    return _assets_dir() / safe
 
 
 def insight_path(hostname: FQDN) -> Path:

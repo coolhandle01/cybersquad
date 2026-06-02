@@ -137,7 +137,7 @@ class TestInsightPersistence:
         # clobber a run-level artefact. A host here is not always a validated
         # FQDN (it can come from a RawFinding.target / parsed URL host), so
         # host_dir must reject the traversal forms rather than trust the type.
-        with pytest.raises(ValueError, match=r"unsafe|escapes"):
+        with pytest.raises(ValueError, match="unsafe after sanitisation"):
             host_dir(hostname)
 
     def test_load_insights_orders_by_hostname(self, make_host_insight, run_dir, target_apex):
