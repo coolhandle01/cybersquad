@@ -20,7 +20,7 @@ across every consumer.
 |                          | ``RdapRecord`` |
 | ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
-| ``models.nvd`` | ``CveEntry``, ``CvssVector``, ``Severity`` |
+| ``models.nvd`` | ``CveEntry``, ``ServiceCves``, ``CvssVector``, ``Severity`` |
 | ``models.mitre`` | ``CWE`` |
 | ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
@@ -104,7 +104,7 @@ from models.insight import (
 )
 from models.metrics import RunMetrics
 from models.mitre import CWE
-from models.nvd import CveEntry, CvssVector, Severity
+from models.nvd import CveEntry, CvssVector, ServiceCves, Severity
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType
 from models.report import AuthoredDraft
@@ -190,6 +190,7 @@ __all__ = [
     "RunFileContent",
     "RunMetrics",
     "Service",
+    "ServiceCves",
     "Severity",
     "SeverityDecision",
     "SimpleProperty",

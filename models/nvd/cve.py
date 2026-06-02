@@ -23,3 +23,18 @@ class CveEntry(BaseModel):
     # ("NVD-CWE-noinfo" / "NVD-CWE-Other") are dropped, so an empty list means
     # NVD assigned no concrete CWE.
     cwe_ids: list[int] = []
+
+
+class ServiceCves(BaseModel):
+    """The CVEs NVD returned for one of a host's nmap-detected service CPEs.
+
+    One row of the VR's CVEs for Host lookup: the ``Service`` whose CPE was
+    queried, the exact CPE 2.3 name fed to NVD, and the CVEs whose
+    applicability criteria cover it (each carrying NVD's own ``cwe_ids`` - the
+    authoritative CPE -> CVE -> CWE link). The VR turns these into
+    ``VulnProperty`` annotations via Annotate Vulnerabilities.
+    """
+
+    service_id: str  # the Service.id the CPE came from ("<host>:<port>/<proto>")
+    cpe: str  # the CPE 2.3 name nmap matched and NVD was queried for
+    cves: list[CveEntry]
