@@ -16,7 +16,11 @@ Loaded via ``pytest_plugins`` in ``tests/conftest.py``.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
+from pydantic import BaseModel
 
 from models import Severity
 from models.h1 import Programme, ScopeItem, ScopeType
@@ -39,6 +43,20 @@ def run_dir(tmp_path, monkeypatch):
     """
     monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
     return tmp_path
+
+
+def stage_models_json(run_dir: Path, name: str, models: BaseModel | list[BaseModel]) -> Path:
+    """Stage a model (or list of models) as ``<run_dir>/<name>``.
+
+    The shared form of the per-test ``_write_findings`` / ``_write_verified``
+    helpers: writes a JSON array of ``model_dump(mode="json")`` rows so a tool
+    can read the workspace artefact back. Accepts a single model or a list;
+    returns the written ``Path``. Import it (it is a helper, not a fixture -
+    ``run_dir`` is already in scope at the call site)."""
+    items = models if isinstance(models, list) else [models]
+    path = run_dir / name
+    path.write_text(json.dumps([m.model_dump(mode="json") for m in items]), encoding="utf-8")
+    return path
 
 
 @pytest.fixture()

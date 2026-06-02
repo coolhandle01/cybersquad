@@ -9,22 +9,16 @@ underlying helpers are exercised in their own dedicated test files.
 
 from __future__ import annotations
 
-import json
 from unittest.mock import patch
 
 import pytest
+
+from tests.fixtures.programme import stage_models_json
 
 pytestmark = pytest.mark.unit
 
 
 class TestTechnicalAuthorTools:
-    @staticmethod
-    def _write_verified(tmp_path, verified_vuln) -> None:
-        (tmp_path / "verified.json").write_text(
-            json.dumps([verified_vuln.model_dump(mode="json")]),
-            encoding="utf-8",
-        )
-
     @staticmethod
     def _good_authoring(target_apex: str, **overrides):
         """Build the kwargs for ``draft_report_tool.func(...)``.
@@ -79,7 +73,7 @@ class TestTechnicalAuthorTools:
         from squad.technical_author import draft_report_tool
         from tools.report_tools import ReportDraftResult
 
-        self._write_verified(run_dir, verified_vuln)
+        stage_models_json(run_dir, "verified.json", verified_vuln)
         result = draft_report_tool.func(**self._good_authoring(target_apex))
 
         assert isinstance(result, ReportDraftResult)
@@ -92,7 +86,7 @@ class TestTechnicalAuthorTools:
         from squad.technical_author import draft_report_tool
         from tools.report_tools import ReportDraftResult
 
-        self._write_verified(run_dir, verified_vuln)
+        stage_models_json(run_dir, "verified.json", verified_vuln)
         result = draft_report_tool.func(**self._good_authoring(target_apex, title="bad title"))
 
         assert isinstance(result, ReportDraftResult)
@@ -105,7 +99,7 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import draft_report_tool
 
-        self._write_verified(run_dir, verified_vuln)
+        stage_models_json(run_dir, "verified.json", verified_vuln)
         with pytest.raises(ValueError, match="out of range"):
             draft_report_tool.func(**self._good_authoring(target_apex, finding_index=5))
 
@@ -114,7 +108,7 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import draft_report_tool, finalise_reports_tool
 
-        self._write_verified(run_dir, verified_vuln)
+        stage_models_json(run_dir, "verified.json", verified_vuln)
         with patch("runtime.programme_handle", "acme"):
             draft_report_tool.func(**self._good_authoring(target_apex))
             result = finalise_reports_tool.func("Session summary line.")
@@ -127,7 +121,7 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import draft_report_tool, finalise_reports_tool
 
-        self._write_verified(run_dir, verified_vuln)
+        stage_models_json(run_dir, "verified.json", verified_vuln)
         with patch("runtime.programme_handle", "acme"):
             draft_report_tool.func(**self._good_authoring(target_apex, title="bad title"))
             with pytest.raises(ValueError, match="unresolved errors"):
