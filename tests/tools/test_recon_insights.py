@@ -16,6 +16,7 @@ from models import (
     TLSCertificate,
     VulnProperty,
 )
+from tests.fixtures.programme import stage_model_json
 from tools.recon_insights import (
     ReconFinalisationError,
     annotate_host_vulns,
@@ -183,7 +184,7 @@ class TestUncoveredInterestingHosts:
 
 
 def _write_sweep(run_dir, sweep: AttackGraph) -> None:
-    (run_dir / "attack_graph.json").write_text(sweep.model_dump_json(), encoding="utf-8")
+    stage_model_json(run_dir, "attack_graph.json", sweep)
 
 
 class TestFinaliseRecon:

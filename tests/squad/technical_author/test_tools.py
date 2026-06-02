@@ -1,6 +1,6 @@
 """
-tests/test_squad_technical_author.py - exercise the @tool wrappers on the
-Technical Author.
+tests/squad/technical_author/test_tools.py - exercise the @tool wrappers on
+the Technical Author.
 
 The wrappers are thin: unmarshal JSON, call into tools/* helpers, serialise
 the result. Coverage here is regression coverage of the wrapping itself; the

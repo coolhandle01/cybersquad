@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.fixtures.programme import stage_model_json
+
 pytestmark = pytest.mark.unit
 
 
@@ -97,9 +99,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
-        (tmp_path / "attack_graph.json").write_text(
-            recon_result.model_dump_json(), encoding="utf-8"
-        )
+        stage_model_json(tmp_path, "attack_graph.json", recon_result)
 
         result = annotate_host_tool.func(
             hostname="api.example.com",
@@ -123,9 +123,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
-        (tmp_path / "attack_graph.json").write_text(
-            recon_result.model_dump_json(), encoding="utf-8"
-        )
+        stage_model_json(tmp_path, "attack_graph.json", recon_result)
 
         result = annotate_host_tool.func(
             hostname=f"api.{target_apex}",
@@ -147,7 +145,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import list_uncovered_hosts_tool
 
-        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "attack_graph.json", recon_result)
         result = list_uncovered_hosts_tool.func()
 
         assert isinstance(result, list)
@@ -160,7 +158,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool, finalise_recon_tool
 
-        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "attack_graph.json", recon_result)
 
         annotate_host_tool.func(
             hostname=f"api.{target_apex}",
@@ -182,7 +180,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import finalise_recon_tool
 
-        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "attack_graph.json", recon_result)
 
         with pytest.raises(ValueError, match="no host insights"):
             finalise_recon_tool.func()
