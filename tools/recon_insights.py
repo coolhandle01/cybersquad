@@ -39,6 +39,7 @@ from pydantic import ValidationError
 import runtime
 from models import (
     CVE,
+    CWE,
     AttackGraph,
     HostInsight,
     HostPriority,
@@ -276,11 +277,15 @@ def vuln_from_cve(cve: CVE) -> VulnProperty:
     property the VR persists: ``id`` / ``description`` carry over, ``source``
     is stamped ``"nvd"``, ``enumeration`` ``"CVE"``, ``reference`` is the CVE's
     NVD detail page, and ``category`` names the primary weakness (the first CWE
-    NVD attributed) where the CVE carried one. The Annotate <asset>
-    Vulnerability tools convert here so a ``VulnProperty`` is never hand-built
-    by the agent.
+    NVD attributed that resolves in the MITRE corpus) where the CVE carried one.
+    The Annotate <asset> Vulnerability tools convert here so a ``VulnProperty``
+    is never hand-built by the agent.
+
+    CWE-name resolution lives here (the tool layer), not on the ``CVE`` model:
+    the model stays a flat NVD DTO carrying raw ``cwe_ids``, and we resolve the
+    first valid one to a name via ``CWE.get`` only at this boundary.
     """
-    primary = cve.cwes[0] if cve.cwes else None
+    primary = next((cwe for cwe_id in cve.cwe_ids if (cwe := CWE.get(cwe_id)) is not None), None)
     category = f"CWE-{primary.cwe_id}: {primary.name}"[:128] if primary else ""
     return VulnProperty(
         id=cve.id,

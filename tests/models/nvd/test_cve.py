@@ -42,12 +42,13 @@ class TestCVE:
         # computed_field, so it serialises into the agent-facing dump.
         assert entry.model_dump()["url"] == entry.url
 
-    def test_cwes_resolved_from_corpus_dropping_unknown_ids(self):
-        # 79 is a real MITRE CWE; the large id is not - it is dropped, matching
-        # the "concrete CWE only" stance of cwe_ids.
+    def test_cwe_ids_are_carried_verbatim_no_corpus_resolution(self):
+        # CVE is a flat NVD DTO: cwe_ids are stored as-is, with no enrichment /
+        # corpus lookup on the model. Name resolution is the consumer's job
+        # (tools.recon_insights.vuln_from_cve / the Lookup CWE tool), so the
+        # dump carries plain ids - not nested CWE objects.
         entry = CVE(id="CVE-2021-44228", cwe_ids=[79, 9_999_999])
-        assert [c.cwe_id for c in entry.cwes] == [79]
-        dumped = entry.model_dump()["cwes"]
-        assert dumped[0]["cwe_id"] == 79
-        # each resolved CWE carries its MITRE url for the agent to cite.
-        assert dumped[0]["url"].endswith("/79.html")
+        assert entry.cwe_ids == [79, 9_999_999]
+        dumped = entry.model_dump()
+        assert dumped["cwe_ids"] == [79, 9_999_999]
+        assert "cwes" not in dumped
