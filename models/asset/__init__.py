@@ -41,7 +41,8 @@ through the scope filter.
 | ``models.asset.identifier`` | ``Identifier`` |
 | ``models.asset.ip`` | ``IpEnrichment``, ``RegistrantBundle`` (recon subgraph bundles) |
 
-The intra-package import order is a DAG: ``relation`` is a leaf (primitives
+The intra-package import order is strictly layered: ``relation`` is a leaf
+(primitives
 only); ``property`` builds on ``relation`` (``DNSRecordProperty`` reuses
 ``RRHeader``); the per-asset modules build on ``property`` / ``relation``;
 ``endpoint`` / ``service`` / ``ip`` build on those. No cycles, so no
