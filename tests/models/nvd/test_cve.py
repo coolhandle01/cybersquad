@@ -42,6 +42,25 @@ class TestCVE:
         # computed_field, so it serialises into the agent-facing dump.
         assert entry.model_dump()["url"] == entry.url
 
+    def test_description_is_uncapped_working_intel(self):
+        # The CVE record is the working intel the research / exploit path reasons
+        # from, so the full NVD advisory is kept whole - no length cap. The
+        # bounded summary lives on the persisted ``VulnProperty`` instead.
+        long_desc = "x" * 5000
+        entry = CVE(id="CVE-2022-22965", description=long_desc)
+        assert entry.description == long_desc
+
+    def test_vuln_from_cve_bounds_the_persisted_annotation(self):
+        # The producer truncates the long CVE text into the bounded OAM
+        # annotation; the full text stays reachable on the CVE / its reference.
+        from models.asset.property import VULN_DESCRIPTION_MAX_LENGTH
+        from tools.recon_insights import vuln_from_cve
+
+        cve = CVE(id="CVE-2022-22965", description="x" * 5000)
+        vuln = vuln_from_cve(cve)
+        assert len(vuln.description) == VULN_DESCRIPTION_MAX_LENGTH
+        assert vuln.id == "CVE-2022-22965"
+
     def test_cwe_ids_are_carried_verbatim_no_corpus_resolution(self):
         # CVE is a flat NVD DTO: cwe_ids are stored as-is, with no enrichment /
         # corpus lookup on the model. Name resolution is the consumer's job

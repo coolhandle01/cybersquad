@@ -50,6 +50,7 @@ from models import (
     Url,
     VulnProperty,
 )
+from models.asset.property import VULN_DESCRIPTION_MAX_LENGTH
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -287,9 +288,13 @@ def vuln_from_cve(cve: CVE) -> VulnProperty:
     """
     primary = next((cwe for cwe_id in cve.cwe_ids if (cwe := CWE.get(cwe_id)) is not None), None)
     category = f"CWE-{primary.cwe_id}: {primary.name}"[:128] if primary else ""
+    # The CVE record carries the full advisory; the persisted annotation is a
+    # bounded summary - truncate to the field cap here rather than let a long
+    # description reject the VulnProperty (the full text stays on the CVE / its
+    # reference URL).
     return VulnProperty(
         id=cve.id,
-        description=cve.description,
+        description=cve.description[:VULN_DESCRIPTION_MAX_LENGTH],
         source="nvd",
         category=category,
         enumeration="CVE",

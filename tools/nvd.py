@@ -33,7 +33,6 @@ from typing import Any
 
 from config import config
 from models import CVE
-from models.nvd.cve import DESCRIPTION_MAX_LENGTH
 from tools import http
 
 logger = logging.getLogger(__name__)
@@ -80,15 +79,11 @@ def _parse_cve(cve: dict[str, Any]) -> CVE:
             cvss_vector = data.get("vectorString")
             break
     descriptions = [d["value"] for d in cve.get("descriptions", []) if d.get("lang") == "en"]
-    # Truncate to the model's boundary cap here rather than let an over-long
-    # NVD description reject the CVE in ``CVE(...)`` - a rejection would be
-    # swallowed by ``_get_cves`` and drop the whole batch, not just this row.
-    description = (descriptions[0] if descriptions else "")[:DESCRIPTION_MAX_LENGTH]
     return CVE(
         id=cve.get("id", ""),
         cvss_score=cvss_score,
         cvss_vector=cvss_vector,
-        description=description,
+        description=descriptions[0] if descriptions else "",
         cwe_ids=_parse_cwe_ids(cve.get("weaknesses", [])),
     )
 

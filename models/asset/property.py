@@ -18,6 +18,14 @@ from pydantic import BaseModel, Field
 
 from models.asset.relation import RRHeader
 
+# Boundary cap on the persisted vuln description. ``VulnProperty`` is a bounded
+# OAM annotation - a summary hung off the asset - not the working record: the
+# full advisory stays whole on ``models.nvd.CVE.description`` and is reachable
+# via the ``reference`` URL. Exported so the producer (``vuln_from_cve``)
+# truncates to the same length rather than letting an over-long CVE description
+# reject the annotation. One source of truth for the cap.
+VULN_DESCRIPTION_MAX_LENGTH = 2000
+
 
 class SimpleProperty(BaseModel):
     """The cybersquad shape that maps to amass's OAM ``SimpleProperty``.
@@ -97,8 +105,9 @@ class VulnProperty(BaseModel):
     # Tool-captured from the NVD feed (external source), not agent-authored.
     # Defence (cybersquad-models skill, tool-captured text): a boundary length
     # cap so a poisoned upstream description cannot smuggle a large injection
-    # downstream.
-    description: str = Field(default="", max_length=2000)
+    # downstream. This is the bounded *annotation*; the full advisory stays on
+    # the ``CVE`` record (the producer truncates to this cap, see vuln_from_cve).
+    description: str = Field(default="", max_length=VULN_DESCRIPTION_MAX_LENGTH)
 
     # Provenance: the feed / tool that produced this fact ("nvd"). A tool-named
     # closed vocabulary, not free external text; length-capped defensively.

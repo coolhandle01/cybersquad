@@ -13,12 +13,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, computed_field
 
-# Boundary cap on the NVD-sourced description (see the field comment below).
-# Exported so the parser (``tools.nvd._parse_cve``) truncates to the same
-# length rather than letting an over-long upstream description reject the CVE -
-# one source of truth for the cap, used at the model and at the parse boundary.
-DESCRIPTION_MAX_LENGTH = 2000
-
 
 class CVE(BaseModel):
     """One NVD CVE record, returned by NVD CVE Lookup / List CVEs for CPE."""
@@ -26,13 +20,18 @@ class CVE(BaseModel):
     id: str
     cvss_score: float | None = None
     cvss_vector: str | None = None
-    # Tool-captured from the NVD feed (external source), not agent-authored,
-    # and this model is the direct return of the VR's CVE-lookup tools - so the
-    # text reaches the agent's context. Defence (cybersquad-models skill,
-    # tool-captured text): a boundary length cap so a poisoned upstream
-    # description cannot smuggle a large injection into context. Mirrors the
-    # cap on the persisted ``VulnProperty.description``.
-    description: str = Field(default="", max_length=DESCRIPTION_MAX_LENGTH)
+    # The full NVD advisory text, kept verbatim and uncapped. This is
+    # tool-captured external text, but it is the working intel the research /
+    # exploit path reasons from - the longest, most detailed CVEs are exactly
+    # the ones worth keeping whole, so a length cap would drop signal where it
+    # matters most. The prompt-injection posture leans on the other two
+    # defences instead (cybersquad-models skill): provenance (NVD/NIST over
+    # HTTPS is a curated source, not attacker-controlled per target) and
+    # treating tool output as data, not a length cap - which is a weak
+    # injection defence anyway (a payload fits in the first bytes). The
+    # *persisted* OAM annotation (``VulnProperty.description``) stays bounded;
+    # the full text lives here and via the ``url`` / NVD reference.
+    description: str = ""
     # CWE ids NVD attributes to this CVE (its ``weaknesses``). This is the
     # authoritative CPE -> CVE -> CWE link: the weakness comes from NVD's data,
     # not from an agent guessing. NVD's non-numeric placeholders
