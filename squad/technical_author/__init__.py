@@ -65,7 +65,7 @@ class _TaLookupCweArgs(BaseModel):
     cwe_id: int = Field(
         description=(
             "The CWE id this finding maps to. For a CVE-backed finding,"
-            " use the id ``NVD CVE Lookup`` returned (``CveEntry.cwe_ids``);"
+            " use the id ``NVD CVE Lookup`` returned (``CVE.cwe_ids``);"
             " otherwise the id of the weakness class the probe found"
             " (e.g. ``89`` for SQL injection, ``79`` for XSS). Returns"
             " MITRE's canonical name + description + URL to cite in the"

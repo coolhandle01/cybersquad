@@ -37,7 +37,18 @@ from pathlib import Path
 from pydantic import ValidationError
 
 import runtime
-from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding, Url, VulnProperty
+from models import (
+    CVE,
+    AttackGraph,
+    HostInsight,
+    HostPriority,
+    HostScore,
+    ProductRelease,
+    RawFinding,
+    Service,
+    Url,
+    VulnProperty,
+)
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -64,7 +75,10 @@ from tools.recon_host_store import (
     insight_path,
     load_host_findings,
     load_host_ports,
+    load_host_product_releases,
     load_host_scores,
+    load_host_services,
+    load_host_urls,
     load_insights,
     load_tls_certificates,
     notes_path,
@@ -72,7 +86,9 @@ from tools.recon_host_store import (
     save_host_findings,
     save_host_notes,
     save_host_ports,
+    save_host_product_releases,
     save_host_score,
+    save_host_services,
     save_host_urls,
     save_insight,
     save_tls_certificate,
@@ -250,6 +266,102 @@ def annotate_host_vulns(hostname: str, vulns: list[VulnProperty]) -> HostInsight
     merged = list(match.vulns) + [v for v in vulns if v.id not in existing_ids]
     updated = match.model_copy(update={"vulns": merged})
     save_insight(updated)
+    return updated
+
+
+def vuln_from_cve(cve: CVE) -> VulnProperty:
+    """Map an NVD ``CVE`` record to the OAM ``VulnProperty`` hung off an asset.
+
+    The bridge from the NVD vocabulary (``models.nvd.CVE``) to the OAM graph
+    property the VR persists: ``id`` / ``description`` carry over, ``source``
+    is stamped ``"nvd"``, ``enumeration`` ``"CVE"``, ``reference`` is the CVE's
+    NVD detail page, and ``category`` names the primary weakness (the first CWE
+    NVD attributed) where the CVE carried one. The Annotate <asset>
+    Vulnerability tools convert here so a ``VulnProperty`` is never hand-built
+    by the agent.
+    """
+    primary = cve.cwes[0] if cve.cwes else None
+    category = f"CWE-{primary.cwe_id}: {primary.name}"[:128] if primary else ""
+    return VulnProperty(
+        id=cve.id,
+        description=cve.description,
+        source="nvd",
+        category=category,
+        enumeration="CVE",
+        reference=cve.url,
+    )
+
+
+def _merge_vulns(existing: list[VulnProperty], incoming: list[VulnProperty]) -> list[VulnProperty]:
+    """Append the vulns not already carried (dedup by ``id``), order-preserving."""
+    seen = {v.id for v in existing}
+    return list(existing) + [v for v in incoming if v.id not in seen]
+
+
+def annotate_service_vulns(hostname: str, service_id: str, vulns: list[VulnProperty]) -> Service:
+    """Merge ``VulnProperty`` annotations onto a host's OAM ``Service`` asset.
+
+    Loads the host's ``services.json``, finds the ``Service`` whose ``id``
+    matches, appends the vulns it does not already carry (dedup by ``id``),
+    persists, and returns the updated ``Service``. Raises ``ValueError`` when
+    the host has no service with that id - List Host Services surfaces the ids.
+    """
+    target = hostname.strip().lower()
+    services = load_host_services(target)
+    match = next((s for s in services if s.id == service_id), None)
+    if match is None:
+        raise ValueError(
+            f"no service {service_id!r} on host {target!r}; List Host Services "
+            "shows the service ids available to annotate"
+        )
+    updated = match.model_copy(update={"vulns": _merge_vulns(match.vulns, vulns)})
+    save_host_services(target, [updated if s.id == service_id else s for s in services])
+    return updated
+
+
+def annotate_product_release_vulns(
+    hostname: str, release_name: str, vulns: list[VulnProperty]
+) -> ProductRelease:
+    """Merge ``VulnProperty`` annotations onto a host's OAM ``ProductRelease``.
+
+    The spec-proper home for a CVE - the vulnerability belongs to the version.
+    Loads the host's ``product_releases.json``, finds the release whose
+    ``name`` matches, appends the vulns it does not already carry (dedup by
+    ``id``), persists, and returns the updated ``ProductRelease``. Raises
+    ``ValueError`` when the host has no release of that name - List Host
+    Product Releases surfaces the names.
+    """
+    target = hostname.strip().lower()
+    releases = load_host_product_releases(target)
+    match = next((r for r in releases if r.name == release_name), None)
+    if match is None:
+        raise ValueError(
+            f"no product release {release_name!r} on host {target!r}; List Host "
+            "Product Releases shows the releases available to annotate"
+        )
+    updated = match.model_copy(update={"vulns": _merge_vulns(match.vulns, vulns)})
+    save_host_product_releases(target, [updated if r.name == release_name else r for r in releases])
+    return updated
+
+
+def annotate_url_vulns(hostname: str, url: str, vulns: list[VulnProperty]) -> Url:
+    """Merge ``VulnProperty`` annotations onto a host's OAM ``Url`` asset.
+
+    Loads the host's ``urls.json``, finds the ``Url`` whose ``raw`` matches,
+    appends the vulns it does not already carry (dedup by ``id``), persists,
+    and returns the updated ``Url``. Raises ``ValueError`` when the host has no
+    URL with that raw value.
+    """
+    target = hostname.strip().lower()
+    urls = load_host_urls(target)
+    match = next((u for u in urls if u.raw == url), None)
+    if match is None:
+        raise ValueError(
+            f"no URL {url!r} recorded on host {target!r}; annotate a URL the "
+            "OSINT Analyst inventoried"
+        )
+    updated = match.model_copy(update={"vulns": _merge_vulns(match.vulns, vulns)})
+    save_host_urls(target, [updated if u.raw == url else u for u in urls])
     return updated
 
 
@@ -465,6 +577,9 @@ __all__ = [
     "InsightValidationReport",
     "ReconFinalisationError",
     "annotate_host_vulns",
+    "annotate_product_release_vulns",
+    "annotate_service_vulns",
+    "annotate_url_vulns",
     "finalise_recon",
     "findings_path",
     "host_dir",
@@ -473,7 +588,10 @@ __all__ = [
     "load_attack_graph",
     "load_host_findings",
     "load_host_ports",
+    "load_host_product_releases",
     "load_host_scores",
+    "load_host_services",
+    "load_host_urls",
     "load_insights",
     "load_tls_certificates",
     "notes_path",
@@ -481,11 +599,14 @@ __all__ = [
     "save_host_findings",
     "save_host_notes",
     "save_host_ports",
+    "save_host_product_releases",
     "save_host_score",
+    "save_host_services",
     "save_host_urls",
     "save_insight",
     "save_tls_certificate",
     "tls_path",
     "uncovered_interesting_hosts",
     "validate_insight",
+    "vuln_from_cve",
 ]

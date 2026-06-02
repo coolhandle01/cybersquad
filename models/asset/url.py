@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from models.asset.property import SourceProperty
+from models.asset.property import SourceProperty, VulnProperty
 
 
 class Url(BaseModel):
@@ -58,6 +58,12 @@ class Url(BaseModel):
     # human-facing report - never re-issue them as instruction context.
     username: str = Field(default="", max_length=255)  # username
     password: str = Field(default="", max_length=255)  # password
+
+    # OAM ``VulnProperty`` annotations hung off this URL asset. Additive and
+    # default-empty; the Vulnerability Researcher attaches CVEs here when a
+    # vulnerability is URL-scoped rather than service- or release-scoped. OAM
+    # lets a ``VulnProperty`` hang off the ``URL`` node like any other asset.
+    vulns: list[VulnProperty] = Field(default_factory=list)
 
     # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
     # this asset and at what confidence. Additive and default-empty; the

@@ -3,7 +3,7 @@ models.nvd - the NVD / CVSS vocabulary: the vulnerability-scoring domain.
 
 Distinct from the OAM asset graph (``models.asset``) and from MITRE's weakness
 taxonomy (``models.mitre``). Houses the NIST National Vulnerability Database
-shapes - the ``CveEntry`` record and the CVSS-derived ``Severity`` rating (and
+shapes - the ``CVE`` record and the CVSS-derived ``Severity`` rating (and
 the CVSS-vector primitive when it lands).
 
 ``Severity`` lived in ``models.primitives`` historically, but it is a
@@ -14,8 +14,8 @@ module can import from it without a cycle.
 
 from __future__ import annotations
 
-from models.nvd.cve import CveEntry, ServiceCves
+from models.nvd.cve import CVE
 from models.nvd.cvss import CvssVector
 from models.nvd.severity import Severity
 
-__all__ = ["CveEntry", "CvssVector", "ServiceCves", "Severity"]
+__all__ = ["CVE", "CvssVector", "Severity"]

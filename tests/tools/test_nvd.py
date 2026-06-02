@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import CveEntry
+from models import CVE
 from tools import nvd
 
 pytestmark = pytest.mark.unit
@@ -93,7 +93,7 @@ class TestCvesForKeyword:
         with patch("tools.nvd.http.get", return_value=_ok(_cve_payload())) as mget:
             results = nvd.cves_for_keyword("log4shell")
         assert len(results) == 1
-        assert isinstance(results[0], CveEntry)
+        assert isinstance(results[0], CVE)
         assert results[0].id == "CVE-2021-44228"
         assert results[0].cvss_score == 10.0
         assert results[0].description == "Log4Shell RCE"

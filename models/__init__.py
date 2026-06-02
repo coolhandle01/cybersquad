@@ -20,7 +20,7 @@ across every consumer.
 |                          | ``RdapRecord`` |
 | ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
-| ``models.nvd`` | ``CveEntry``, ``ServiceCves``, ``CvssVector``, ``Severity`` |
+| ``models.nvd`` | ``CVE``, ``CvssVector``, ``Severity`` |
 | ``models.mitre`` | ``CWE`` |
 | ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
@@ -104,7 +104,7 @@ from models.insight import (
 )
 from models.metrics import RunMetrics
 from models.mitre import CWE
-from models.nvd import CveEntry, CvssVector, ServiceCves, Severity
+from models.nvd import CVE, CvssVector, Severity
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType
 from models.report import AuthoredDraft
@@ -121,6 +121,7 @@ from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
+    "CVE",
     "CWE",
     "FQDN",
     "AsnRecord",
@@ -138,7 +139,6 @@ __all__ = [
     "Contact",
     "ContactRecord",
     "ContactRole",
-    "CveEntry",
     "CvssVector",
     "DNSRecordProperty",
     "DomainRecord",
@@ -190,7 +190,6 @@ __all__ = [
     "RunFileContent",
     "RunMetrics",
     "Service",
-    "ServiceCves",
     "Severity",
     "SeverityDecision",
     "SimpleProperty",

@@ -1,17 +1,22 @@
 """
-models.nvd.cve - the NVD CVE record shape, returned by VR's NVD CVE Lookup.
+models.nvd.cve - the NVD CVE record shape, returned by the VR's CVE lookups.
 
-The external-vocabulary record the VR pulls during triage via a live NVD
-query (the ``models.mitre.CWE`` type enriches the ``cwe_ids`` this carries).
+The external-vocabulary record the VR pulls via a live NVD query. ``cwe_ids``
+carries the raw NVD weakness ids; ``cwes`` resolves them through the
+``models.mitre.CWE`` corpus so the agent sees the named weakness and its MITRE
+URL alongside the CVE. The ``models.nvd`` -> ``models.mitre`` edge this adds is
+acyclic: ``mitre`` imports nothing from ``models`` but its own corpus.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
+
+from models.mitre import CWE
 
 
-class CveEntry(BaseModel):
-    """One NVD CVE record, returned by NVD CVE Lookup."""
+class CVE(BaseModel):
+    """One NVD CVE record, returned by NVD CVE Lookup / List CVEs for CPE."""
 
     id: str
     cvss_score: float | None = None
@@ -24,17 +29,22 @@ class CveEntry(BaseModel):
     # NVD assigned no concrete CWE.
     cwe_ids: list[int] = []
 
+    # The canonical NVD detail page for this CVE. A computed_field (not a plain
+    # property) so it serialises into model_dump - the @cyber_tool return hands
+    # the CVE straight to the agent, which cites this URL. Mirrors ``CWE.url`` /
+    # ``OWASPEntry.url``.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def url(self) -> str:
+        return f"https://nvd.nist.gov/vuln/detail/{self.id}"
 
-class ServiceCves(BaseModel):
-    """The CVEs NVD returned for one of a host's nmap-detected service CPEs.
-
-    One row of the VR's CVEs for Host lookup: the ``Service`` whose CPE was
-    queried, the exact CPE 2.3 name fed to NVD, and the CVEs whose
-    applicability criteria cover it (each carrying NVD's own ``cwe_ids`` - the
-    authoritative CPE -> CVE -> CWE link). The VR turns these into
-    ``VulnProperty`` annotations via Annotate Vulnerabilities.
-    """
-
-    service_id: str  # the Service.id the CPE came from ("<host>:<port>/<proto>")
-    cpe: str  # the CPE 2.3 name nmap matched and NVD was queried for
-    cves: list[CveEntry]
+    # The weaknesses NVD attributes to this CVE, resolved from ``cwe_ids``
+    # through the MITRE corpus so each carries its name / description / URL.
+    # computed_field for the same reason as ``url``: the agent sees the named
+    # CWEs in the tool output, not bare ints. Ids outside the corpus are dropped
+    # (``CWE.get`` -> None), matching the "concrete CWE only" stance of
+    # ``cwe_ids``.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cwes(self) -> list[CWE]:
+        return [cwe for cwe_id in self.cwe_ids if (cwe := CWE.get(cwe_id)) is not None]

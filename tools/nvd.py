@@ -32,7 +32,7 @@ import logging
 from typing import Any
 
 from config import config
-from models import CveEntry
+from models import CVE
 from tools import http
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,8 @@ def _headers() -> dict[str, str]:
     return {"apiKey": key} if key else {}
 
 
-def _parse_cve(cve: dict[str, Any]) -> CveEntry:
-    """Map one NVD ``cve`` object to a typed ``CveEntry``.
+def _parse_cve(cve: dict[str, Any]) -> CVE:
+    """Map one NVD ``cve`` object to a typed ``CVE``.
 
     Prefers the richest CVSS metric available (v3.1 > v3.0 > v2) and the
     English description. Missing pieces degrade to ``None`` / ``""`` - a CVE
@@ -79,7 +79,7 @@ def _parse_cve(cve: dict[str, Any]) -> CveEntry:
             cvss_vector = data.get("vectorString")
             break
     descriptions = [d["value"] for d in cve.get("descriptions", []) if d.get("lang") == "en"]
-    return CveEntry(
+    return CVE(
         id=cve.get("id", ""),
         cvss_score=cvss_score,
         cvss_vector=cvss_vector,
@@ -110,7 +110,7 @@ def _parse_cwe_ids(weaknesses: list[dict[str, Any]]) -> list[int]:
     return ids
 
 
-def _get_cves(params: dict[str, str | int], cache_key: tuple[str, str]) -> list[CveEntry]:
+def _get_cves(params: dict[str, str | int], cache_key: tuple[str, str]) -> list[CVE]:
     """Shared CVE-API fetch + parse + cache. Degrades to ``[]`` on any error."""
     if cache_key in _RESULT_CACHE:
         return list(_RESULT_CACHE[cache_key])
@@ -129,11 +129,11 @@ def _get_cves(params: dict[str, str | int], cache_key: tuple[str, str]) -> list[
     return list(results)
 
 
-def cves_for_keyword(keyword: str, limit: int = 5) -> list[CveEntry]:
+def cves_for_keyword(keyword: str, limit: int = 5) -> list[CVE]:
     """Search the NVD for CVEs matching a free-text keyword.
 
     The keyword path: broad, noisy, good for "what is known-bad about this
-    technology class". Returns up to ``limit`` typed ``CveEntry`` rows; ``[]``
+    technology class". Returns up to ``limit`` typed ``CVE`` rows; ``[]``
     on empty input or any error.
     """
     if not keyword.strip():
@@ -142,13 +142,13 @@ def cves_for_keyword(keyword: str, limit: int = 5) -> list[CveEntry]:
     return _get_cves(params, ("cve:keyword", keyword))
 
 
-def cves_for_cpe(cpe: str, limit: int = 5) -> list[CveEntry]:
+def cves_for_cpe(cpe: str, limit: int = 5) -> list[CVE]:
     """Look up the CVEs that apply to an exact CPE 2.3 name.
 
     The CPE path: precise. Feed it the authoritative CPE nmap matched on a
     ``Service`` and NVD returns exactly the vulnerabilities whose
     applicability criteria cover it. Returns up to ``limit`` typed
-    ``CveEntry`` rows; ``[]`` on empty input or any error.
+    ``CVE`` rows; ``[]`` on empty input or any error.
     """
     if not cpe.strip():
         return []

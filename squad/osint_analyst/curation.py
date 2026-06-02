@@ -184,7 +184,8 @@ def annotate_host_tool(
       - vulns: optional OAM VulnProperty annotations - known CVEs for the
         detected tech, where they can already be grounded to a version.
         Usually left empty here; the Vulnerability Researcher attaches
-        these later via Annotate Vulnerabilities.
+        these later via its Annotate FQDN / Service / ProductRelease /
+        URL Vulnerability tools.
 
     Returns a HostAnnotation with the relative insight path and an
     InsightValidationReport. Re-run with the issues addressed when

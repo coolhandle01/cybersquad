@@ -171,7 +171,7 @@ The reader returns the typed model; downstream agents work against the schema, n
 | `models.finding` | `RawFinding`, `VerifiedVulnerability`, `RawFindingSummary` |
 | `models.asset` | `Endpoint`, `EndpointPage`, `HostRole`, `HostPriority`, `HostInsight`, `OpenPortsMap`, `LlmEndpoint`, `AttackGraph` |
 | `models.workspace` | `RunFile`, `RunFileContent` |
-| `models.cve` | `CveEntry` |
+| `models.nvd` | `CVE`, `CvssVector`, `Severity` |
 | `models.metrics` | `RunMetrics` |
 | `models.h1` | HackerOne API shapes (incl. `ProgrammeReportSummary`) |
 | `models.attack` | `AttackForest`, `AttackTree` |

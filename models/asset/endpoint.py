@@ -71,11 +71,12 @@ class Endpoint(BaseModel):
     # these off the endpoints into ``AttackGraph.tls_certificates``.
     tls_certificate: TLSCertificate | None = None
 
-    # OAM ``VulnProperty`` annotations hung off this endpoint asset - the
-    # known vulnerabilities the VR / OA attributed to its detected web
-    # technologies (an NVD CVE matched against a ``technologies`` entry).
-    # Additive and default-empty: an endpoint with no attributed vulns is
-    # the common case.
+    # FIXME(oam): ``Endpoint`` is a recon *observation*, not an OAM asset, so
+    # a ``VulnProperty`` does not belong here - OAM hangs vulns off the ``URL``
+    # asset (``models.asset.url.Url.vulns``), which is now the VR's annotation
+    # target. This field predates that and has no per-host persistence of its
+    # own; remove it once nothing reads ``Endpoint.vulns`` and fold any callers
+    # onto ``Url``.
     vulns: list[VulnProperty] = Field(default_factory=list)
 
     # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
