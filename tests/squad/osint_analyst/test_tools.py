@@ -1,6 +1,6 @@
 """
-tests/test_squad_osint_analyst.py - exercise the @tool wrappers on the OSINT
-Analyst.
+tests/squad/osint_analyst/test_tools.py - exercise the @tool wrappers on the
+OSINT Analyst.
 
 The wrappers are thin: unmarshal JSON, call into tools/* helpers, serialise
 the result. Coverage here is regression coverage of the wrapping itself; the
