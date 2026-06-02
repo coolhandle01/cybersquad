@@ -13,117 +13,64 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.fixtures.findings import draft_report_kwargs
 from tests.fixtures.programme import stage_models_json
 
 pytestmark = pytest.mark.unit
 
 
 class TestTechnicalAuthorTools:
-    @staticmethod
-    def _good_authoring(target_apex: str, **overrides):
-        """Build the kwargs for ``draft_report_tool.func(...)``.
-
-        The wrapper takes a typed ``AuthoredDraft``, so the authored
-        fields are nested under ``authored`` while ``finding_index`` /
-        ``verified_path`` stay top-level. ``overrides`` mutate authored
-        fields when the key matches one, top-level otherwise.
-        """
-        authored: dict[str, object] = {
-            "title": "SQL Injection in /search?q allows full database extraction",
-            "summary": (
-                "The /search endpoint concatenates user input into a SELECT statement. "
-                "An unauthenticated attacker can dump the entire users table."
-            ),
-            "description": (
-                "The handler at routes/search.py concatenates the q parameter directly "
-                "into the SQL statement with no parameterisation. Standard UNION-based "
-                "injection extracts arbitrary rows from the users table."
-            ),
-            "steps_to_reproduce": [
-                f"Issue GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
-                "Observe the response body contains the union'd rows.",
-            ],
-            "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
-            "impact": (
-                "An unauthenticated attacker can dump the entire users table including "
-                "bcrypt hashes and email addresses, enabling offline cracking and full "
-                "account takeover."
-            ),
-            "remediation": (
-                "Use parameterised queries throughout the ORM. See "
-                "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
-            ),
-            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "cwe_id": 89,
-        }
-        base: dict[str, object] = {
-            "finding_index": 0,
-            "authored": authored,
-        }
-        for key, value in overrides.items():
-            if key in authored:
-                authored[key] = value
-            else:
-                base[key] = value
-        return base
-
     def test_draft_report_tool_writes_draft_and_returns_validation(
-        self, verified_vuln, run_dir, target_apex
+        self, verified_vuln, run_dir
     ) -> None:
         from squad.technical_author import draft_report_tool
         from tools.report_tools import ReportDraftResult
 
         stage_models_json(run_dir, "verified.json", verified_vuln)
-        result = draft_report_tool.func(**self._good_authoring(target_apex))
+        result = draft_report_tool.func(**draft_report_kwargs())
 
         assert isinstance(result, ReportDraftResult)
         assert result.validation.ok is True
         assert (run_dir / "drafts" / "000.json").exists()
 
-    def test_draft_report_tool_surfaces_validation_issues(
-        self, verified_vuln, run_dir, target_apex
-    ) -> None:
+    def test_draft_report_tool_surfaces_validation_issues(self, verified_vuln, run_dir) -> None:
         from squad.technical_author import draft_report_tool
         from tools.report_tools import ReportDraftResult
 
         stage_models_json(run_dir, "verified.json", verified_vuln)
-        result = draft_report_tool.func(**self._good_authoring(target_apex, title="bad title"))
+        result = draft_report_tool.func(**draft_report_kwargs(title="bad title"))
 
         assert isinstance(result, ReportDraftResult)
         assert result.validation.ok is False
         sections = {i.section for i in result.validation.issues}
         assert "title" in sections
 
-    def test_draft_report_tool_rejects_out_of_range_index(
-        self, verified_vuln, run_dir, target_apex
-    ) -> None:
+    def test_draft_report_tool_rejects_out_of_range_index(self, verified_vuln, run_dir) -> None:
         from squad.technical_author import draft_report_tool
 
         stage_models_json(run_dir, "verified.json", verified_vuln)
         with pytest.raises(ValueError, match="out of range"):
-            draft_report_tool.func(**self._good_authoring(target_apex, finding_index=5))
+            draft_report_tool.func(**draft_report_kwargs(finding_index=5))
 
-    def test_finalise_reports_tool_consolidates_drafts(
-        self, verified_vuln, run_dir, target_apex
-    ) -> None:
+    def test_finalise_reports_tool_consolidates_drafts(self, verified_vuln, run_dir) -> None:
         from squad.technical_author import draft_report_tool, finalise_reports_tool
 
         stage_models_json(run_dir, "verified.json", verified_vuln)
         with patch("runtime.programme_handle", "acme"):
-            draft_report_tool.func(**self._good_authoring(target_apex))
+            draft_report_tool.func(**draft_report_kwargs())
             result = finalise_reports_tool.func("Session summary line.")
 
         assert result == "reports.json"
         assert (run_dir / "reports.json").exists()
 
     def test_finalise_reports_tool_raises_on_unresolved_errors(
-        self, verified_vuln, run_dir, target_apex
+        self, verified_vuln, run_dir
     ) -> None:
         from squad.technical_author import draft_report_tool, finalise_reports_tool
 
         stage_models_json(run_dir, "verified.json", verified_vuln)
         with patch("runtime.programme_handle", "acme"):
-            draft_report_tool.func(**self._good_authoring(target_apex, title="bad title"))
+            draft_report_tool.func(**draft_report_kwargs(title="bad title"))
             with pytest.raises(ValueError, match="unresolved errors"):
                 finalise_reports_tool.func("Summary.")
 
