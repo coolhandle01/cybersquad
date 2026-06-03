@@ -14,9 +14,15 @@ When you have an open PR and a reviewer surfaces a gap, treat it as a **blocker 
 
 Watching a PR means investigating each review event and deciding whether the surfaced gap belongs in this PR or somewhere else - not optimising for closing the current PR by deferring everything to "follow-ups" that grow the open-issue count without growing the project.
 
-## Commit messages
+## Git essentials
 
-Never include session URLs (`https://claude.ai/code/session_...`) in commit messages or PR bodies. They reference private conversations.
+The full flow is in `docs/git-workflow.md`; these are the non-negotiables, inline so they land before the first commit rather than two hops away:
+
+- **Branch**: cut fresh from current `main` and name it `<type>/<short-description>`, where `<type>` matches the commit type (`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`, ...). A branch ruleset blocks `claude/*` and other off-convention names. If a harness placed you on a synthetic branch while a real PR branch exists, switch to the PR branch and surface the mismatch.
+- **Commit**: Conventional Commits - `<type>(<scope>)?: <subject>`, lowercase imperative subject (e.g. `refactor(squad): lift wrappers into tools/`).
+- **Before you push**: run the CONTRIBUTING "Before you commit" CI parity stack, and `git diff origin/main --stat` to confirm only intended changes are staged.
+- **Never** force-push, `git push --delete`, or `git branch -D` a shared / PR branch without an explicit plain-words maintainer authorisation in the immediately preceding message; `--force-with-lease` is no exception. `git-guard.sh` enforces this at the tool boundary.
+- Never include session URLs (`https://claude.ai/code/session_...`) in commit messages or PR bodies - they reference private conversations.
 
 ## Skills
 
@@ -48,6 +54,12 @@ Grouped by concern: tool wrappers, pipeline plumbing, tests, agent-facing prose.
 The `in_tests` pre-classifier in the hook is load-bearing: `*` crosses `/` in bash case patterns, so without it `*/squad/*.py` would over-match `tests/squad/<member>/test_*.py` and pull the wrapper-author skills into test edits where they do not apply.
 
 The hook is wired in `.claude/settings.json`; the matching logic lives in `.claude/hooks/load-skill.sh`. If a hook fails to fire in your session, run `/hooks` once (or restart) - the watcher only sees `.claude/settings.json` if it existed at session start. You can always also load a skill manually via the `Skill` tool.
+
+Three more hooks live alongside it, all wired in the same `.claude/settings.json`:
+
+- `session-start.sh` (`SessionStart`) - injects the workflow non-negotiables (read CONTRIBUTING first, the `<type>/<short-description>` branch convention, branch identity, force-push policy) into context before the first edit, since those rules have no edit to hang a skill load off. Surfaces the current branch and warns on harness-synthetic `claude/*` names or detached HEAD.
+- `session-setup.sh` (`SessionStart`, web only) - bootstraps the dev environment: builds a Python 3.12 `.venv` (matching the CI pin) and `pip install -e ".[dev]"`, then puts it first on PATH via `$CLAUDE_ENV_FILE` so `python` / `ruff` / `pytest` resolve to it. Idempotent: the slow build runs at most once per container; resume / compact SessionStarts hit the warm fast path. Gated on `$CLAUDE_CODE_REMOTE`, so a local contributor's environment is untouched.
+- `git-guard.sh` (`PreToolUse:Bash`) - hard-denies destructive git history/branch operations (force-push, `push --delete`, colon-refspec push, `branch -D`, `reset --hard`, `clean -f`) unless there is explicit plain-words maintainer authorisation. The mechanical complement to `docs/git-workflow.md`'s force-push policy. Fails open on unexpected input.
 
 ### Runtime crew skills (CrewAI)
 
