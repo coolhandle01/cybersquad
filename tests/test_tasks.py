@@ -40,12 +40,16 @@ class _FakeTask:
         agent: object,
         context: list | None = None,
         human_input: bool = False,
+        guardrail: object = None,
+        max_retries: int | None = None,
     ) -> None:
         self.description = description
         self.expected_output = expected_output
         self.agent = agent
         self.context = context or []
         self.human_input = human_input
+        self.guardrail = guardrail
+        self.max_retries = max_retries
 
 
 class TestSquadMemberRead:
@@ -111,6 +115,20 @@ class TestBuildTasks:
         assert triage.context == [pentest, research, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
+
+    def test_select_task_wired_with_guardrail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from squad.guardrails import validate_select_output
+
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        select, *_rest = build_tasks(self._agents())
+        assert select.guardrail is validate_select_output
+        assert select.max_retries == 2
+
+    def test_only_select_task_is_guarded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        select, *rest = build_tasks(self._agents())
+        assert select.guardrail is not None
+        assert all(t.guardrail is None for t in rest)
 
     def test_human_input_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import importlib

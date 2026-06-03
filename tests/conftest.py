@@ -20,6 +20,7 @@ The fixtures themselves live under ``tests/fixtures/`` by concern:
                 attack_tree, attack_forest
   responses.py  make_response, clean_response_body
   tools.py      invoke_tool, reload_module
+  task_output.py  make_task_output
 
 The ``pytest_plugins`` mechanism is the upstream-blessed way to wire
 fixture modules into the discovery path - documented at
@@ -48,6 +49,7 @@ pytest_plugins = [
     "tests.fixtures.findings",
     "tests.fixtures.responses",
     "tests.fixtures.tools",
+    "tests.fixtures.task_output",
 ]
 
 
