@@ -46,7 +46,7 @@ from squad.osint_analyst import (
     _OsintLookupOwaspArgs,
     _RunInitialSweepArgs,
 )
-from squad.workspace_tools import (
+from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )

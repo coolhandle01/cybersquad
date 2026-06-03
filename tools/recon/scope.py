@@ -87,12 +87,12 @@ def _filter_fqdns(hosts: list[str]) -> list[str]:
 
     Sources the in-flight Programme via ``current_programme()`` and
     returns the in-scope subset. Lazy-imported to break the
-    ``squad.workspace_tools`` -> ``squad`` cycle that would otherwise
+    ``squad.tools.workspace_tools`` -> ``squad`` cycle that would otherwise
     fire at module load.
     """
     if not hosts:
         return hosts
-    from squad.workspace_tools import current_programme
+    from squad.tools.workspace_tools import current_programme
 
     return filter_in_scope(hosts, current_programme())
 
@@ -109,7 +109,7 @@ def _filter_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
     """
     if not endpoints:
         return endpoints
-    from squad.workspace_tools import current_programme
+    from squad.tools.workspace_tools import current_programme
 
     programme = current_programme()
     in_scope = set(filter_in_scope([host_of(ep.url) for ep in endpoints], programme))
@@ -123,7 +123,7 @@ def _require_fqdn_in_scope(host: str) -> str:
     out-of-scope value is a loud error, not silent drop. Raises
     ``ValueError`` if the hostname is not in scope.
     """
-    from squad.workspace_tools import current_programme
+    from squad.tools.workspace_tools import current_programme
 
     if not filter_in_scope([host], current_programme()):
         raise ValueError(f"hostname {host!r} is not in the selected programme's scope")
@@ -136,7 +136,7 @@ def _require_endpoint_in_scope(endpoint: Endpoint) -> Endpoint:
     Mirror of ``_require_fqdn_in_scope`` but pulls the host out of
     ``endpoint.url`` first. Raises ``ValueError`` if the host is OOS.
     """
-    from squad.workspace_tools import current_programme
+    from squad.tools.workspace_tools import current_programme
 
     host = host_of(endpoint.url)
     if not filter_in_scope([host], current_programme()):

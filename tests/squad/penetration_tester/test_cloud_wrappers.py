@@ -44,33 +44,39 @@ pytestmark = pytest.mark.unit
 # refuses a new hostname-taking wrapper landing without being added
 # to one of the two tables; same for the endpoint table further down.
 _HOSTNAME_PASSING_ITERATING_WRAPPERS: list[tuple[str, str]] = [
-    ("elasticsearch_tool", "squad.penetration_tester.cloud.databases.check_elasticsearch"),
-    ("couchdb_tool", "squad.penetration_tester.cloud.databases.check_couchdb"),
-    ("redis_tool", "squad.penetration_tester.cloud.databases.check_redis"),
-    ("mongodb_tool", "squad.penetration_tester.cloud.databases.check_mongodb"),
-    ("postgresql_tool", "squad.penetration_tester.cloud.databases.check_postgresql"),
-    ("mysql_tool", "squad.penetration_tester.cloud.databases.check_mysql"),
+    ("elasticsearch_tool", "squad.penetration_tester.tools.cloud.databases.check_elasticsearch"),
+    ("couchdb_tool", "squad.penetration_tester.tools.cloud.databases.check_couchdb"),
+    ("redis_tool", "squad.penetration_tester.tools.cloud.databases.check_redis"),
+    ("mongodb_tool", "squad.penetration_tester.tools.cloud.databases.check_mongodb"),
+    ("postgresql_tool", "squad.penetration_tester.tools.cloud.databases.check_postgresql"),
+    ("mysql_tool", "squad.penetration_tester.tools.cloud.databases.check_mysql"),
 ]
 
 _HOSTNAME_PASSING_LIST_WRAPPERS: list[tuple[str, str]] = [
-    ("s3_check_tool", "squad.penetration_tester.cloud.storage.check_s3_buckets"),
+    ("s3_check_tool", "squad.penetration_tester.tools.cloud.storage.check_s3_buckets"),
     (
         "azure_blob_container_check_tool",
-        "squad.penetration_tester.cloud.storage.check_azure_blob_containers",
+        "squad.penetration_tester.tools.cloud.storage.check_azure_blob_containers",
     ),
-    ("cpanel_tool", "squad.penetration_tester.cloud.panels.check_cpanel"),
-    ("plesk_tool", "squad.penetration_tester.cloud.panels.check_plesk"),
-    ("directadmin_tool", "squad.penetration_tester.cloud.panels.check_directadmin"),
-    ("webmin_tool", "squad.penetration_tester.cloud.panels.check_webmin"),
-    ("grafana_port_check_tool", "squad.penetration_tester.cloud.dashboards.check_grafana_ports"),
-    ("kibana_port_check_tool", "squad.penetration_tester.cloud.dashboards.check_kibana_ports"),
+    ("cpanel_tool", "squad.penetration_tester.tools.cloud.panels.check_cpanel"),
+    ("plesk_tool", "squad.penetration_tester.tools.cloud.panels.check_plesk"),
+    ("directadmin_tool", "squad.penetration_tester.tools.cloud.panels.check_directadmin"),
+    ("webmin_tool", "squad.penetration_tester.tools.cloud.panels.check_webmin"),
+    (
+        "grafana_port_check_tool",
+        "squad.penetration_tester.tools.cloud.dashboards.check_grafana_ports",
+    ),
+    (
+        "kibana_port_check_tool",
+        "squad.penetration_tester.tools.cloud.dashboards.check_kibana_ports",
+    ),
     (
         "portainer_port_check_tool",
-        "squad.penetration_tester.cloud.dashboards.check_portainer_ports",
+        "squad.penetration_tester.tools.cloud.dashboards.check_portainer_ports",
     ),
     (
         "consul_vault_port_check_tool",
-        "squad.penetration_tester.cloud.service_discovery.check_consul_vault_ports",
+        "squad.penetration_tester.tools.cloud.service_discovery.check_consul_vault_ports",
     ),
 ]
 
@@ -238,7 +244,7 @@ def test_endpoint_driven_cloud_table_covers_every_cloud_endpoint_wrapper() -> No
 
     Probe wrappers (Nuclei, SQLMap, SSRF, ...) also take ``endpoints``,
     so the cloud-only subset is selected by ``func.__module__`` starting
-    with ``squad.penetration_tester.cloud.``. The split is deliberate -
+    with ``squad.penetration_tester.tools.cloud.``. The split is deliberate -
     probe wrappers have their own bespoke tests in ``test_tools.py``.
     """
     import squad.penetration_tester as pt_module
@@ -246,7 +252,7 @@ def test_endpoint_driven_cloud_table_covers_every_cloud_endpoint_wrapper() -> No
     cloud_endpoint_tools = {
         tool.name
         for tool in pt_module.MEMBER.tools
-        if tool.func.__module__.startswith("squad.penetration_tester.cloud.")
+        if tool.func.__module__.startswith("squad.penetration_tester.tools.cloud.")
         and "endpoints" in tool.args_schema.model_fields
     }
     table_display_names = {
@@ -260,21 +266,30 @@ def test_endpoint_driven_cloud_table_covers_every_cloud_endpoint_wrapper() -> No
 
 
 _ENDPOINT_DRIVEN_CLOUD_WRAPPERS: list[tuple[str, str]] = [
-    ("sensitive_files_tool", "squad.penetration_tester.cloud.web_content.check_sensitive_files"),
-    ("admin_panels_tool", "squad.penetration_tester.cloud.web_content.check_admin_panels"),
+    (
+        "sensitive_files_tool",
+        "squad.penetration_tester.tools.cloud.web_content.check_sensitive_files",
+    ),
+    ("admin_panels_tool", "squad.penetration_tester.tools.cloud.web_content.check_admin_panels"),
     (
         "azure_sas_token_check_tool",
-        "squad.penetration_tester.cloud.storage.check_azure_sas_tokens",
+        "squad.penetration_tester.tools.cloud.storage.check_azure_sas_tokens",
     ),
-    ("grafana_path_check_tool", "squad.penetration_tester.cloud.dashboards.check_grafana_paths"),
-    ("kibana_path_check_tool", "squad.penetration_tester.cloud.dashboards.check_kibana_paths"),
+    (
+        "grafana_path_check_tool",
+        "squad.penetration_tester.tools.cloud.dashboards.check_grafana_paths",
+    ),
+    (
+        "kibana_path_check_tool",
+        "squad.penetration_tester.tools.cloud.dashboards.check_kibana_paths",
+    ),
     (
         "portainer_path_check_tool",
-        "squad.penetration_tester.cloud.dashboards.check_portainer_paths",
+        "squad.penetration_tester.tools.cloud.dashboards.check_portainer_paths",
     ),
     (
         "consul_vault_path_check_tool",
-        "squad.penetration_tester.cloud.service_discovery.check_consul_vault_paths",
+        "squad.penetration_tester.tools.cloud.service_discovery.check_consul_vault_paths",
     ),
 ]
 

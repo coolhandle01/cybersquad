@@ -34,7 +34,7 @@ from squad.technical_author import (
     _TaLookupCweArgs,
     _TaLookupOwaspArgs,
 )
-from squad.workspace_tools import (
+from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )

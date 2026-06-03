@@ -16,7 +16,8 @@ cybersquad is a six-agent CrewAI pipeline that autonomously selects HackerOne bu
 | `squad/__init__.py` | `SquadMember` dataclass + `build_agent()` / `build_task()` helpers. Each helper reads prose from a single-purpose `.md` file. |
 | `squad/<member>/{role,goal,backstory}.md` | Three single-purpose files driving the CrewAI Agent. Edit to tune agent behaviour. |
 | `squad/<member>/{description,expected_output}.md` | Two single-purpose files driving the Task description and expected output. |
-| `squad/<member>/__init__.py` | Tool functions (`@tool`) + a module-level `MEMBER = SquadMember(...)` constant. |
+| `squad/<member>/__init__.py` | Registry assembly: imports the member's wrappers, builds the module-level `MEMBER = SquadMember(...)` constant, and re-exports the wrappers. |
+| `squad/<member>/tools/` | The member's `@tool` / `@cyber_tool` / `@pentest_tool` wrapper modules (the CrewAI wrapper layer; kernels live in the top-level `tools/`). Shared wrappers live in `squad/tools/`. |
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
 | `tools/recon/` | Recon tools: subfinder, httpx, dnsx (subdomain-takeover detection), nmap, TLS, DNS, dirfuzz, waybackurls, cert transparency, traceroute, scope guard. |
 | `tools/recon/scope.py` | `filter_in_scope()` - hard scope enforcement boundary. Do not weaken. |

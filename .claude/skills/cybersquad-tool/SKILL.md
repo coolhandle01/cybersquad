@@ -160,8 +160,8 @@ The reader returns the typed model; downstream agents work against the schema, n
 
 ## Where tools live
 
-- **Per-agent**: `squad/<agent>/__init__.py`. Each `@cyber_tool` / `@pentest_tool` is added to that agent's `MEMBER.tools` list.
-- **Shared between agents**: `squad/workspace_tools.py`. Re-export through `squad/__init__.py` (`__all__` and the explicit re-export) so consumers `from squad import read_attack_forest_tool`, not from the deeper path.
+- **Per-agent**: the wrapper modules live under `squad/<agent>/tools/` (one module per cohesive responsibility - e.g. `discovery.py` / `curation.py`, `probes/` / `cloud/`, `selection.py`, `submission.py`, `authoring.py`). The agent's `squad/<agent>/__init__.py` imports each wrapper, assembles the `MEMBER.tools` list, and re-exports the wrappers + their args_schema classes so consumers keep importing `from squad.<agent> import ...`.
+- **Shared between agents**: `squad/tools/workspace_tools.py`. Re-export through `squad/__init__.py` (`__all__` and the explicit re-export) so consumers `from squad import read_attack_forest_tool`, not from the deeper path.
 
 ## Where models live
 
@@ -197,7 +197,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`, with `insight` / 
 - A `dict[str, ...]` whose keys are hostnames - type the key as `dict[FQDN, ...]` so the validator fires on the keys too.
 - Adding a new model directly to `models/__init__.py`. The package is split per domain; put it in the matching module and let the re-export carry it.
 - New workspace writer with no typed reader.
-- `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
+- `from squad.tools.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
 - Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Use the typed `Target*` alias on the `args_schema` field so the Pydantic-native `AfterValidator` is what enforces scope; the guarantee lives in the type signature, not in the body.
 - Fuzzing or guessing customer cloud-tenant names / bucket names / account names to probe `*.s3.amazonaws.com`, `*.blob.core.windows.net`, or any other third-party infrastructure. The PT only attacks what OSINT inventoried in `recon.subdomains` / `recon.endpoints`; if a candidate name isn't there, OSINT didn't surface it through legitimate discovery (DNS / cert transparency / historical URLs) and the PT can't fabricate it. High-risk post-discovery exploitation that goes beyond OSINT's inventory (credential checks against discovered panels, brute-force, ...) is policy-gated; see #65 (default credential checks) and #67 (credential stuffing) for the canonical pattern (programme-policy parser confirms authorisation, hard per-target cap enforced in code, full rate-limiter respected).
 - A new `programme_handle: str` field on an args_schema for a tool whose body would only thread it into `current_programme()` or `filter_in_scope`. Workspace state (`runtime.programme_handle` / `<run_dir>/programme.json`) is the contract; the per-call handle is duplication.
@@ -209,7 +209,7 @@ These rules apply to every agent's `@cyber_tool` / `@pentest_tool` / `@research_
 
 - `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`, `grafana_port_check_tool`) show `list[FQDN]` typed-target fields (auto-scope-filtered); path-style cloud wrappers (`sensitive_files_tool`, `grafana_path_check_tool`, `azure_sas_token_check_tool`) show `list[Endpoint]` typed-target fields; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the same composition on the OSINT side.
 - `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but reads OSINT's recon output, so the pattern is cross-agent.
-- `squad/workspace_tools.py` `read_attack_forest_tool` returns `AttackForest` - mirror this shape on any new workspace reader (typed return, no `dict`).
+- `squad/tools/workspace_tools.py` `read_attack_forest_tool` returns `AttackForest` - mirror this shape on any new workspace reader (typed return, no `dict`).
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):
   - `Finalise Recon` (`squad/osint_analyst/__init__.py`) -> `"recon.json"`
   - `Finalise Research` (`squad/vulnerability_researcher/__init__.py`) -> `"attack_forest.json"`

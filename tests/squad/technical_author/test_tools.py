@@ -113,7 +113,7 @@ class TestTechnicalAuthorTools:
         from squad.technical_author import calculate_cvss_tool
 
         with patch(
-            "squad.technical_author.calculate_cvss_score",
+            "squad.technical_author.tools.authoring.calculate_cvss_score",
             return_value=8.8,
         ) as m:
             result = calculate_cvss_tool.func("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
@@ -137,7 +137,9 @@ class TestTechnicalAuthorTools:
         ]
         with (
             patch("runtime.programme_handle", "acme"),
-            patch("squad.technical_author.h1.list_reports", return_value=h1_reports) as mlist,
+            patch(
+                "squad.technical_author.tools.authoring.h1.list_reports", return_value=h1_reports
+            ) as mlist,
         ):
             result = list_programme_reports_tool.func(page_size=10)
 

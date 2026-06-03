@@ -25,9 +25,9 @@ class TestDisclosureCoordinatorTools:
         submission = SubmissionResult(report_id="h1-42", status=SubmissionStatus.SUBMITTED)
 
         with (
-            patch("squad.disclosure_coordinator.save_report") as msave,
+            patch("squad.disclosure_coordinator.tools.submission.save_report") as msave,
             patch(
-                "squad.disclosure_coordinator.h1.submit_report",
+                "squad.disclosure_coordinator.tools.submission.h1.submit_report",
                 return_value=submission,
             ) as msub,
         ):
@@ -49,9 +49,9 @@ class TestDisclosureCoordinatorTools:
         submission = SubmissionResult(report_id="h1-42", status=SubmissionStatus.SUBMITTED)
 
         with (
-            patch("squad.disclosure_coordinator.save_report"),
+            patch("squad.disclosure_coordinator.tools.submission.save_report"),
             patch(
-                "squad.disclosure_coordinator.h1.submit_report",
+                "squad.disclosure_coordinator.tools.submission.h1.submit_report",
                 return_value=submission,
             ),
         ):
@@ -71,7 +71,7 @@ class TestDisclosureCoordinatorTools:
         with (
             patch("runtime.programme_handle", "acme"),
             patch(
-                "squad.disclosure_coordinator.h1.list_reports",
+                "squad.disclosure_coordinator.tools.submission.h1.list_reports",
                 return_value=reports,
             ),
         ):

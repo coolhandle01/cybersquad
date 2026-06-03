@@ -64,7 +64,9 @@ class TestLookupIpAssets:
             captured["ips"] = ips
             return composed
 
-        monkeypatch.setattr("squad.osint_analyst.enrichment.compose_ip_enrichment", _fake_compose)
+        monkeypatch.setattr(
+            "squad.osint_analyst.tools.enrichment.compose_ip_enrichment", _fake_compose
+        )
 
         result = invoke_tool(lookup_ip_assets_tool, ips=["1.2.3.4", "8.8.8.8"])
 
@@ -118,7 +120,9 @@ class TestLookupRdapAsn:
             captured["asn"] = asn
             return record
 
-        monkeypatch.setattr("squad.osint_analyst.enrichment.lookup_rdap_for_asn", _fake_lookup)
+        monkeypatch.setattr(
+            "squad.osint_analyst.tools.enrichment.lookup_rdap_for_asn", _fake_lookup
+        )
 
         result = invoke_tool(lookup_rdap_asn_tool, asn=13335)
 
@@ -129,7 +133,9 @@ class TestLookupRdapAsn:
 
     def test_returns_empty_bundle_on_miss(self, invoke_tool, monkeypatch) -> None:
         """A bootstrap / lookup miss yields an empty bundle, not a crash."""
-        monkeypatch.setattr("squad.osint_analyst.enrichment.lookup_rdap_for_asn", lambda asn: None)
+        monkeypatch.setattr(
+            "squad.osint_analyst.tools.enrichment.lookup_rdap_for_asn", lambda asn: None
+        )
 
         result = invoke_tool(lookup_rdap_asn_tool, asn=64512)
 
@@ -214,7 +220,7 @@ class TestDeepScanHost:
             captured_kwargs.update(kwargs)
             return NmapScanResult(mode=NmapMode.SERVICE_VERSION, hosts=[host_result])
 
-        monkeypatch.setattr("squad.osint_analyst.enrichment.nmap_scan", _fake_nmap_scan)
+        monkeypatch.setattr("squad.osint_analyst.tools.enrichment.nmap_scan", _fake_nmap_scan)
 
         result = invoke_tool(discover_host_services_tool, host=host, ports=[22, 443])
 
@@ -251,7 +257,7 @@ class TestDeepScanHost:
         host = f"api.{target_apex}"
 
         monkeypatch.setattr(
-            "squad.osint_analyst.enrichment.nmap_scan",
+            "squad.osint_analyst.tools.enrichment.nmap_scan",
             lambda hosts, **kwargs: NmapScanResult(mode=NmapMode.SERVICE_VERSION, hosts=[]),
         )
 
