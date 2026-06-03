@@ -8,6 +8,11 @@
             "type": "command",
             "command": ".claude/hooks/session-start.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/session-setup.sh",
+            "timeout": 600
           }
         ]
       }
