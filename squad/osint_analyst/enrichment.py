@@ -6,7 +6,8 @@ and the slicers over it), this module carries the tools the OA reaches
 for *after* the sweep to enrich and pivot on what it surfaced:
 
 - ``Lookup IP Assets`` - ASN + RDAP + PTR for IPs the sweep surfaced,
-  composed into one ``IpAsset`` per IP (the amass IPAddress-asset shape).
+  composed into the faithful OAM ``IpEnrichment`` subgraph (IPAddress /
+  Netblock / AutonomousSystem nodes + registry / registrant assets + edges).
 
 These are the "explore, don't just record" half: the sweep records the
 surface; these tools let the agent follow a thread off it with
@@ -20,21 +21,27 @@ boundary, not the IP one - see the per-tool notes below.
 
 from pydantic import BaseModel, Field
 
-from models import IPAddress, IpAsset, RdapRecord, Service
+from models import IpAddr, IpEnrichment, RegistrantBundle, Service
 from models.primitives import FQDN
 from models.scanner import NmapMode, NmapScripts
 from squad import cyber_tool
-from tools.recon.ip_asset import compose_ip_assets
+from tools.recon.ip_enrichment import compose_ip_enrichment
 from tools.recon.nmap import nmap_scan, services_from_nmap
 from tools.recon.rdap import lookup_rdap_for_asn
+from tools.recon.rdap_assets import registrant_assets_from_rdap
 from tools.recon.scope import TargetFQDN
-from tools.recon_host_store import save_host_services
+from tools.recon_host_store import (
+    save_host_product_releases,
+    save_host_products,
+    save_host_relations,
+    save_host_services,
+)
 
 
 class _LookupIpAssetsArgs(BaseModel):
     """Explicit args_schema for the Lookup IP Assets tool."""
 
-    ips: list[IPAddress] = Field(
+    ips: list[IpAddr] = Field(
         description=(
             "IPv4 / IPv6 addresses surfaced by the sweep (e.g. the"
             " resolved IPs behind in-scope hostnames, or traceroute"
@@ -48,26 +55,31 @@ class _LookupIpAssetsArgs(BaseModel):
 
 
 @cyber_tool("Lookup IP Assets", args_schema=_LookupIpAssetsArgs)
-def lookup_ip_assets_tool(ips: list[IPAddress]) -> list[IpAsset]:
+def lookup_ip_assets_tool(ips: list[IpAddr]) -> IpEnrichment:
     """
     Enrich a set of IPs with ASN, RDAP, and reverse-DNS (PTR) data,
-    returning one ``IpAsset`` per unique IP. This is the IP-rooted pivot:
-    given IPs the sweep surfaced, find the netblock / AS-owner (Team
-    Cymru), the registrant + abuse contact (RDAP), and any cohabiting
-    hostnames that PTR back to the same IP.
+    returning the faithful OAM ``IpEnrichment`` subgraph. This is the
+    IP-rooted pivot: given IPs the sweep surfaced, find the netblock /
+    AS-owner (Team Cymru), the registrant org + abuse contact (RDAP), and
+    the hostnames that PTR back to each IP.
 
-    Fires outbound lookups per IP: Team Cymru bulk-whois (ASN), an RDAP
-    HTTP fetch (registrant), and a dnsx ``-ptr`` reverse query. Each
-    source degrades independently - an IP with only ASN data still
-    returns a useful ``IpAsset`` rather than being dropped.
+    Fires outbound lookups per IP: Team Cymru bulk-whois (ASN), RDAP HTTP
+    fetches (registrant, per IP and per AS), and a dnsx ``-ptr`` reverse
+    query. Each source degrades independently - an IP with only ASN data
+    still yields its ``IPAddress`` / ``Netblock`` / ``AutonomousSystem``
+    nodes rather than being dropped.
 
-    Returns ``list[IpAsset]`` ({ip, asn, rdap, ptr}), ordered by the
-    de-duplicated input; empty list on empty input. PTR-discovered
-    hostnames ride in on ``IpAsset.ptr`` and are out-of-scope by
-    default - they are pivot evidence, not in-scope assets, until the
-    annotation pass promotes any that share the programme's apex.
+    Returns an ``IpEnrichment`` bundle: ``ip_addresses`` / ``netblocks`` /
+    ``autonomous_systems`` nodes, the ``autnum_records`` / ``ipnet_records``
+    registry records, the registrant ``organizations`` / ``identifiers``
+    (abuse + registrant emails), and the ``relations`` joining them
+    (``contains`` / ``announces`` / ``managed_by`` / ``registrant_org`` /
+    ``ptr_record``). Empty bundle on empty input. PTR-discovered hostnames
+    ride in on the ``ptr_record`` edges and are out-of-scope by default -
+    pivot evidence, not in-scope assets, until the annotation pass promotes
+    any that share the programme's apex.
     """
-    return compose_ip_assets(ips)
+    return compose_ip_enrichment(ips)
 
 
 class _LookupRdapAsnArgs(BaseModel):
@@ -79,8 +91,9 @@ class _LookupRdapAsnArgs(BaseModel):
         description=(
             "Autonomous System Number to look up, as a bare integer (e.g."
             " 13335 for Cloudflare) - no ``AS`` prefix; a non-numeric"
-            " string rejects upstream. Read it off an ``IpAsset.asn``"
-            " record surfaced by Lookup IP Assets. Out-of-range values"
+            " string rejects upstream. Read it off an"
+            " ``autonomous_systems`` entry surfaced by Lookup IP Assets."
+            " Out-of-range values"
             " (negative, or above the 32-bit ceiling) reject at the"
             " boundary."
         ),
@@ -88,23 +101,26 @@ class _LookupRdapAsnArgs(BaseModel):
 
 
 @cyber_tool("Lookup RDAP for ASN", args_schema=_LookupRdapAsnArgs)
-def lookup_rdap_asn_tool(asn: int) -> RdapRecord | None:
+def lookup_rdap_asn_tool(asn: int) -> RegistrantBundle:
     """
-    Look up the RDAP (RFC 7483) registration record for one ASN: the
-    AS-owner organisation, abuse / registrant contacts, and registration
-    events. This is the ASN-side pivot - IP-side RDAP already rides in on
-    ``Lookup IP Assets`` (``IpAsset.rdap``), so reach for this when the
-    question is about the AS itself: who to disclose to, or building a
-    pattern-of-life view of an org's address space.
+    Look up the RDAP (RFC 7483) registration for one ASN and return the
+    faithful OAM registration subgraph: the ``AutnumRecord`` registry record,
+    the registrant ``Organization``, and the abuse / registrant contact
+    ``Identifier`` (email) assets, joined by ``registrant_org`` / ``managed_by``
+    / ``<role>_email`` edges. This is the ASN-side pivot - IP-side RDAP already
+    rides in on ``Lookup IP Assets`` (its ``ipnet_records`` /
+    ``organizations``), so reach for this when the question is about the AS
+    itself: who to disclose to, or building a pattern-of-life view of an org's
+    address space.
 
-    Fires one RDAP HTTP fetch against the authoritative RIR (resolved via
-    the IANA bootstrap registry). Returns an ``RdapRecord`` ({query,
-    handle, rir, registrant_organisation, abuse_email, registered_at,
-    last_changed_at, source_url, contacts}), or ``None`` when the
-    bootstrap has no entry for the ASN or the RIR lookup fails - the OA
+    Fires one RDAP HTTP fetch against the authoritative RIR (resolved via the
+    IANA bootstrap registry). Returns a ``RegistrantBundle`` ({organizations,
+    autnum_records, ipnet_records, identifiers, relations}); the bundle is empty
+    when the bootstrap has no entry for the ASN or the RIR lookup fails - the OA
     keeps moving rather than blocking on a miss.
     """
-    return lookup_rdap_for_asn(asn)
+    record = lookup_rdap_for_asn(asn)
+    return registrant_assets_from_rdap([record] if record is not None else [], ip_to_cidr={})
 
 
 class _DiscoverHostServicesArgs(BaseModel):
@@ -150,13 +166,14 @@ def discover_host_services_tool(host: FQDN, ports: list[int]) -> list[Service]:
     the HTTP surface is already covered by ``Discover Webpages`` / httpx.
 
     Returns the host's open ``Service`` assets (one per open port nmap
-    fingerprinted), each carrying its banner detail, the NIST CPE nmap
-    matched, and ``detected_by="nmap"``. Empty list when nmap found
-    nothing (host down / scan blocked) - the OA always gets a typed
-    result back. The services are also written to the host's
-    ``services.json`` so the finalised recon (and the future amass
-    upsert) carry them; the raw nmap XML is not persisted - this is a
-    focused pivot, not an evidence artefact.
+    fingerprinted), each carrying its banner in ``output`` / ``attributes``.
+    Empty list when nmap found nothing (host down / scan blocked) - the OA
+    always gets a typed result back. Alongside the return, the full OAM
+    subgraph is written to the host directory: ``services.json``, the
+    ``products.json`` / ``product_releases.json`` nmap's CPEs decomposed to,
+    and the ``port`` / ``product_used`` edges in ``relations.json`` - the
+    on-disk form of what #45 upserts. The raw nmap XML is not persisted -
+    this is a focused pivot, not an evidence artefact.
     """
     result = nmap_scan(
         [host],
@@ -170,13 +187,21 @@ def discover_host_services_tool(host: FQDN, ports: list[int]) -> list[Service]:
         # nmap surfaced no row for the queried host (down / blocked /
         # parse miss) - fall back to the first row if any, else nothing.
         host_result = result.hosts[0] if result.hosts else None
-    services = services_from_nmap(host_result) if host_result is not None else []
-    if services:
-        # Persist the Service-asset facet to the host's directory - the
-        # on-disk form of what #45 upserts as amass Service nodes. Skip
-        # the write when empty (presence graph: no services -> no node).
-        save_host_services(host, services)
-    return services
+    if host_result is None:
+        return []
+    assets = services_from_nmap(host_result)
+    # Persist each OAM facet to the host directory - the on-disk form of what
+    # #45 upserts (assets + their attached properties) and inserts
+    # (relations.json edges). Presence graph: skip the empty writes.
+    if assets.services:
+        save_host_services(host, assets.services)
+    if assets.products:
+        save_host_products(host, assets.products)
+    if assets.product_releases:
+        save_host_product_releases(host, assets.product_releases)
+    if assets.relations:
+        save_host_relations(host, assets.relations)
+    return assets.services
 
 
 __all__ = [

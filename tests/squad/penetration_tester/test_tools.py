@@ -16,6 +16,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.fixtures.programme import stage_model_json
+
 pytestmark = pytest.mark.unit
 
 
@@ -45,7 +47,7 @@ class TestPenetrationTesterTools:
     def test_cookie_check_tool(self, recon_result, raw_finding_low, run_dir) -> None:
         from squad.penetration_tester import cookie_check_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
             "squad.penetration_tester.probes.headers.check_cookies",
             return_value=[raw_finding_low],
@@ -57,7 +59,7 @@ class TestPenetrationTesterTools:
     def test_cors_check_tool(self, recon_result, raw_finding_low, run_dir) -> None:
         from squad.penetration_tester import cors_check_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
             "squad.penetration_tester.probes.headers.check_cors_misconfiguration",
             return_value=[raw_finding_low],
@@ -69,7 +71,7 @@ class TestPenetrationTesterTools:
     def test_csrf_check_tool(self, recon_result, raw_finding_low, run_dir) -> None:
         from squad.penetration_tester import csrf_check_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
             "squad.penetration_tester.probes.headers.check_csrf",
             return_value=[raw_finding_low],
@@ -92,7 +94,7 @@ class TestPenetrationTesterTools:
     def test_header_injection_tool(self, recon_result, raw_finding_low, run_dir) -> None:
         from squad.penetration_tester import header_injection_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
             "squad.penetration_tester.probes.headers.check_header_injection",
             return_value=[raw_finding_low],
@@ -104,7 +106,7 @@ class TestPenetrationTesterTools:
     def test_host_header_tool(self, recon_result, raw_finding_low, run_dir) -> None:
         from squad.penetration_tester import host_header_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
             "squad.penetration_tester.probes.headers.check_host_headers",
             return_value=[raw_finding_low],
@@ -126,14 +128,14 @@ class TestPenetrationTesterTools:
     def test_recon_subdomains_tool(self, recon_result, run_dir) -> None:
         from squad.penetration_tester import recon_subdomains_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         result = recon_subdomains_tool.func("recon.json")
         assert result == recon_result.subdomains
 
     def test_recon_endpoints_tool(self, recon_result, run_dir) -> None:
         from squad.penetration_tester import recon_endpoints_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         result = recon_endpoints_tool.func("recon.json", status=200)
         from models import EndpointPage
 
@@ -144,7 +146,7 @@ class TestPenetrationTesterTools:
     def test_recon_open_ports_tool(self, recon_result, run_dir) -> None:
         from squad.penetration_tester import recon_open_ports_tool
 
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        stage_model_json(run_dir, "recon.json", recon_result)
         from models import OpenPortsMap
 
         result = recon_open_ports_tool.func("recon.json")

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models.network import RdapRecord
+from models.asset.network import RdapRecord
 from tools.recon import rdap
 
 pytestmark = pytest.mark.unit

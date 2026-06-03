@@ -22,7 +22,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from models.asset import Endpoint
-from models.primitives import FQDN, IPAddress
+from models.primitives import FQDN, IpAddr
 
 
 class NmapMode(StrEnum):
@@ -93,6 +93,12 @@ class NmapService(BaseModel):
     version: str | None = Field(default=None, max_length=64)
     extra_info: str | None = Field(default=None, max_length=255)
 
+    # nmap's service-detection confidence for this match (the ``<service conf>``
+    # attribute), 1-10; 0 when nmap emitted no match. The producer scales it to
+    # the OAM ``SourceProperty.confidence`` (0-100) it stamps on the Service /
+    # Product / ProductRelease assets.
+    conf: int = Field(default=0, ge=0, le=10)
+
     # Tool-captured CPE 2.3 string, normalised from nmap's ``<cpe>`` 2.2 URI
     # output via ``tools.cpe.normalize_cpe``. The product's NIST identifier
     # and the high-confidence join key for the VR's CVE lookup. ``None`` when
@@ -103,8 +109,7 @@ class NmapService(BaseModel):
     # FIXME(#45 / amass-integration): promote to a typed ``Cpe`` primitive in
     # ``models.primitives`` once the CVE-lookup workflow lands - CPE now sits
     # on two fields (here + ``Service.cpe``), the multi-field threshold the
-    # cybersquad-models skill sets for a primitive. Deferred alongside the
-    # existing ``CvssVector`` / ``CweId`` primitive plans.
+    # cybersquad-models skill sets for a primitive.
     cpe: str | None = Field(default=None, max_length=255)
 
 
@@ -118,7 +123,7 @@ class NmapHostResult(BaseModel):
     to the agent.
     """
 
-    host: FQDN | IPAddress
+    host: FQDN | IpAddr
     services: list[NmapService] = Field(default_factory=list)
 
 

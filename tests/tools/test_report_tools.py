@@ -122,16 +122,19 @@ class TestCalculateCvssScore:
     def test_version_30_accepted(self):
         assert calculate_cvss_score("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H") == 9.8
 
+    # The three reject cases assert the boundary contract the recompute call
+    # sites rely on: a bad vector surfaces as ``ValueError``. The match pins the
+    # wrapper's stable prefix, not the underlying ``cvss`` library's wording.
     def test_malformed_version_raises(self):
-        with pytest.raises(ValueError, match="Unrecognised CVSS version"):
+        with pytest.raises(ValueError, match="invalid CVSS vector"):
             calculate_cvss_score("CVSS:2.0/AV:N/AC:L/Au:N/C:C/I:C/A:C")
 
     def test_missing_metric_raises(self):
-        with pytest.raises(ValueError, match="Missing or unknown CVSS metric"):
+        with pytest.raises(ValueError, match="invalid CVSS vector"):
             calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H")
 
     def test_malformed_component_raises(self):
-        with pytest.raises(ValueError, match="Malformed metric"):
+        with pytest.raises(ValueError, match="invalid CVSS vector"):
             calculate_cvss_score("CVSS:3.1/AV:N/BADCOMPONENT/PR:N/UI:N/S:U/C:H/I:H/A:H")
 
 
@@ -259,7 +262,12 @@ class TestRenderDraftMarkdown:
 
     def test_contains_cwe_name(self, target_apex):
         md = render_draft_markdown(_good_draft(target_apex))
-        assert "CWE-89 (SQL Injection)" in md
+        # The name is sourced from the MITRE corpus (cwe2), not a hand-written
+        # short label, so assert the id plus the canonical short form MITRE
+        # embeds in CWE-89's name ("...('SQL Injection')") rather than pinning
+        # the full verbose name string.
+        assert "CWE-89" in md
+        assert "SQL Injection" in md
 
     def test_steps_are_numbered(self, target_apex):
         md = render_draft_markdown(_good_draft(target_apex))

@@ -24,8 +24,13 @@ import logging
 from datetime import datetime
 from urllib.parse import urlparse
 
-from models.asset import Endpoint, TLSCertificate
+from models.asset import Endpoint, SourceProperty, TLSCertificate
 from models.scanner import HttpxMode
+
+# httpx directly probes the endpoint, so its observation carries a
+# full-confidence OAM provenance stamp.
+_HTTPX_SOURCE = "httpx"
+_HTTPX_CONFIDENCE = 100
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +106,7 @@ def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
         sans_raw = tls_block.get("subject_alt_names", []) if isinstance(tls_block, dict) else []
         sans_filtered: list[str] = [san for san in sans_raw if isinstance(san, str)]
 
+        sources = [SourceProperty(source=_HTTPX_SOURCE, confidence=_HTTPX_CONFIDENCE)]
         try:
             ep = Endpoint(
                 url=entry.get("url", ""),
@@ -108,6 +114,7 @@ def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
                 technologies=raw_tech,
                 favicon_hash=favicon if isinstance(favicon, str) else None,
                 tls_sans=sans_filtered,
+                sources=sources,
             )
         except ValueError as exc:
             # One field rejected (likely a SAN not RFC-1123-shaped or a
@@ -119,6 +126,7 @@ def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
                     url=entry.get("url", ""),
                     status_code=entry.get("status_code"),
                     technologies=raw_tech,
+                    sources=sources,
                 )
             except ValueError as exc2:
                 logger.debug("httpx row skipped: %s", exc2)

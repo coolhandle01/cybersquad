@@ -4,9 +4,32 @@ from __future__ import annotations
 
 import pytest
 
-from tools.cpe import normalize_cpe, pick_application_cpe
+from tools.cpe import normalize_cpe, pick_application_cpe, product_release_from_cpe
 
 pytestmark = pytest.mark.unit
+
+
+class TestProductReleaseFromCpe:
+    def test_decomposes_product_and_version(self):
+        decomposed = product_release_from_cpe("cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*")
+        assert decomposed is not None
+        product, release = decomposed
+        assert product.name == "nginx"
+        assert release.name == "nginx 1.25.3"
+
+    def test_no_version_uses_product_alone(self):
+        decomposed = product_release_from_cpe("cpe:2.3:a:nginx:nginx:*:*:*:*:*:*:*:*")
+        assert decomposed is not None
+        product, release = decomposed
+        assert product.name == "nginx"
+        assert release.name == "nginx"
+
+    def test_none_when_no_product(self):
+        # An OS / wildcard row that names no product yields nothing.
+        assert product_release_from_cpe("cpe:2.3:o:*:*:*:*:*:*:*:*:*:*") is None
+
+    def test_none_on_unparseable(self):
+        assert product_release_from_cpe("not a cpe") is None
 
 
 class TestNormalizeCpe:

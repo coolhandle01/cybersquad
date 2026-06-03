@@ -31,6 +31,6 @@ non-circular.
 from __future__ import annotations
 
 from tools.recon.nmap.scanner import nmap_scan, port_scan
-from tools.recon.nmap.service import services_from_nmap
+from tools.recon.nmap.service import NmapAssets, services_from_nmap
 
-__all__ = ["nmap_scan", "port_scan", "services_from_nmap"]
+__all__ = ["NmapAssets", "nmap_scan", "port_scan", "services_from_nmap"]

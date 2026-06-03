@@ -94,7 +94,9 @@ Rules:
 
 Composition rule: when a higher-level model carries a field that is conceptually a hostname or URL, type it through the primitive. `HostInsight.hostname: FQDN` rather than `: str`; `Endpoint.url: HttpUrl` rather than `: str`; `dict[FQDN, list[int]]` rather than `dict[str, list[int]]` for hostname-keyed dicts. The primitive's validator fires per-field at model construction time, so mis-shaped values reject upstream of every downstream consumer.
 
-FIXME comments in `primitives.py` and `asset.py` flag the eventual move to Pydantic's built-in `HttpUrl` (stronger contract, exposes `.host` / `.scheme` / `.port` properties, but runtime type stops being `str` so every consumer needs auditing first).
+**An annotation is not a runtime check - only model construction is.** The validator runs when Pydantic *constructs a model* (a model field, or an args_schema during `model_validate`). A plain function parameter annotated with a primitive - `def host_dir(hostname: FQDN)` - gets *no* validation; Python does not run the `AfterValidator` on a bare call, so the annotation is documentation there, not a guard. A helper that receives a *derived* host - a `RawFinding.target` (bare `str`), a `urlsplit(...).hostname` - is holding an unvalidated value despite the `FQDN` annotation. When such a value reaches a side effect (a filesystem path, a subprocess arg), sanitise it at that point: `recon_host_store.host_dir` rejects `.` / `..` (with `/` already turned to `_` by its sanitiser, nothing else can traverse) precisely because its `FQDN`-typed parameter is not the guarantee it looks like. The type signature is the contract *at a model boundary*; everywhere else it is a comment.
+
+`HttpUrl` deliberately stays a `str` at runtime (validation delegated to `pydantic.HttpUrl`): it types the URL *as the string httpx observed it* - `Endpoint.url` - where `urlparse(ep.url)` / dict-key / f-string use has to keep working with no audit. The structured, parsed-out URL *identity* - `scheme` / `host` / `port` / `path` as real fields - is a separate shape, the OAM `Url` asset in `models/asset/url.py`, not a future change to this primitive. `Endpoint` (the httpx observation: a URL string plus the status / tech / TLS / vulns seen) and `Url` (the OAM asset: just the parsed identity) are deliberate siblings - same web address, two roles - so the field stays `str` and the structure lives on the asset.
 
 For the **producer side** - when to define a new typed primitive, the prompt-injection threat model around free-text fields, and the cross-model coupling that the workspace-pair pattern preserves - see the `cybersquad-models` skill, which auto-loads on `models/*.py` edits.
 
@@ -167,16 +169,18 @@ The reader returns the typed model; downstream agents work against the schema, n
 
 | Module | Contents |
 |---|---|
-| `models.primitives` | `Severity`, `FQDN`, `HttpUrl` - the typed-string and enum layer |
+| `models.primitives` | `FQDN`, `HttpUrl`, `IpAddr`, `Cidr`, `Email`, `IPType` - the typed-string primitive layer (one module per primitive) |
 | `models.finding` | `RawFinding`, `VerifiedVulnerability`, `RawFindingSummary` |
-| `models.asset` | `Endpoint`, `EndpointPage`, `HostRole`, `HostPriority`, `HostInsight`, `OpenPortsMap`, `LlmEndpoint`, `AttackGraph` |
-| `models.workspace` | `RunFile`, `RunFileContent` |
-| `models.cve` | `CveEntry` |
-| `models.metrics` | `RunMetrics` |
+| `models.asset` | the OAM asset / property / relation package - `Endpoint`, `Service`, `Product`, `ProductRelease`, `Url`, `TLSCertificate`, ...; properties `SourceProperty` / `VulnProperty` / `DNSRecordProperty`; relations `Relation` / `RelationType` |
+| `models.insight` | `HostRole`, `HostPriority`, `HostInsight`, `HostScore`, `OpenPortsMap`, `HostAnnotation` |
+| `models.nvd` | `CVE`, `CvssVector`, `Severity` |
+| `models.mitre` | `CWE` |
+| `models.attack` | `AttackGraph`, `AttackForest`, `AttackTree` |
 | `models.h1` | HackerOne API shapes (incl. `ProgrammeReportSummary`) |
-| `models.attack` | `AttackForest`, `AttackTree` |
 
-Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import only from layers below them. Consumers can still `from models import X` (re-exports preserve the public surface) but inside the package, prefer the per-module path so circular-import dances stay out of reach.
+`Severity` lives in `models.nvd` (not `primitives`); `AttackGraph` in `models.attack` (not `asset`); the per-host insight shapes in `models.insight`. The full, authoritative map is the table in `models/__init__.py` - this is a pointer, not a mirror.
+
+Dependency layers flow `primitives -> finding -> h1 -> asset`, with `insight` / `attack` composing on top; modules import only from layers below them. Consumers can still `from models import X` (re-exports preserve the public surface) but inside the package, prefer the per-module path so circular-import dances stay out of reach.
 
 ## The `SquadMember.tools` registry
 

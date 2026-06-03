@@ -38,6 +38,7 @@ from squad.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )
+from tests.fixtures.findings import authored_draft, draft_report_kwargs
 from tests.squad._contract_assertions import (
     assert_closed_world_mapping,
     assert_field_descriptions_present,
@@ -45,55 +46,6 @@ from tests.squad._contract_assertions import (
 )
 
 pytestmark = pytest.mark.unit
-
-
-def _good_authored_draft(target_apex) -> dict[str, object]:
-    """Minimal valid kwargs for ``AuthoredDraft``.
-
-    Returned as a dict so the args_schema accept / reject tests can
-    mutate one authored field at a time without restating the full
-    shape, and so the wrapper-side wraps it under ``authored`` via
-    ``_good_draft_kwargs`` below.
-    """
-    return {
-        "title": "SQL Injection in /search?q allows full database extraction",
-        "summary": (
-            "The /search endpoint concatenates user input into a SELECT "
-            "statement. An attacker can dump the entire users table."
-        ),
-        "description": (
-            "The handler concatenates the q parameter directly into the "
-            "SQL statement with no parameterisation. UNION-based "
-            "injection extracts arbitrary rows."
-        ),
-        "steps_to_reproduce": [
-            f"Issue GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
-            "Observe the response body contains the union'd rows.",
-        ],
-        "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
-        "impact": (
-            "An attacker dumps the users table including bcrypt hashes "
-            "and emails, enabling offline cracking and account takeover."
-        ),
-        "remediation": (
-            "Use parameterised queries throughout the ORM. See "
-            "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
-        ),
-        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-        "cwe_id": 89,
-    }
-
-
-def _good_draft_kwargs(target_apex) -> dict[str, object]:
-    """Minimal valid kwargs for ``_DraftReportArgs``.
-
-    Wraps the authored shape (``_good_authored_draft``) in the
-    ``authored`` field the args_schema expects.
-    """
-    return {
-        "finding_index": 0,
-        "authored": _good_authored_draft(target_apex),
-    }
 
 
 class TestTaArgsSchemaContracts:
@@ -159,7 +111,7 @@ class TestSchemaAcceptReject:
         ("schema_cls", "kwargs"),
         [
             (_SanitiseEvidenceArgs, {"text": "Authorization: Bearer abc.def.ghi"}),
-            (_TaLookupCweArgs, {"query": "SQLi"}),
+            (_TaLookupCweArgs, {"cwe_id": 89}),
             (_TaLookupOwaspArgs, {"query": "sql injection"}),
             (_TaCalculateCvssArgs, {"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}),
             # Shared workspace acceptance cases.
@@ -180,7 +132,7 @@ class TestSchemaAcceptReject:
         instance = _TaListProgrammeReportsArgs.model_validate({})
         assert instance.page_size == 25  # default
 
-    def test_draft_report_accepts_full_authored_shape(self, target_apex) -> None:
+    def test_draft_report_accepts_full_authored_shape(self) -> None:
         """``Draft Vulnerability Report`` accepts the canonical authored payload.
 
         The authored content is the typed ``AuthoredDraft`` (in
@@ -188,7 +140,7 @@ class TestSchemaAcceptReject:
         field; the wrapper-side plumbing (finding_index,
         verified_path) stays top-level.
         """
-        instance = _DraftReportArgs.model_validate(_good_draft_kwargs(target_apex))
+        instance = _DraftReportArgs.model_validate(draft_report_kwargs())
         assert instance.finding_index == 0
         assert instance.authored.cwe_id == 89
         assert instance.verified_path == "verified.json"  # default
@@ -211,7 +163,7 @@ class TestSchemaAcceptReject:
         "schema_cls",
         [
             _SanitiseEvidenceArgs,  # text required
-            _TaLookupCweArgs,  # query required
+            _TaLookupCweArgs,  # cwe_id required
             _TaLookupOwaspArgs,  # query required
             _TaCalculateCvssArgs,  # vector required
             _DraftReportArgs,  # every authored field required
@@ -224,19 +176,19 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
 
-    def test_draft_report_rejects_partial_authored_payload(self, target_apex) -> None:
+    def test_draft_report_rejects_partial_authored_payload(self) -> None:
         """Each field on ``AuthoredDraft`` is required - dropping any one
         rejects upstream of the wrapper body. Spot-check the four
         most-frequently-missed fields rather than parametrize over the
         full nine: every required field is structurally identical."""
-        full_authored = _good_authored_draft(target_apex)
+        full_authored = authored_draft()
         for missing in ("title", "evidence", "cvss_vector", "cwe_id"):
             partial_authored = {k: v for k, v in full_authored.items() if k != missing}
             kwargs = {"finding_index": 0, "authored": partial_authored}
             with pytest.raises(ValidationError):
                 _DraftReportArgs.model_validate(kwargs)
 
-    def test_draft_report_rejects_non_numeric_cwe_id(self, target_apex) -> None:
+    def test_draft_report_rejects_non_numeric_cwe_id(self) -> None:
         """``AuthoredDraft.cwe_id`` is typed ``int`` - a non-numeric
         string rejects.
 
@@ -244,6 +196,6 @@ class TestSchemaAcceptReject:
         this test only pins the case the validator actually catches: a
         non-numeric string for ``cwe_id``.
         """
-        authored = {**_good_authored_draft(target_apex), "cwe_id": "not-a-number"}
+        authored = {**authored_draft(), "cwe_id": "not-a-number"}
         with pytest.raises(ValidationError):
             _DraftReportArgs.model_validate({"finding_index": 0, "authored": authored})

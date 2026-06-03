@@ -19,13 +19,15 @@ The cybersquad-tool skill covers the *consumer* side (how a wrapper author uses 
 
 ## When to add a new typed primitive
 
-A new constrained string deserves a typed primitive in `models/primitives.py` whenever:
+A new constrained string deserves a typed primitive in `models/primitives/` whenever:
 
 - It will appear on **more than one** args_schema or model field, AND
 - The valid shape is checkable up-front (regex, parse, catalogue lookup), AND
 - A wrong-shape value reaching the tool body would do something silently bad (wrong target probed, wrong CWE attributed, wrong score computed).
 
-The pattern is `Annotated[str, AfterValidator(_validate_...)]` (or `Annotated[int, ...]` for integer primitives). Runtime type stays `str` / `int` so consumers do not have to migrate in lockstep - the validator fires at `model_validate` time. The reference shapes are `FQDN` (RFC 1123 strictness) and `HttpUrl` (delegates URL parsing to `pydantic.HttpUrl`, adds the host strictness on top); the in-line docstrings in `models/primitives.py` carry the full contract for each, including the `str` runtime-type rationale. `CvssVector` and `CweId` are flagged as FIXMEs in `models/report.py` - deferred to the amass-integration work where ID-shape validation is the natural home.
+The pattern is `Annotated[str, AfterValidator(_validate_...)]` (or `Annotated[int, ...]` for integer primitives). Runtime type stays `str` / `int` so consumers do not have to migrate in lockstep - the validator fires at `model_validate` time. The reference shapes are `FQDN` (RFC 1123 strictness) and `HttpUrl` (delegates URL parsing to `pydantic.HttpUrl`, adds the host strictness on top); the in-line docstrings in `models/primitives/` carry the full contract for each, including the `str` runtime-type rationale. A primitive does not have to live in `models/primitives/` - asset-identity / tool-boundary validators do, but a domain-scoped one belongs with its domain: `CvssVector` lives in `models/nvd/`.
+
+Not every domain concept wants a primitive. CWE is the worked counter-example: rather than a `CweId` int-primitive plus a separate enriched model, there is one `CWE` type in `models/mitre/` - a `BaseModel` that accepts a bare int, validates it by looking the id up in the bundled MITRE corpus (`cwe2`), and carries MITRE's canonical name/description/URL. Validity *is* corpus membership; the lookup that validates also enriches, so splitting "the id" from "the entry" bought nothing. Construction hits the corpus (`models.mitre` may import `cwe2` the same way `models.nvd` imports `cvss`); use `CWE.get(id)` for a None-on-miss boundary lookup. At an args_schema boundary the agent passes a plain `int` (a `CWE`-typed field would show the LLM the whole object schema) - the id for a CVE-backed finding comes from `CVE.cwe_ids` (NVD's own attribution), so it is sourced, not invented.
 
 Counter-example: a one-off internal field used only inside one model does not need a primitive - inline the validator on the field, or use a `Literal[...]` / `StrEnum` for a closed set.
 
@@ -43,6 +45,8 @@ Fields that carry **tool-captured** text from external sources (`evidence`, raw 
 2. **Constrain shape at the model boundary** - max length, max line count, no control characters. Reduces the room an injection has to manoeuvre.
 3. **Keep the field out of the LLM's downstream context** - if a field is for human review only (the disclosure report's raw HTTP transcript), make sure no agent's task reads it back into context.
 
+The ordering is a default, not a reflex. Defence 2 is the weakest of the three: a length cap bounds an injection's *volume*, not its *presence* - the payload fits in the first bytes. So do not reach for it on a field carrying trusted-source, load-bearing intel, where truncation drops signal precisely on the richest entries (a long NVD CVE description is exactly the one the research / exploit path most needs whole). There, keep the working record uncapped and apply defence 3 to the *persisted summary* instead: bound the annotation that travels the pipeline (`VulnProperty.description`), not the working record (`CVE.description`) - the full text stays one lookup away via the record's id / reference. And be honest about what the trusted source buys: provenance trusts the *channel* (a curated feed over HTTPS), not the *content*. The day that feed faithfully relays an adversarial payload - an LLM-targeting CVE whose description *is* an injection - "the source is trusted" is exactly what gets it delivered.
+
 When you add a field that will carry tool-captured text, leave a one-line comment naming which defence applies. The next contributor reading the model should not have to guess whether the field is safe to feed back into context.
 
 ## Cross-model coupling
@@ -55,9 +59,21 @@ If you are adding a field that crosses agent boundaries:
 - Update both sides in the same PR (the writer's args_schema, the reader's task description).
 - The reader/writer pair test in `tests/test_workspace.py` and per-agent integration tests will catch a half-migrated change.
 
+Keep a leaf model free of cross-domain dependencies: when it needs a value owned by another domain's corpus, carry the *raw* identifier and resolve at the boundary that needs it, not on the model. `CVE` (`models/nvd/`) carries raw `cwe_ids: list[int]` and never imports `models.mitre`; the CWE-name resolution lives one layer out, in the tool-side `vuln_from_cve` (and the `Lookup CWE` tool) via `CWE.get`. The leaf does no corpus lookup on construction or serialisation, so it stays a flat DTO of what its own source returned and the dependency graph stays acyclic - the same reason `Severity` / `CVE` sit in `models/nvd/` rather than leaking into `primitives`.
+
+## OAM names are canonical; cybersquad names yield
+
+The OAM vocabulary itself - asset / relation / property shapes, the faithful-to-amass mapping, the on-disk asset graph - lives in the `cybersquad-oam` skill, which stacks on this one and auto-loads on `models/asset/**` edits (`docs/academic-grounding.md` is the longer-form grounding). The naming rule is restated here because it also bites when naming a *primitive* - a `models/primitives/` edit `cybersquad-oam` does not see.
+
+`models/asset/` is a faithful implementation of the OWASP Open Asset Model (OAM). Rule of thumb when a cybersquad name would collide with an OAM asset name: **cybersquad code moves out of the OAM's way, never the reverse.** The OAM owns `IPAddress`, `Netblock`, `Service`, `Product`, `URL`, etc. as *asset* names; if a primitive, helper, or local symbol wants the same word, rename the cybersquad side.
+
+Worked example (#161): the typed-string primitive for an IP literal was called `IPAddress`, colliding with the OAM `IPAddress` asset that `models/asset/` will model under that exact name. The primitive was renamed `IPAddress` -> `IpAddr` (in `models/primitives/ip_addr.py`, re-exported from `models/__init__.py`); every field type and import moved with it. Prose that refers to the *primitive* says `IpAddr`; prose that refers to the *OAM asset* keeps `IPAddress` - the distinction is load-bearing, so a blanket find-replace is wrong. The two live side by side in one comment in `models/primitives/ip_addr.py`: "the future amass `IPAddress` asset ... reads this `IpAddr` primitive at the boundary."
+
+Layering that falls out of this: `models/primitives/` is the shared validation leaf (asset-identity typed strings + the `IPType` discriminator) that *both* the `@cyber_tool` args_schema boundary and the disk-side asset models consume - `FQDN` / `IpAddr` / `Cidr` / `HttpUrl` / `Email` all do double duty. `models/asset/` is the OAM-faithful disk shape that *uses* those primitives as field types. Vocabulary that is *not* asset-identity lives in its own domain package, not in `models/primitives/`: `Severity` (a CVSS-derived scoring rating) and `CVE` live in `models/nvd/` (the NVD / scoring domain). The dividing line: a primitive validates an asset's identity or a tool-boundary input; a scoring/taxonomy shape belongs to its source domain.
+
 ## Anti-patterns
 
-- A bare `str` field for a value that has a constrained shape (hostname, URL, CVSS vector, CWE id, OWASP category). Use the matching primitive in `models/primitives.py`; if it does not exist, see "When to add a new typed primitive" above.
+- A bare `str` field for a value that has a constrained shape (hostname, URL, CVSS vector, CWE id, OWASP category). Use the matching primitive (`models/primitives/` for asset-identity / boundary types; `models/nvd/` / `models/mitre/` for domain-scoped ones like `CvssVector` / `CWE`); if it does not exist, see "When to add a new typed primitive" above.
 - A `dict[str, Any]` field where the LLM both reads and writes. The LLM can stuff arbitrary content into `Any` and the next reader gets whatever the previous one decided to put there. Define a typed inner model instead.
 - A `Field()` with no `description=...` on an args_schema. The description is the LLM's per-parameter documentation; an empty one is the same gap the inferred-args path had.
 - A new top-level model added to `models/__init__.py` directly. The package is split per domain (`finding.py`, `h1.py`, `report.py`, `attack.py`, etc); put it in the matching module and let the re-export carry it.

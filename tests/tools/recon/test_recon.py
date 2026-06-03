@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from models import Endpoint
+from models import Endpoint, IPAddress, IpEnrichment
 from models.h1 import ScopeType
 from tools.recon import _ACTIVE_RECON_TYPES, _CODE_HOSTS
 
@@ -51,13 +51,12 @@ class TestRunRecon:
         # composition (subdomains the scope guard accepted, endpoints
         # probed, ports scanned, tech collated, traceroute hops keyed
         # by host, IP enrichment composed from resolve_records).
-        from models import IpAsset
         from tools.recon import run_recon
         from tools.recon.dnsx import DNSRecord
 
         ep = Endpoint(url=f"https://api.{target_apex}/", status_code=200, technologies=["nginx"])
         dns_record = DNSRecord(hostname=f"api.{target_apex}", a_records=["8.8.8.8"], cname=[])
-        ip_asset = IpAsset(ip="8.8.8.8")
+        ip_enrichment = IpEnrichment(ip_addresses=[IPAddress(address="8.8.8.8", type="IPv4")])
         with (
             patch(
                 "tools.recon.enumerate_subdomains",
@@ -70,7 +69,7 @@ class TestRunRecon:
             patch("tools.recon.check_dns_email_security", return_value=[]),
             patch("tools.recon.run_traceroute", return_value={}),
             patch("tools.recon.resolve_records", return_value=[dns_record]) as mock_resolve,
-            patch("tools.recon.compose_ip_assets", return_value=[ip_asset]) as mock_compose,
+            patch("tools.recon.compose_ip_enrichment", return_value=ip_enrichment) as mock_compose,
         ):
             attack_graph = run_recon(programme)
 
@@ -81,10 +80,18 @@ class TestRunRecon:
         assert "nginx" in attack_graph.technologies
 
         # IP enrichment: A records from resolve_records feed
-        # compose_ip_assets, the result lands on AttackGraph.ip_assets.
+        # compose_ip_enrichment, the result lands on AttackGraph.ip_enrichment.
         mock_resolve.assert_called_once_with([f"api.{target_apex}"])
         mock_compose.assert_called_once_with(["8.8.8.8"])
-        assert attack_graph.ip_assets == [ip_asset]
+        assert attack_graph.ip_enrichment == ip_enrichment
+        assert attack_graph.ip_enrichment.ip_addresses[0].address == "8.8.8.8"
+
+        # The same A records surface as OAM DNSRecordProperty entries plus
+        # their BasicDNSRelation edges on the graph.
+        assert [p.data for p in attack_graph.dns_records] == ["8.8.8.8"]
+        assert attack_graph.dns_records[0].header.rr_type == 1  # A
+        assert [r.to_key for r in attack_graph.relations] == ["8.8.8.8"]
+        assert attack_graph.relations[0].label == "a_record"
 
     def test_port_scan_receives_hostnames_not_urls(self, programme, target_apex):
         # Regression: nmap scans hosts, not URLs. run_recon must extract the
@@ -104,7 +111,7 @@ class TestRunRecon:
             patch("tools.recon.check_dns_email_security", return_value=[]),
             patch("tools.recon.run_traceroute", return_value={}),
             patch("tools.recon.resolve_records", return_value=[]),
-            patch("tools.recon.compose_ip_assets", return_value=[]),
+            patch("tools.recon.compose_ip_enrichment", return_value=IpEnrichment()),
         ):
             run_recon(programme)
 
@@ -139,7 +146,7 @@ class TestRunRecon:
             patch("tools.recon.check_dns_email_security", return_value=[]),
             patch("tools.recon.run_traceroute", return_value={}),
             patch("tools.recon.resolve_records", return_value=[]),
-            patch("tools.recon.compose_ip_assets", return_value=[]),
+            patch("tools.recon.compose_ip_enrichment", return_value=IpEnrichment()),
         ):
             attack_graph = run_recon(programme)
 
@@ -167,7 +174,7 @@ class TestRunRecon:
             patch("tools.recon.check_dns_email_security", return_value=[]),
             patch("tools.recon.run_traceroute", return_value={}),
             patch("tools.recon.resolve_records", return_value=[]),
-            patch("tools.recon.compose_ip_assets", return_value=[]),
+            patch("tools.recon.compose_ip_enrichment", return_value=IpEnrichment()),
         ):
             attack_graph = run_recon(programme)
 

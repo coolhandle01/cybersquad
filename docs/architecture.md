@@ -26,4 +26,4 @@ cybersquad is a six-agent CrewAI pipeline that autonomously selects HackerOne bu
 | `tools/cloud/databases/` | Per-engine unauthenticated database checks: one file per engine. |
 | `tools/triage_tools.py` | Authoring primitives for the Vulnerability Researcher: per-finding assessment / discard, quality validation, and final consolidation into verified.json. |
 | `tools/report_tools.py` | Authoring primitives for the Technical Author: evidence sanitisation, draft persistence, quality validation, and final consolidation into reports.json. |
-| `tools/cwe_data.py` / `tools/owasp_data.py` | Local CWE / OWASP cheat-sheet catalogues both the Vulnerability Researcher and Technical Author cite. |
+| `models/mitre/cwe.py` (`CWE`) / `tools/owasp_data.py` | CWE enrichment from the bundled MITRE corpus (by id) and the local OWASP cheat-sheet catalogue, both cited by the Vulnerability Researcher and Technical Author. |

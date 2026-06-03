@@ -155,6 +155,8 @@ class TestHttpxScanWebInventoryMode:
         ep = result.endpoints[0]
         assert ep.favicon_hash == "-1234567890"
         assert ep.tls_sans == [target_apex, f"api.{target_apex}"]
+        # Provenance: httpx stamps its SourceProperty on the endpoint it probed.
+        assert ep.sources[0].source == "httpx"
 
     def test_handles_alternate_favicon_key_path(self, target_url):
         # Older httpx versions emitted the key as ``favicon_path``;
@@ -219,6 +221,8 @@ class TestHttpxScanWebInventoryMode:
         assert len(result.endpoints) == 1
         assert result.endpoints[0].status_code == 200
         assert result.endpoints[0].tls_sans == []
+        # The degraded retry still carries httpx provenance.
+        assert result.endpoints[0].sources[0].source == "httpx"
 
     def test_captures_tls_certificate(self, target_url, target_apex):
         # The tls block becomes a full TLSCertificate asset on the endpoint:

@@ -11,18 +11,18 @@ the typed artefact downstream agents (VR research, PT probes) consume.
 from pydantic import BaseModel, Field, TypeAdapter
 
 from models import (
+    CWE,
     FQDN,
-    CWEEntry,
     HostAnnotation,
     HostInsight,
     HostPriority,
     HostRole,
     OWASPEntry,
     ReconFinalisationError,
+    VulnProperty,
 )
 from squad import cyber_tool
 from squad.workspace_tools import current_programme
-from tools.cwe_data import lookup as cwe_lookup
 from tools.owasp_data import lookup as owasp_lookup
 from tools.recon.scope import TargetFQDN
 from tools.recon_insights import (
@@ -46,27 +46,28 @@ _FQDN_LIST_ADAPTER: TypeAdapter[list[FQDN]] = TypeAdapter(list[FQDN])
 class _OsintLookupCweArgs(BaseModel):
     """Explicit args_schema for the OSINT Lookup CWE tool."""
 
-    query: str = Field(
+    cwe_id: int = Field(
         description=(
-            "Free-text query against the Common Weakness Enumeration index."
-            " Matches CWE id, name, or description (case-insensitive"
-            " substring). Useful when annotating a host whose detected tech"
-            " has a well-known weakness class (e.g. 'WordPress' -> XSS /"
-            " SQLi; 'Spring Boot' -> SSTI / RCE)."
+            "The CWE id of the weakness class to cite (e.g. ``79`` for"
+            " XSS, ``89`` for SQLi, ``94`` for SSTI). When annotating a"
+            " host whose detected tech has a well-known weakness, pass"
+            " that weakness's id - or the id ``NVD CVE Lookup`` returned"
+            " for a matched CVE. Returns MITRE's name + description + URL."
         ),
     )
 
 
 @cyber_tool("Lookup CWE", args_schema=_OsintLookupCweArgs)
-def lookup_cwe_tool(query: str) -> list[CWEEntry]:
+def lookup_cwe_tool(cwe_id: int) -> list[CWE]:
     """
-    Find Common Weakness Enumeration entries that match a query - useful
-    when annotating a host whose detected tech has a well-known weakness
-    class (e.g. "WordPress" -> XSS / SQLi; "Spring Boot" -> SSTI / RCE).
-    Returns each match's cwe_id, name, short description, and the matching
-    OWASP cheat-sheet topic.
+    Resolve a CWE id to MITRE's canonical name, description, and URL - useful
+    when annotating a host whose detected tech has a well-known weakness class
+    (e.g. WordPress -> XSS / SQLi; Spring Boot -> SSTI / RCE), or to enrich the
+    id NVD CVE Lookup returned. Returns one entry, or an empty list if the id
+    is not a real CWE.
     """
-    return list(cwe_lookup(query))
+    cwe = CWE.get(cwe_id)
+    return [cwe] if cwe else []
 
 
 class _OsintLookupOwaspArgs(BaseModel):
@@ -137,6 +138,18 @@ class _AnnotateHostArgs(BaseModel):
             " of what was seen, not an alternate inventory."
         ),
     )
+    vulns: list[VulnProperty] | None = Field(
+        default=None,
+        description=(
+            "OAM VulnProperty annotations to hang off this host - known"
+            " vulnerabilities attributed to its detected tech (e.g. a CVE"
+            " from NVD CVE Lookup matched against 'WordPress 5.8.1'). Each"
+            " carries ``id`` (e.g. 'CVE-2022-22965'), and optionally"
+            " ``description``, ``source`` ('nvd'), ``category`` (a CWE),"
+            " ``enumeration`` ('CVE'), and a ``reference`` URL. Omit when"
+            " the host carries no known vulns."
+        ),
+    )
     attack_graph_path: str = Field(
         default="attack_graph.json",
         description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
@@ -150,6 +163,7 @@ def annotate_host_tool(
     priority: HostPriority,
     notes: str,
     detected_tech: list[str] | None = None,
+    vulns: list[VulnProperty] | None = None,
     attack_graph_path: str = "attack_graph.json",
 ) -> HostAnnotation:
     """
@@ -167,6 +181,11 @@ def annotate_host_tool(
       - detected_tech: ideally with versions ("Spring Boot 2.6.3" beats
         "Spring Boot"); the warning fires when the sweep saw tech that the
         annotation drops
+      - vulns: optional OAM VulnProperty annotations - known CVEs for the
+        detected tech, where they can already be grounded to a version.
+        Usually left empty here; the Vulnerability Researcher attaches
+        these later via its Annotate FQDN / Service / ProductRelease /
+        URL Vulnerability tools.
 
     Returns a HostAnnotation with the relative insight path and an
     InsightValidationReport. Re-run with the issues addressed when
@@ -181,6 +200,7 @@ def annotate_host_tool(
         priority=HostPriority(priority),
         notes=notes.strip(),
         detected_tech=[t.strip() for t in (detected_tech or []) if t.strip()],
+        vulns=[VulnProperty.model_validate(v) for v in (vulns or [])],
     )
     path = save_insight(insight)
     return HostAnnotation(

@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import pytest
 
-from models.asset import IpAsset, Service
-from models.network import RdapRecord
+from models import IPType
+from models.asset import IPAddress, IpEnrichment, Service
+from models.asset.network import RdapRecord
 from models.scanner import NmapHostResult, NmapMode, NmapScanResult, NmapScripts, NmapService
 from squad.osint_analyst import (
     _DiscoverHostServicesArgs,
@@ -35,7 +36,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestLookupIpAssets:
-    """``Lookup IP Assets`` wraps ``compose_ip_assets`` - no scope filter.
+    """``Lookup IP Assets`` wraps ``compose_ip_enrichment`` - no scope filter.
 
     The IPs come from the sweep, which was already scope-filtered upstream
     (the programme scope model is FQDN-shaped, so there is no IP-level
@@ -54,16 +55,16 @@ class TestLookupIpAssets:
         with pytest.raises(ValidationError):
             _LookupIpAssetsArgs.model_validate({"ips": ["not-an-ip"]})
 
-    def test_returns_composed_assets(self, invoke_tool, monkeypatch) -> None:
-        """The wrapper returns ``compose_ip_assets``' typed result verbatim."""
-        composed = [IpAsset(ip="1.2.3.4"), IpAsset(ip="8.8.8.8")]
+    def test_returns_composed_bundle(self, invoke_tool, monkeypatch) -> None:
+        """The wrapper returns ``compose_ip_enrichment``' typed bundle verbatim."""
+        composed = IpEnrichment(ip_addresses=[IPAddress(address="1.2.3.4", type=IPType.IPV4)])
         captured: dict[str, object] = {}
 
         def _fake_compose(ips):
             captured["ips"] = ips
             return composed
 
-        monkeypatch.setattr("squad.osint_analyst.enrichment.compose_ip_assets", _fake_compose)
+        monkeypatch.setattr("squad.osint_analyst.enrichment.compose_ip_enrichment", _fake_compose)
 
         result = invoke_tool(lookup_ip_assets_tool, ips=["1.2.3.4", "8.8.8.8"])
 
@@ -74,10 +75,10 @@ class TestLookupIpAssets:
 class TestLookupRdapAsn:
     """``Lookup RDAP for ASN`` wraps ``lookup_rdap_for_asn`` - no scope filter.
 
-    The ASN-side pivot: IP-side RDAP is already embedded in ``IpAsset``,
-    so this is the genuinely new lookup (who owns the AS, what's its
-    registrant / abuse contact). The ASN is a number the agent read off
-    an ``IpAsset.asn`` record, not a scope-bearing target.
+    The ASN-side pivot: IP-side RDAP is already in the ``Lookup IP Assets``
+    enrichment bundle, so this is the genuinely new lookup (who owns the AS,
+    what's its registrant / abuse contact). The ASN is a number the agent
+    read off an ``autonomous_systems`` entry, not a scope-bearing target.
     """
 
     def test_schema_accepts_asn(self) -> None:
@@ -106,9 +107,11 @@ class TestLookupRdapAsn:
         with pytest.raises(ValidationError):
             _LookupRdapAsnArgs.model_validate({"asn": "AS13335"})
 
-    def test_returns_rdap_record(self, invoke_tool, monkeypatch) -> None:
-        """The wrapper returns ``lookup_rdap_for_asn``' result verbatim."""
-        record = RdapRecord(query="AS13335", registrant_organisation="Cloudflare, Inc.")
+    def test_returns_registrant_bundle(self, invoke_tool, monkeypatch) -> None:
+        """The wrapper decomposes the RDAP record into faithful OAM assets."""
+        record = RdapRecord(
+            query="AS13335", handle="AS13335", registrant_organisation="Cloudflare, Inc."
+        )
         captured: dict[str, object] = {}
 
         def _fake_lookup(asn):
@@ -119,16 +122,20 @@ class TestLookupRdapAsn:
 
         result = invoke_tool(lookup_rdap_asn_tool, asn=13335)
 
-        assert result is record
+        assert [a.number for a in result.autnum_records] == [13335]
+        assert [o.name for o in result.organizations] == ["Cloudflare, Inc."]
+        assert any(r.label == "managed_by" for r in result.relations)
         assert captured["asn"] == 13335
 
-    def test_returns_none_on_miss(self, invoke_tool, monkeypatch) -> None:
-        """A bootstrap / lookup miss returns ``None`` straight through."""
+    def test_returns_empty_bundle_on_miss(self, invoke_tool, monkeypatch) -> None:
+        """A bootstrap / lookup miss yields an empty bundle, not a crash."""
         monkeypatch.setattr("squad.osint_analyst.enrichment.lookup_rdap_for_asn", lambda asn: None)
 
         result = invoke_tool(lookup_rdap_asn_tool, asn=64512)
 
-        assert result is None
+        assert result.autnum_records == []
+        assert result.organizations == []
+        assert result.relations == []
 
 
 class TestDeepScanHost:
@@ -171,10 +178,15 @@ class TestDeepScanHost:
     def test_runs_service_version_scan_and_persists_services(
         self, invoke_tool, programme_in_workspace, target_apex, monkeypatch
     ) -> None:
-        """The wrapper runs nmap in SERVICE_VERSION mode, translates the
-        open services into OAM ``Service`` assets (with CPE + provenance),
-        and writes them to the host's ``services.json``."""
-        from tools.recon_host_store import load_host_services
+        """The wrapper runs nmap in SERVICE_VERSION mode, decomposes the open
+        services into the OAM subgraph (Service + Product / ProductRelease +
+        port / product_used edges), and writes each facet to the host dir."""
+        from tools.recon_host_store import (
+            load_host_product_releases,
+            load_host_products,
+            load_host_relations,
+            load_host_services,
+        )
 
         host = f"api.{target_apex}"
         host_result = NmapHostResult(
@@ -212,20 +224,21 @@ class TestDeepScanHost:
         assert captured_kwargs["scripts"] == NmapScripts.DEFAULT
         assert captured_kwargs["ports"] == [22, 443]
 
-        # Returns OAM Service assets - only the OPEN service, with CPE +
-        # provenance; the filtered port is dropped.
-        assert [s.port for s in result] == [22]
+        # Returns OAM Service assets - only the OPEN service; the filtered
+        # port is dropped. host:port is the id; the banner is in attributes.
+        assert [s.id for s in result] == [f"{host}:22/tcp"]
         svc = result[0]
         assert isinstance(svc, Service)
-        assert svc.host == host
-        assert svc.product == "OpenSSH"
-        assert svc.cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
-        assert svc.detected_by == "nmap"
+        assert svc.type == "ssh"
+        assert svc.attributes["product"] == ["OpenSSH"]
+        assert svc.attributes["cpe"] == ["cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"]
 
-        # ... and persisted to the host's services.json
-        persisted = load_host_services(host)
-        assert [s.port for s in persisted] == [22]
-        assert persisted[0].cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
+        # ... and persisted: the Service facet, the Product / ProductRelease
+        # the CPE decomposed to, and the port / product_used edges.
+        assert [s.id for s in load_host_services(host)] == [f"{host}:22/tcp"]
+        assert [p.name for p in load_host_products(host)] == ["openssh"]
+        assert [r.name for r in load_host_product_releases(host)] == ["openssh 7.4"]
+        assert {r.label for r in load_host_relations(host)} == {"port", "product_used"}
 
     def test_returns_empty_when_nmap_finds_nothing(
         self, invoke_tool, programme_in_workspace, target_apex, monkeypatch

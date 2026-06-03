@@ -31,8 +31,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from models.network import AsnRecord
-from models.primitives import IPAddress
+from models.asset.network import AsnRecord
+from models.primitives import IpAddr
 from tools._helpers import _require_binary, _run
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ _BULK_ENVELOPE_END = "end"
 _MAX_BATCH = 256
 
 
-def _build_bulk_input(ips: list[IPAddress]) -> str:
+def _build_bulk_input(ips: list[IpAddr]) -> str:
     """Assemble Cymru's stdin envelope: ``begin / verbose / <ips> / end``."""
     body = "\n".join(ips)
     return f"{_BULK_ENVELOPE_BEGIN}\n{body}\n{_BULK_ENVELOPE_END}\n"
@@ -64,10 +64,13 @@ def _parse_cymru_row(line: str) -> AsnRecord | None:
     rows, blanks, or malformed entries (Cymru emits "NA" for unknown
     AS numbers - we skip those rather than coerce to 0).
     """
-    parts = [p.strip() for p in line.split("|")]
+    # Split at most six times so the trailing AS-Name column stays intact even
+    # when it contains a literal "|" - an unbounded split would truncate a
+    # piped org name to the seventh field and silently drop the rest.
+    parts = [p.strip() for p in line.split("|", 6)]
     if len(parts) < 7:
         return None
-    asn_raw, ip_raw, prefix, country, _registry, _allocated, organisation = parts[:7]
+    asn_raw, ip_raw, prefix, country, _registry, _allocated, organisation = parts
     # Header row legend ("AS | IP | BGP Prefix | ...") trips the column
     # count check above but a stray padding line might not - skip when
     # the AS column isn't numeric.
@@ -75,7 +78,7 @@ def _parse_cymru_row(line: str) -> AsnRecord | None:
         return None
     try:
         return AsnRecord(
-            # ``IPAddress`` is ``Annotated[str, AfterValidator(...)]`` so
+            # ``IpAddr`` is ``Annotated[str, AfterValidator(...)]`` so
             # a bare ``str`` satisfies the field type; the validator
             # fires inside ``AsnRecord(...)`` and rejects malformed IPs.
             ip=ip_raw,
@@ -91,10 +94,10 @@ def _parse_cymru_row(line: str) -> AsnRecord | None:
         return None
 
 
-def lookup_asn(ips: list[IPAddress]) -> list[AsnRecord]:
+def lookup_asn(ips: list[IpAddr]) -> list[AsnRecord]:
     """Bulk IP -> ASN lookup via Team Cymru's whois service.
 
-    Input: scope-filtered ``list[IPAddress]``. Output: one ``AsnRecord``
+    Input: scope-filtered ``list[IpAddr]``. Output: one ``AsnRecord``
     per IP for which Cymru returned a valid row. IPs that Cymru does
     not know about (rare; typically RFC 1918 / unannounced space) drop
     silently from the result.
