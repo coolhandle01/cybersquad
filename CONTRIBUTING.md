@@ -13,7 +13,7 @@ python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Use Python 3.12 - it is the version CI pins (`.github/workflows/ci.yml`) and the `requires-python` floor. On Claude Code on the web a `SessionStart` hook (`.claude/hooks/session-setup.sh`) builds this venv for you and puts it on `PATH`, so a remote session starts ready to run the stack below; the manual steps above are for local checkouts.
+Use Python 3.12 - it is the version CI pins (`.github/workflows/ci.yml`) and the `requires-python` floor.
 
 Then run the full CI stack locally, in this order. All six must pass before pushing - never "push and let CI tell me":
 
