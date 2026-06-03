@@ -46,9 +46,9 @@ def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
     """Apply quality heuristics to an AttackForest. Returns the issue list.
 
     Hard errors:
-      * empty ``items`` (no plan is not a plan)
-      * any item missing one of probe / target / rationale (empty after strip)
-      * any item whose ``recon_evidence`` is empty - the plan is supposed
+      * empty ``trees`` (no plan is not a plan)
+      * any tree missing one of probe / target / rationale (empty after strip)
+      * any tree whose ``recon_evidence`` is empty - the plan is supposed
         to be grounded in the OSINT Analyst's signals; an unevidenced
         hypothesis is the agent skipping the research pass.
     """
@@ -67,8 +67,8 @@ def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
             )
         )
 
-    for n, item in enumerate(plan.trees, 1):
-        if not item.probe.strip():
+    for n, tree in enumerate(plan.trees, 1):
+        if not tree.probe.strip():
             issues.append(
                 AttackForestValidationIssue(
                     section=f"trees[{n}].probe",
@@ -76,7 +76,7 @@ def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
                     message="probe is required (CVE id or vulnerability-class name)",
                 )
             )
-        if not item.target.strip():
+        if not tree.target.strip():
             issues.append(
                 AttackForestValidationIssue(
                     section=f"trees[{n}].target",
@@ -84,7 +84,7 @@ def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
                     message="target is required (hostname or URL drawn from recon)",
                 )
             )
-        if not item.rationale.strip():
+        if not tree.rationale.strip():
             issues.append(
                 AttackForestValidationIssue(
                     section=f"trees[{n}].rationale",
@@ -92,7 +92,7 @@ def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
                     message="rationale is required (1-2 sentence why and what to look for)",
                 )
             )
-        if not item.recon_evidence:
+        if not tree.recon_evidence:
             issues.append(
                 AttackForestValidationIssue(
                     section=f"trees[{n}].recon_evidence",

@@ -46,7 +46,7 @@ from squad.osint_analyst import (
     _OsintLookupOwaspArgs,
     _RunInitialSweepArgs,
 )
-from squad.workspace_tools import (
+from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )
@@ -127,7 +127,7 @@ class TestSchemaAcceptReject:
                 {"status": 200, "tech": "wordpress", "host_contains": "admin", "limit": 25},
             ),
             (_ListOpenPortsArgs, {}),
-            (_OsintLookupCweArgs, {"query": "xss"}),
+            (_OsintLookupCweArgs, {"cwe_id": 79}),
             (_OsintLookupOwaspArgs, {"query": "csrf"}),
             (_ListUncoveredHostsArgs, {}),
             (_FinaliseReconArgs, {}),
@@ -219,7 +219,7 @@ class TestSchemaAcceptReject:
             _DiscoverLlmEndpointsArgs,  # endpoints required
             _DiscoverWebpagesArgs,  # hostnames required (scope_filter sources Programme)
             _DiscoverTakeoverCandidatesArgs,  # hostnames required (scope_filter sources Programme)
-            _OsintLookupCweArgs,  # query required
+            _OsintLookupCweArgs,  # cwe_id required
             _OsintLookupOwaspArgs,  # query required
             _AnnotateHostArgs,  # hostname / role / priority / notes required
         ],

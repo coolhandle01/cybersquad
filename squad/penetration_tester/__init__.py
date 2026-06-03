@@ -29,14 +29,14 @@ from squad import (
     read_run_file_tool,
     read_run_filelist_tool,
 )
-from squad.penetration_tester._decorator import (
+from squad.penetration_tester.tools._decorator import (
     _parse_endpoints,
     _PentestFn,
     _PentestTool,
     _recon_from_path,
     pentest_tool,
 )
-from squad.penetration_tester.cloud import (
+from squad.penetration_tester.tools.cloud import (
     _AdminPanelsArgs,
     _AzureBlobContainerArgs,
     _AzureSasTokenArgs,
@@ -84,8 +84,8 @@ from squad.penetration_tester.cloud import (
     sensitive_files_tool,
     webmin_tool,
 )
-from squad.penetration_tester.findings import _SaveFindingsArgs, save_findings_tool
-from squad.penetration_tester.probes import (
+from squad.penetration_tester.tools.findings import _SaveFindingsArgs, save_findings_tool
+from squad.penetration_tester.tools.probes import (
     _CmdInjectionArgs,
     _CookieCheckArgs,
     _CorsCheckArgs,
@@ -137,7 +137,7 @@ from squad.penetration_tester.probes import (
     xss_probe_tool,
     xxe_probe_tool,
 )
-from squad.penetration_tester.recon import (
+from squad.penetration_tester.tools.recon import (
     _PtReconEndpointsArgs,
     _PtReconOpenPortsArgs,
     _PtReconSubdomainsArgs,
@@ -145,7 +145,7 @@ from squad.penetration_tester.recon import (
     recon_open_ports_tool,
     recon_subdomains_tool,
 )
-from squad.workspace_tools import (
+from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadAttackForestArgs,
     _ReadRunFileArgs,
@@ -270,7 +270,7 @@ MEMBER = SquadMember(
         "Recon Endpoints": _PtReconEndpointsArgs,
         "Recon Open Ports": _PtReconOpenPortsArgs,
         "Save Findings": _SaveFindingsArgs,
-        # Shared workspace wrappers (re-exported via squad.workspace_tools)
+        # Shared workspace wrappers (re-exported via squad.tools.workspace_tools)
         "List Run Files": _ListRunFilesArgs,
         "Read Run File": _ReadRunFileArgs,
         "Read Attack Plan": _ReadAttackForestArgs,

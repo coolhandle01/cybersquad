@@ -18,6 +18,109 @@ from models.attack import AttackForest, AttackTree
 from models.h1 import DisclosureReport
 
 
+def _wrap_authored(authored: dict[str, object], **overrides: object) -> dict[str, object]:
+    """Wrap an authored payload as ``{finding_index, authored}`` and apply
+    ``overrides`` - a key that names an authored field mutates it, any other
+    key (``finding_index`` / ``verified_path``) sets a top-level field."""
+    base: dict[str, object] = {"finding_index": 0, "authored": authored}
+    for key, value in overrides.items():
+        if key in authored:
+            authored[key] = value
+        else:
+            base[key] = value
+    return base
+
+
+def authored_draft(**overrides: object) -> dict[str, object]:
+    """The canonical ``AuthoredDraft`` inner shape (the agent-authored half of a
+    report draft). Pass overrides to mutate a field. Use this when a test pokes
+    the authored payload directly; for the full Draft-tool kwargs (wrapped under
+    ``authored`` with ``finding_index``) use ``draft_report_kwargs``."""
+    authored: dict[str, object] = {
+        "title": "SQL Injection in /search?q allows full database extraction",
+        "summary": (
+            "The /search endpoint concatenates user input into a SELECT statement. "
+            "An unauthenticated attacker can dump the entire users table."
+        ),
+        "description": (
+            "The handler concatenates the q parameter directly into the SQL statement "
+            "with no parameterisation. Standard UNION-based injection extracts arbitrary "
+            "rows from the users table."
+        ),
+        "steps_to_reproduce": [
+            "Issue GET /search?q=test' UNION SELECT 1,2,3-- ",
+            "Observe the response body contains the union'd rows.",
+        ],
+        "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
+        "impact": (
+            "An unauthenticated attacker can dump the entire users table including bcrypt "
+            "hashes and email addresses, enabling offline cracking and full account takeover."
+        ),
+        "remediation": (
+            "Use parameterised queries throughout the ORM. See "
+            "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+        ),
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "cwe_id": 89,
+    }
+    authored.update(overrides)
+    return authored
+
+
+def draft_report_kwargs(**overrides: object) -> dict[str, object]:
+    """Canonical kwargs for the Technical Author's Draft Vulnerability Report
+    tool / ``_DraftReportArgs``: ``authored_draft`` wrapped under ``authored``
+    with ``finding_index``. An override naming an authored field mutates it; any
+    other key (``finding_index`` / ``verified_path``) sets a top-level field.
+    The shared source for both the tool-test and the args-schema-test (was
+    duplicated as ``_good_authoring`` / ``_good_authored_draft``)."""
+    return _wrap_authored(authored_draft(), **overrides)
+
+
+def authored_assessment(**overrides: object) -> dict[str, object]:
+    """The canonical ``AuthoredAssessment`` inner shape (the VR's triage call).
+    Pass overrides to mutate a field; for the full Assess-tool kwargs use
+    ``assess_finding_kwargs``."""
+    authored: dict[str, object] = {
+        "severity_decision": "keep",
+        "severity": "high",
+        "severity_rationale": (
+            "Unauthenticated SQLi at a public endpoint with full DB read available - "
+            "matches the PT high call."
+        ),
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+        "title": "SQL Injection in /search?q allows database extraction",
+        "description": (
+            "The /search endpoint concatenates q into a SELECT statement without "
+            "parameterisation. sqlmap exploits classic UNION-based injection to extract "
+            "rows from the users table."
+        ),
+        "steps_to_reproduce": [
+            "Issue GET /search?q=test' UNION SELECT 1,2,3-- ",
+            "Observe the response body contains the union'd rows.",
+        ],
+        "impact": (
+            "An authenticated attacker dumps the users table including bcrypt hashes and "
+            "emails, enabling offline cracking and account takeover."
+        ),
+        "remediation": (
+            "Use parameterised queries throughout. See "
+            "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+        ),
+    }
+    authored.update(overrides)
+    return authored
+
+
+def assess_finding_kwargs(**overrides: object) -> dict[str, object]:
+    """Canonical kwargs for the Vulnerability Researcher's Assess Raw Finding
+    tool / ``_AssessRawFindingArgs``: ``authored_assessment`` wrapped under
+    ``authored`` with ``finding_index``. Same override / wrapping contract as
+    ``draft_report_kwargs`` (was duplicated as ``_good_authoring`` /
+    ``_good_authored_kwargs``)."""
+    return _wrap_authored(authored_assessment(), **overrides)
+
+
 @pytest.fixture()
 def raw_finding_high(target_apex: str) -> RawFinding:
     return RawFinding(

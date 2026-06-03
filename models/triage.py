@@ -22,7 +22,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models.primitives import Severity
+from models.nvd import CvssVector, Severity
 
 
 class SeverityDecision(StrEnum):
@@ -67,7 +67,7 @@ class AuthoredAssessment(BaseModel):
             " surfaced in the briefing to the Technical Author."
         ),
     )
-    cvss_vector: str = Field(
+    cvss_vector: CvssVector = Field(
         description=(
             "Full CVSS 3.1 vector string"
             " (``CVSS:3.1/AV:<n>/AC:<n>/PR:<n>/UI:<n>/S:<n>/C:<n>/I:<n>"

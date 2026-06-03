@@ -160,10 +160,13 @@ cybersquad/
 |
 +-- squad/             # One sub-package per agent
 |   +-- __init__.py    # @cyber_tool decorator, build_agent / build_task helpers
-|   +-- workspace_tools.py  # Shared read-only wrappers + current_programme()
+|   +-- tools/         # Shared CrewAI wrapper layer
+|   |   +-- workspace_tools.py  # Shared read-only wrappers + current_programme()
 |   +-- <member>/
-|   |   +-- __init__.py        # @cyber_tool / @pentest_tool / @research_brief_tool wrappers
-|   |                          #   + MEMBER = SquadMember(...) constant
+|   |   +-- __init__.py        # MEMBER = SquadMember(...) constant - registry assembly
+|   |   |                      #   (imports wrappers from <member>/tools/, re-exports them)
+|   |   +-- tools/             # The member's @cyber_tool / @pentest_tool /
+|   |   |                      #   @research_brief_tool wrapper layer
 |   |   +-- role.md            # Agent role line
 |   |   +-- goal.md            # Agent goal (edit to tune behaviour)
 |   |   +-- backstory.md       # Agent backstory
@@ -172,12 +175,13 @@ cybersquad/
 |   |       +-- description.md       # Task description (one folder per task)
 |   |       +-- expected_output.md   # Task expected output
 |   +-- penetration_tester/
-|       +-- probes/<family>.py # @pentest_tool wrappers (injection, auth, headers,
-|       |                      #   disclosure, client_side, network, external)
-|       +-- cloud/*.py         # Cloud-service @cyber_tool wrappers (S3, DBs, panels)
-|       +-- recon.py           # Recon-query @cyber_tool wrappers
+|       +-- tools/
+|           +-- probes/<family>.py # @pentest_tool wrappers (injection, auth, headers,
+|           |                      #   disclosure, client_side, network, external)
+|           +-- cloud/*.py         # Cloud-service @cyber_tool wrappers (S3, DBs, panels)
+|           +-- recon.py           # Recon-query @cyber_tool wrappers
 |
-+-- tools/             # Tool implementations (the inner check_X helpers)
++-- tools/             # Tool implementations (the inner check_X helpers / "kernels")
 |   +-- h1_api.py          # HackerOne REST client
 |   +-- http.py            # Programme-attributed HTTP session
 |   +-- workspace.py       # Run-dir path resolution + traversal guard
@@ -283,7 +287,7 @@ Load-bearing structural decisions in cybersquad cite a canonical external spec a
 
 **Vulnerability scoring and classification**
 
-- [FIRST CVSS v3.1 Specification Document](https://www.first.org/cvss/v3.1/specification-document) - the vector grammar, metric short codes, and base-score formula implemented by `Calculate CVSS Score` in `tools/report_tools.py` and surfaced by `squad/vulnerability_researcher/triage.py`.
+- [FIRST CVSS v3.1 Specification Document](https://www.first.org/cvss/v3.1/specification-document) - the vector grammar, metric short codes, and base-score formula implemented by `Calculate CVSS Score` in `tools/report_tools.py` and surfaced by `squad/vulnerability_researcher/tools/triage.py`.
 - [FIRST CVSS v3.1 Calculator](https://www.first.org/cvss/calculator/3-1) - hand-verification entry point for a vector / score pair.
 - [OWASP Top 10:2021](https://owasp.org/Top10/2021/) - the A01..A10 codes encoded by `OWASPCategory` in `tools/pentest/owasp.py` and stamped onto every `check_X` via `@owasp(...)`.
 - [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/) - canonical remediation guidance keyed by topic slug, looked up by `tools/owasp_data.py` and cited in every disclosure's Remediation section.

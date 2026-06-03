@@ -41,8 +41,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from models.network import Contact, ContactRole, RdapRecord
-from models.primitives import IPAddress
+from models.asset.network import Contact, ContactRole, RdapRecord
+from models.primitives import IpAddr
 from tools import http
 
 logger = logging.getLogger(__name__)
@@ -293,7 +293,7 @@ def _parse_rdap_payload(payload: dict[str, Any], query: str, source_url: str) ->
     )
 
 
-def lookup_rdap_for_ip(ip: IPAddress) -> RdapRecord | None:
+def lookup_rdap_for_ip(ip: IpAddr) -> RdapRecord | None:
     """RDAP lookup for one IP. Returns ``None`` on any failure."""
     base = _base_url_for_ip(ip)
     if not base:

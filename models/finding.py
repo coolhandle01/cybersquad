@@ -5,7 +5,7 @@ models.finding - the vuln-pipeline data shapes (PT -> VR -> TA).
 ``VerifiedVulnerability`` is the post-triage shape the Technical Author
 turns into a report; ``RawFindingSummary`` is the compact slice the VR's
 List Raw Findings tool returns. All three carry a ``Severity`` (from
-``models.primitives``).
+``models.nvd``).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from models.primitives import Severity
+from models.nvd import CvssVector, Severity
 
 
 class RawFinding(BaseModel):
@@ -36,7 +36,7 @@ class VerifiedVulnerability(BaseModel):
     target: str
     severity: Severity
     cvss_score: float
-    cvss_vector: str
+    cvss_vector: CvssVector
     description: str
     steps_to_reproduce: list[str]
     evidence: str

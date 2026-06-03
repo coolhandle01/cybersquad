@@ -13,9 +13,10 @@ from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
+from tools.recon.dns_assets import dns_assets_from_dnsx
 from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates, resolve_records
 from tools.recon.httpx import probe_endpoints
-from tools.recon.ip_asset import compose_ip_assets
+from tools.recon.ip_enrichment import compose_ip_enrichment
 from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
 from tools.recon.scope import filter_in_scope, host_of
@@ -81,10 +82,11 @@ __all__ = [
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
-    "compose_ip_assets",
+    "compose_ip_enrichment",
     "detect_llm_endpoints",
     "detect_takeover_candidates",
     "discover_paths",
+    "dns_assets_from_dnsx",
     "enumerate_subdomains",
     "filter_in_scope",
     "historical_urls",
@@ -166,11 +168,16 @@ def run_recon(programme: Programme) -> AttackGraph:
     network_hops = run_traceroute(in_scope_hosts[:20])
 
     # IP-rooted enrichment: resolve A records once for the in-scope hosts,
-    # unique-ify the IPs, compose one IpAsset per IP via Cymru + RDAP +
-    # dnsx PTR. One IpAsset = one amass IPAddress asset's worth of input.
+    # unique-ify the IPs, compose the faithful IP subgraph (IPAddress /
+    # Netblock / AutonomousSystem + registry / registrant assets + edges) via
+    # Cymru + RDAP + dnsx PTR.
     dns_records = resolve_records(in_scope_hosts)
     unique_ips = list(dict.fromkeys(ip for record in dns_records for ip in record.a_records))
-    ip_assets = compose_ip_assets(unique_ips)
+    ip_enrichment = compose_ip_enrichment(unique_ips)
+    # The OAM subgraph of those same records: A / CNAME answers as
+    # DNSRecordProperty entries hung off each host's FQDN node, plus the
+    # BasicDNSRelation edges to the answer assets.
+    dns_assets = dns_assets_from_dnsx(dns_records)
 
     return AttackGraph(
         programme=programme,
@@ -180,7 +187,9 @@ def run_recon(programme: Programme) -> AttackGraph:
         technologies=list(dict.fromkeys(all_tech)),
         passive_findings=passive_findings,
         network_hops=network_hops,
-        ip_assets=ip_assets,
+        ip_enrichment=ip_enrichment,
+        dns_records=dns_assets.records,
+        relations=dns_assets.relations,
         # Cert aggregate for the sweep; per-host materialisation happens at
         # finalise (the bound handoff point), not here - run_recon stays
         # side-effect-free.

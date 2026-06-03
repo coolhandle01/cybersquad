@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from cpe import CPE
 
+from models.asset import Product, ProductRelease
+
 # A CPE 2.3 formatted string tops out well under this; a longer value is junk
 # or an injection riding in on a banner, not a CPE. Mirrors the ``max_length``
 # cap on the typed ``cpe`` fields that store the normalised result.
@@ -76,4 +78,37 @@ def pick_application_cpe(raws: list[str]) -> str | None:
     return normalized[0]
 
 
-__all__ = ["normalize_cpe", "pick_application_cpe"]
+def _first_component(values: list[str]) -> str:
+    """First concrete value from a CPE component list (wildcards -> '')."""
+    for value in values:
+        cleaned = (value or "").strip()
+        if cleaned and cleaned not in {"*", "-"}:
+            return cleaned
+    return ""
+
+
+def product_release_from_cpe(cpe_fs: str) -> tuple[Product, ProductRelease] | None:
+    """Decompose a CPE 2.3 string into OAM ``Product`` + ``ProductRelease``.
+
+    ``cpe:2.3:a:nginx:nginx:1.25.3:*:...`` -> ``Product(name="nginx")`` +
+    ``ProductRelease(name="nginx 1.25.3")``. The product name is the CVE-lookup
+    key; the release name pins the exact version a ``VulnProperty`` hangs off.
+
+    Returns ``None`` when the CPE names no usable product (a wildcard / OS-only
+    row), matching the defensive posture of ``normalize_cpe`` - the input is
+    external tool output, so an unusable value degrades quietly rather than
+    raising.
+    """
+    try:
+        parsed = CPE(cpe_fs)
+    except (ValueError, NotImplementedError):
+        return None
+    product = _first_component(parsed.get_product())
+    if not product:
+        return None
+    version = _first_component(parsed.get_version())
+    release_name = f"{product} {version}".strip() if version else product
+    return Product(name=product), ProductRelease(name=release_name)
+
+
+__all__ = ["normalize_cpe", "pick_application_cpe", "product_release_from_cpe"]

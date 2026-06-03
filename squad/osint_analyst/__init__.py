@@ -10,7 +10,7 @@ cohesive responsibility:
   Takeover Candidates``) take ``list[FQDN]``; ``@cyber_tool``
   auto-detects the typed-target field and runs the programme scope
   guard in the wrapper rather than inline in the body. The shared
-  ``current_programme`` reader lives in ``squad.workspace_tools``.
+  ``current_programme`` reader lives in ``squad.tools.workspace_tools``.
 - ``curation`` - lookup (CWE / OWASP) + ``Annotate Host`` +
   ``List Uncovered Hosts`` + ``Finalise Recon``. The "what do we record
   about the surface" half.
@@ -25,7 +25,7 @@ consumers (tests, ``crew.py``, the contract tests in
 from pathlib import Path
 
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
-from squad.osint_analyst.curation import (
+from squad.osint_analyst.tools.curation import (
     _AnnotateHostArgs,
     _FinaliseReconArgs,
     _ListUncoveredHostsArgs,
@@ -37,7 +37,7 @@ from squad.osint_analyst.curation import (
     lookup_cwe_tool,
     lookup_owasp_tool,
 )
-from squad.osint_analyst.discovery import (
+from squad.osint_analyst.tools.discovery import (
     _DiscoverHistoricalUrlsArgs,
     _DiscoverLlmEndpointsArgs,
     _DiscoverSubdomainsArgs,
@@ -57,7 +57,7 @@ from squad.osint_analyst.discovery import (
     list_subdomains_tool,
     run_initial_sweep_tool,
 )
-from squad.osint_analyst.enrichment import (
+from squad.osint_analyst.tools.enrichment import (
     _DiscoverHostServicesArgs,
     _LookupIpAssetsArgs,
     _LookupRdapAsnArgs,
@@ -65,7 +65,7 @@ from squad.osint_analyst.enrichment import (
     lookup_ip_assets_tool,
     lookup_rdap_asn_tool,
 )
-from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
+from squad.tools.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 
 MEMBER = SquadMember(
     dir=Path(__file__).parent,
@@ -110,7 +110,7 @@ MEMBER = SquadMember(
         "Annotate Host": _AnnotateHostArgs,
         "List Uncovered Hosts": _ListUncoveredHostsArgs,
         "Finalise Recon": _FinaliseReconArgs,
-        # Shared workspace wrappers (re-exported via squad.workspace_tools)
+        # Shared workspace wrappers (re-exported via squad.tools.workspace_tools)
         "List Run Files": _ListRunFilesArgs,
         "Read Run File": _ReadRunFileArgs,
     },

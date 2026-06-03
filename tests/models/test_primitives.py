@@ -1,4 +1,4 @@
-"""tests/models/test_primitives.py - unit tests for models/primitives.py."""
+"""tests/models/test_primitives.py - unit tests for models/primitives/."""
 
 from __future__ import annotations
 
@@ -7,9 +7,11 @@ from pydantic import BaseModel, ValidationError
 
 from models import (
     FQDN,
+    Cidr,
     Email,
     HttpUrl,
-    IPAddress,
+    IpAddr,
+    IPType,
     Severity,
 )
 
@@ -161,13 +163,13 @@ class TestHttpUrl:
         assert _HttpUrlProbe(value=url).value == url
 
 
-class _IPAddressProbe(BaseModel):
-    """Thin probe model used to drive the IPAddress validator in isolation."""
+class _IpAddrProbe(BaseModel):
+    """Thin probe model used to drive the IpAddr validator in isolation."""
 
-    value: IPAddress
+    value: IpAddr
 
 
-class TestIPAddress:
+class TestIpAddr:
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
@@ -187,7 +189,7 @@ class TestIPAddress:
         ],
     )
     def test_valid_address_canonicalises(self, raw, expected):
-        assert _IPAddressProbe(value=raw).value == expected
+        assert _IpAddrProbe(value=raw).value == expected
 
     @pytest.mark.parametrize(
         "bad",
@@ -204,33 +206,33 @@ class TestIPAddress:
     )
     def test_rejects_malformed(self, bad):
         with pytest.raises(ValidationError):
-            _IPAddressProbe(value=bad)
+            _IpAddrProbe(value=bad)
 
     def test_rejects_cidr_notation(self):
         # CIDR is a netblock, not an IP; explicit reject so the error
         # message names the cause.
         with pytest.raises(ValidationError, match="CIDR"):
-            _IPAddressProbe(value="1.2.3.0/24")
+            _IpAddrProbe(value="1.2.3.0/24")
 
     def test_rejects_ipv6_zone_identifier(self):
         # Link-local zone IDs (``fe80::1%eth0``) shouldn't appear in
         # recon JSON - they're scoped to the scanner's host, not stable.
         with pytest.raises(ValidationError, match="zone identifier"):
-            _IPAddressProbe(value="fe80::1%eth0")
+            _IpAddrProbe(value="fe80::1%eth0")
 
     def test_rejects_non_string_input(self):
         with pytest.raises(ValidationError):
-            _IPAddressProbe.model_validate({"value": ["1.2.3.4"]})
+            _IpAddrProbe.model_validate({"value": ["1.2.3.4"]})
 
     def test_serialisation_roundtrip(self):
-        original = _IPAddressProbe(value="2001:db8::1")
-        restored = _IPAddressProbe.model_validate_json(original.model_dump_json())
+        original = _IpAddrProbe(value="2001:db8::1")
+        restored = _IpAddrProbe.model_validate_json(original.model_dump_json())
         assert restored.value == "2001:db8::1"
 
     def test_runtime_type_is_str(self):
-        # IPAddress is Annotated[str, ...] - consumers that do
+        # IpAddr is Annotated[str, ...] - consumers that do
         # f"https://{ip}" / ip.startswith(...) / dict-key keep working.
-        probe = _IPAddressProbe(value="8.8.8.8")
+        probe = _IpAddrProbe(value="8.8.8.8")
         assert isinstance(probe.value, str)
         assert probe.value.startswith("8.")
 
@@ -273,3 +275,56 @@ class TestEmail:
         probe = _EmailProbe(value="abuse@example.com")
         assert isinstance(probe.value, str)
         assert "@" in probe.value
+
+
+class TestIPType:
+    def test_values(self):
+        assert {t.value for t in IPType} == {"IPv4", "IPv6"}
+
+    def test_is_string_enum(self):
+        assert isinstance(IPType.IPV4, str)
+        assert IPType.IPV4 == "IPv4"
+
+
+class _CidrProbe(BaseModel):
+    """Thin probe model used to drive the Cidr validator in isolation."""
+
+    value: Cidr
+
+
+class TestCidr:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("8.8.8.0/24", "8.8.8.0/24"),
+            ("8.8.8.8/24", "8.8.8.0/24"),  # host bits normalise to the network
+            (" 10.0.0.0/8 ", "10.0.0.0/8"),  # whitespace stripped
+            ("2001:db8::/32", "2001:db8::/32"),
+        ],
+    )
+    def test_valid_cidr_normalises(self, raw, expected):
+        assert _CidrProbe(value=raw).value == expected
+
+    def test_rejects_non_cidr(self, target_url):
+        """The bare cases stay literal; the hostname-shaped case derives its
+        host from target_url so "a domain where a CIDR was expected" reads at
+        the call site. Parametrize can't consume fixtures, so a single method
+        loops the corpus (mirrors TestFQDN / TestHttpUrl).
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(target_url).hostname or ""
+        cases: list[str] = ["", "   ", "8.8.8.8", "not-a-cidr", "999.0.0.0/8", f"{host}/24"]
+        for bad in cases:
+            with pytest.raises(ValidationError):
+                _CidrProbe(value=bad)
+
+    def test_runtime_type_is_str(self):
+        # Cidr is Annotated[str, ...] so consumers keep treating it as a string.
+        probe = _CidrProbe(value="8.8.8.0/24")
+        assert isinstance(probe.value, str)
+
+    def test_serialisation_roundtrip(self):
+        original = _CidrProbe(value="2001:db8::/32")
+        restored = _CidrProbe.model_validate_json(original.model_dump_json())
+        assert restored.value == "2001:db8::/32"

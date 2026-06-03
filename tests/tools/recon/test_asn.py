@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from models.network import AsnRecord
+from models.asset.network import AsnRecord
 from tools.recon.asn import _build_bulk_input, _parse_cymru_row, lookup_asn
 
 pytestmark = pytest.mark.unit

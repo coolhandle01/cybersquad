@@ -85,9 +85,11 @@ class TestParseXml:
         assert len(results) == 1
         assert results[0].services[0].service == "ssh"
         assert results[0].services[0].product is None
+        # No <service conf> attribute -> confidence defaults to 0.
+        assert results[0].services[0].conf == 0
 
     def test_skips_host_when_host_validator_rejects_addr(self):
-        # NmapHostResult.host is typed FQDN | IPAddress; a non-routable
+        # NmapHostResult.host is typed FQDN | IpAddr; a non-routable
         # string trips the validator and the row drops on the floor.
         xml = (
             "<?xml version='1.0'?><nmaprun>"
@@ -105,7 +107,7 @@ class TestParseXml:
             '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
             '<ports><port protocol="tcp" portid="22">'
             '<state state="open"/>'
-            '<service name="ssh" product="OpenSSH" version="7.4">'
+            '<service name="ssh" product="OpenSSH" version="7.4" conf="10">'
             "<cpe>cpe:/o:linux:linux_kernel</cpe>"
             "<cpe>cpe:/a:openbsd:openssh:7.4</cpe>"
             "</service></port></ports>"
@@ -113,6 +115,8 @@ class TestParseXml:
         )
         results = _parse_xml(xml)
         assert results[0].services[0].cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
+        # nmap's <service conf> attribute is captured as the match confidence.
+        assert results[0].services[0].conf == 10
 
     def test_cpe_is_none_when_service_emits_no_cpe(self):
         # A service-name-only row (no -sV banner, no <cpe>) leaves cpe None.

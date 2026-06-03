@@ -108,11 +108,11 @@ def cyber_tool(
 
 
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,
-# because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
+# because ``squad/tools/workspace_tools.py`` decorates with ``@cyber_tool`` and
 # would hit a circular import if pulled in alongside the top-of-module
 # imports. The deferred-import pattern is explicitly endorsed by ruff for
 # this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
-from squad.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
+from squad.tools.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
     read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,

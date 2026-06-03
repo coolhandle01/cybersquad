@@ -30,6 +30,19 @@ dependencies = [
     # library only (no modification / static linking), so the obligations
     # are light, but flagging it for the licence record.
     "cpe>=1.3",
+    # CVSS vector parsing + base-score + severity, the canonical RedHat
+    # implementation of the CVSS spec. Replaces the hand-derived CVSS 3.1
+    # formula in tools/report_tools.calculate_cvss_score and backs the
+    # ``CvssVector`` primitive's validation in models.nvd. Pure-Python, zero
+    # runtime deps. NOTE: LGPLv3+ (same copyleft posture as ``cpe`` above) -
+    # imported as a library only, flagged for the licence record.
+    "cvss>=3.4",
+    # CWE corpus: the full MITRE Common Weakness Enumeration database, bundled
+    # offline (ships the CWE XML inside the wheel - no network). Backs the
+    # ``models.mitre.CWE`` type, which validates a CWE id by corpus membership
+    # and carries MITRE's canonical name/description - no hand-vendored CWE
+    # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
+    "cwe2>=3.0",
 ]
 
 [project.optional-dependencies]

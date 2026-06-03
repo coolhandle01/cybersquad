@@ -68,6 +68,9 @@ def _parse_xml(xml_text: str) -> list[NmapHostResult]:
             product = svc_el.get("product") if svc_el is not None else None
             version = svc_el.get("version") if svc_el is not None else None
             extra = svc_el.get("extrainfo") if svc_el is not None else None
+            # nmap's per-match confidence (1-10); absent / non-numeric -> 0.
+            conf_attr = svc_el.get("conf") if svc_el is not None else None
+            conf = int(conf_attr) if conf_attr and conf_attr.isdigit() else 0
             # nmap emits one or more ``<cpe>`` children (2.2 URI binding) per
             # service when -sV matches; prefer the application CPE and
             # normalise to the 2.3 formatted string.
@@ -87,6 +90,7 @@ def _parse_xml(xml_text: str) -> list[NmapHostResult]:
                         version=version,
                         extra_info=extra,
                         cpe=service_cpe,
+                        conf=conf,
                     )
                 )
             except ValueError as exc:

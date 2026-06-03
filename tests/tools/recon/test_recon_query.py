@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import pytest
 
 from models import Endpoint
+from tests.fixtures.programme import stage_model_json
 from tools.recon import query
 
 pytestmark = pytest.mark.unit
@@ -46,7 +47,7 @@ def recon_file(run_dir: Path, recon_result, target_url: str) -> str:
             },
         }
     )
-    (run_dir / "recon.json").write_text(recon.model_dump_json(), encoding="utf-8")
+    stage_model_json(run_dir, "recon.json", recon)
     return "recon.json"
 
 

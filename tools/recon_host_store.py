@@ -1,7 +1,7 @@
 """
 tools/recon_host_store.py - the per-host workspace artefact store.
 
-Every in-scope FQDN gets one directory under ``<run_dir>/hosts/<fqdn>/``,
+Every in-scope FQDN gets one directory under ``<run_dir>/assets/<fqdn>/``,
 and this module is the typed reader/writer pair for the facets that hang
 off it - the on-disk form of one amass FQDN-asset node:
 
@@ -12,6 +12,13 @@ off it - the on-disk form of one amass FQDN-asset node:
 * ``tls.json`` - the leaf ``TLSCertificate`` observed on the host.
 * ``ports.json`` / ``findings.json`` - the host's open ports and its
   node-local ``RawFinding`` rows.
+* ``services.json`` / ``products.json`` / ``product_releases.json`` /
+  ``urls.json`` - the host's OAM asset facets.
+* ``relations.json`` - the typed edges originating from this host.
+
+The per-host dirs live under ``<run_dir>/assets/<fqdn>/``; the run-level,
+infrastructure OAM assets (one IP serving many FQDNs - AutonomousSystem /
+Netblock / Organization / ... ) sit beside them at ``<run_dir>/assets/*.json``.
 
 Split out of ``tools.recon_insights`` (which keeps the validation + the
 ``finalise_recon`` orchestration that *drives* these writers) so neither
@@ -28,24 +35,34 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 import runtime
-from models import HostInsight, HostScore, RawFinding, Service, TLSCertificate
+from models import (
+    HostInsight,
+    HostScore,
+    Product,
+    ProductRelease,
+    RawFinding,
+    Relation,
+    Service,
+    TLSCertificate,
+    Url,
+)
 from models.primitives import FQDN
 
-_HOSTS_SUBDIR = "hosts"
+_ASSETS_SUBDIR = "assets"
 
 # FQDNs must be made filesystem-safe before persisting under
-# ``hosts/<fqdn>/``. The replacement is reversible because we never
+# ``assets/<fqdn>/``. The replacement is reversible because we never
 # reverse it - the persisted artefacts carry the original hostname in
 # their body.
 _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 
-def _hosts_dir() -> Path:
-    return runtime.run_dir() / _HOSTS_SUBDIR
+def _assets_dir() -> Path:
+    return runtime.run_dir() / _ASSETS_SUBDIR
 
 
 def host_dir(hostname: FQDN) -> Path:
-    """Return the per-host evidence directory under ``<run_dir>/hosts/``.
+    """Return the per-host evidence directory under ``<run_dir>/assets/``.
 
     Each in-scope FQDN gets its own directory; ``insight_path`` writes
     ``insight.json`` here, and future evidence-writing tools (httpx
@@ -57,11 +74,20 @@ def host_dir(hostname: FQDN) -> Path:
     Sanitises the hostname for filesystem use. The replacement is
     reversible because we never reverse it - the persisted artefacts
     inside carry the original hostname in their body.
+
+    The sanitiser keeps ``.`` (legitimate in an FQDN), so a hostname of
+    ``.`` / ``..`` would survive and resolve the directory out of (or up
+    from) ``assets/``. That matters because a host here is not always a
+    validated ``FQDN``: callers also derive it from a ``RawFinding.target``
+    (a bare ``str``) or a parsed URL host, both attacker-influenceable. We
+    reject those dot-only forms; with ``/`` already turned to ``_`` by the
+    sanitiser, no other component can traverse, so a crafted host cannot
+    escape ``assets/`` and clobber a run-level artefact.
     """
     safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
-    if not safe or safe.strip("_") == "":
-        raise ValueError("hostname is empty after sanitisation")
-    return _hosts_dir() / safe
+    if not safe.strip("_") or safe in {".", ".."}:
+        raise ValueError(f"hostname is empty or unsafe after sanitisation: {hostname!r}")
+    return _assets_dir() / safe
 
 
 def insight_path(hostname: FQDN) -> Path:
@@ -75,7 +101,7 @@ def insight_path(hostname: FQDN) -> Path:
 
 
 def save_insight(insight: HostInsight) -> Path:
-    """Persist an insight to ``<run_dir>/hosts/<host>/insight.json``."""
+    """Persist an insight to ``<run_dir>/assets/<host>/insight.json``."""
     path = insight_path(insight.hostname)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(insight.model_dump_json(indent=2), encoding="utf-8")
@@ -84,7 +110,7 @@ def save_insight(insight: HostInsight) -> Path:
 
 def load_insights() -> list[HostInsight]:
     """Load every insight in the current run, ordered by hostname."""
-    dir_ = _hosts_dir()
+    dir_ = _assets_dir()
     if not dir_.is_dir():
         return []
     return sorted(
@@ -107,7 +133,7 @@ def tls_path(hostname: FQDN) -> Path:
 
 
 def save_tls_certificate(certificate: TLSCertificate) -> Path:
-    """Persist a cert to ``<run_dir>/hosts/<host>/tls.json``."""
+    """Persist a cert to ``<run_dir>/assets/<host>/tls.json``."""
     path = tls_path(certificate.host)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(certificate.model_dump_json(indent=2), encoding="utf-8")
@@ -116,7 +142,7 @@ def save_tls_certificate(certificate: TLSCertificate) -> Path:
 
 def load_tls_certificates() -> list[TLSCertificate]:
     """Load every per-host TLS cert in the current run, ordered by host."""
-    dir_ = _hosts_dir()
+    dir_ = _assets_dir()
     if not dir_.is_dir():
         return []
     return sorted(
@@ -134,6 +160,10 @@ def load_tls_certificates() -> list[TLSCertificate]:
 _HOST_FINDINGS = TypeAdapter(list[RawFinding])
 _HOST_PORTS = TypeAdapter(list[int])
 _HOST_SERVICES = TypeAdapter(list[Service])
+_HOST_URLS = TypeAdapter(list[Url])
+_HOST_RELATIONS = TypeAdapter(list[Relation])
+_HOST_PRODUCTS = TypeAdapter(list[Product])
+_HOST_PRODUCT_RELEASES = TypeAdapter(list[ProductRelease])
 
 
 def host_score_path(hostname: FQDN) -> Path:
@@ -142,7 +172,7 @@ def host_score_path(hostname: FQDN) -> Path:
 
 
 def save_host_score(score: HostScore) -> Path:
-    """Persist a ``HostScore`` to ``<run_dir>/hosts/<host>/host.json``."""
+    """Persist a ``HostScore`` to ``<run_dir>/assets/<host>/host.json``."""
     path = host_score_path(score.hostname)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(score.model_dump_json(indent=2), encoding="utf-8")
@@ -151,7 +181,7 @@ def save_host_score(score: HostScore) -> Path:
 
 def load_host_scores() -> list[HostScore]:
     """Load every per-host score in the current run, ordered by hostname."""
-    dir_ = _hosts_dir()
+    dir_ = _assets_dir()
     if not dir_.is_dir():
         return []
     return sorted(
@@ -169,7 +199,7 @@ def notes_path(hostname: FQDN) -> Path:
 
 
 def save_host_notes(hostname: FQDN, notes: str) -> Path:
-    """Persist the OA's prose guidance to ``<run_dir>/hosts/<host>/notes.md``.
+    """Persist the OA's prose guidance to ``<run_dir>/assets/<host>/notes.md``.
 
     The "look here, because ..." half of the curation, kept as markdown
     outside the typed data shape. Agent-authored prose: it is read back by
@@ -253,6 +283,110 @@ def load_host_services(hostname: FQDN) -> list[Service]:
     return _HOST_SERVICES.validate_json(path.read_text(encoding="utf-8"))
 
 
+def urls_path(hostname: FQDN) -> Path:
+    """Per-host URLs file: ``<host_dir>/urls.json``."""
+    return host_dir(hostname) / "urls.json"
+
+
+def save_host_urls(hostname: FQDN, urls: list[Url]) -> Path:
+    """Persist a host's OAM ``Url`` assets to ``hosts/<host>/urls.json``.
+
+    The OAM ``URL``-asset facet of the host node: one structured URL per row
+    (scheme / host / port / path / ...), the on-disk form of what #45 upserts
+    as amass URL nodes related to the FQDN. Sibling of ``services.json``.
+    """
+    path = urls_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_URLS.dump_json(urls, indent=2))
+    return path
+
+
+def load_host_urls(hostname: FQDN) -> list[Url]:
+    """Load a host's ``Url`` assets; empty when none were written."""
+    path = urls_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_URLS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def products_path(hostname: FQDN) -> Path:
+    """Per-host products file: ``<host_dir>/products.json``."""
+    return host_dir(hostname) / "products.json"
+
+
+def save_host_products(hostname: FQDN, products: list[Product]) -> Path:
+    """Persist a host's OAM ``Product`` assets to ``hosts/<host>/products.json``.
+
+    The product lines nmap's CPEs decomposed to (e.g. ``nginx``), linked to
+    their services by ``product_used`` edges in ``relations.json``.
+    """
+    path = products_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_PRODUCTS.dump_json(products, indent=2))
+    return path
+
+
+def load_host_products(hostname: FQDN) -> list[Product]:
+    """Load a host's ``Product`` assets; empty when none were written."""
+    path = products_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_PRODUCTS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def product_releases_path(hostname: FQDN) -> Path:
+    """Per-host product-releases file: ``<host_dir>/product_releases.json``."""
+    return host_dir(hostname) / "product_releases.json"
+
+
+def save_host_product_releases(hostname: FQDN, releases: list[ProductRelease]) -> Path:
+    """Persist a host's OAM ``ProductRelease`` assets to ``product_releases.json``.
+
+    The version-specific releases (e.g. ``nginx 1.25.3``) - the spec-proper
+    anchor the VR's CPE -> CVE ``VulnProperty`` results hang off.
+    """
+    path = product_releases_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_PRODUCT_RELEASES.dump_json(releases, indent=2))
+    return path
+
+
+def load_host_product_releases(hostname: FQDN) -> list[ProductRelease]:
+    """Load a host's ``ProductRelease`` assets; empty when none were written."""
+    path = product_releases_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_PRODUCT_RELEASES.validate_json(path.read_text(encoding="utf-8"))
+
+
+def relations_path(hostname: FQDN) -> Path:
+    """Per-host relations file: ``<host_dir>/relations.json``."""
+    return host_dir(hostname) / "relations.json"
+
+
+def save_host_relations(hostname: FQDN, relations: list[Relation]) -> Path:
+    """Persist a host's OAM graph edges to ``hosts/<host>/relations.json``.
+
+    The explicit-edge half of the host's OAM subgraph: assets carry their own
+    attached properties in their facet files; the typed relations *between*
+    them (host -> ``Service`` ``port``, ``Service`` -> ``ProductRelease``
+    ``product_used``, ...) live here, one record per edge. #45 inserts one
+    graph edge per row.
+    """
+    path = relations_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_RELATIONS.dump_json(relations, indent=2))
+    return path
+
+
+def load_host_relations(hostname: FQDN) -> list[Relation]:
+    """Load a host's OAM graph edges; empty when none were written."""
+    path = relations_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_RELATIONS.validate_json(path.read_text(encoding="utf-8"))
+
+
 __all__ = [
     "findings_path",
     "host_dir",
@@ -260,19 +394,31 @@ __all__ = [
     "insight_path",
     "load_host_findings",
     "load_host_ports",
+    "load_host_product_releases",
+    "load_host_products",
+    "load_host_relations",
     "load_host_scores",
     "load_host_services",
+    "load_host_urls",
     "load_insights",
     "load_tls_certificates",
     "notes_path",
     "ports_path",
+    "product_releases_path",
+    "products_path",
+    "relations_path",
     "save_host_findings",
     "save_host_notes",
     "save_host_ports",
+    "save_host_product_releases",
+    "save_host_products",
+    "save_host_relations",
     "save_host_score",
     "save_host_services",
+    "save_host_urls",
     "save_insight",
     "save_tls_certificate",
     "services_path",
     "tls_path",
+    "urls_path",
 ]

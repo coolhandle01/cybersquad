@@ -22,7 +22,7 @@ from pydantic import BaseModel
 # import path is ``from models import TakeoverCandidate``.
 from config import config
 from models.dns import PtrRecord, TakeoverCandidate
-from models.primitives import IPAddress
+from models.primitives import IpAddr
 from tools._helpers import _require_binary, _run
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,10 @@ class DNSRecord(BaseModel):
     hostname: str
     a_records: list[str] = []
     cname: list[str] = []
+    # The response TTL dnsx reports (retryabledns ``ttl``); one value per host
+    # response, carried onto the OAM DNSRecordProperty / RRHeader. 0 when dnsx
+    # omitted it.
+    ttl: int = 0
 
 
 def _match_fingerprint(cname: str) -> str | None:
@@ -155,6 +159,7 @@ def resolve_records(hostnames: list[str]) -> list[DNSRecord]:
                 hostname=hostname,
                 a_records=entry.get("a") or [],
                 cname=entry.get("cname") or [],
+                ttl=max(0, int(entry.get("ttl") or 0)),
             )
         )
     logger.info("dnsx resolved %d/%d hosts", len(records), len(hostnames))
@@ -201,7 +206,7 @@ def detect_takeover_candidates(hostnames: list[str]) -> list[TakeoverCandidate]:
     return candidates
 
 
-def resolve_ptr(ips: list[IPAddress]) -> list[PtrRecord]:
+def resolve_ptr(ips: list[IpAddr]) -> list[PtrRecord]:
     """Reverse-DNS lookup for ``ips`` via dnsx.
 
     Maps each IP to whatever name(s) the in-addr.arpa zone publishes
@@ -262,7 +267,7 @@ def resolve_ptr(ips: list[IPAddress]) -> list[PtrRecord]:
             records.append(PtrRecord(ip=ip, hostnames=hostnames))
         except ValueError as exc:
             # A hostname tripped the FQDN validator or the IP failed
-            # ``IPAddress`` shape. Retry without the optional hostnames -
+            # ``IpAddr`` shape. Retry without the optional hostnames -
             # an IP-only PtrRecord still carries the "we asked, got
             # nothing legible" signal vs the silent drop above.
             logger.debug("dnsx PTR row degraded (dropping hostnames): %s", exc)

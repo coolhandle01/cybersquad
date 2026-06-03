@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import CveEntry
+from models import CVE
 from tools import nvd
 
 pytestmark = pytest.mark.unit
@@ -43,6 +43,16 @@ def _cve_payload():
                             }
                         ]
                     },
+                    "weaknesses": [
+                        {
+                            "type": "Primary",
+                            "description": [
+                                {"lang": "en", "value": "CWE-502"},
+                                {"lang": "en", "value": "NVD-CWE-noinfo"},
+                            ],
+                        },
+                        {"type": "Secondary", "description": [{"lang": "en", "value": "CWE-917"}]},
+                    ],
                 }
             }
         ]
@@ -65,15 +75,31 @@ def _ok(json_body):
     return resp
 
 
+class TestParseCweIds:
+    def test_extracts_numeric_cwes_dropping_placeholders_and_garbage(self):
+        weaknesses = [
+            "not-a-dict",  # malformed entry is skipped
+            {"description": [{"value": "CWE-89"}, {"value": "NVD-CWE-Other"}, "not-a-dict"]},
+            {"description": [{"value": "CWE-89"}]},  # duplicate id de-duped
+        ]
+        assert nvd._parse_cwe_ids(weaknesses) == [89]
+
+    def test_empty_returns_empty(self):
+        assert nvd._parse_cwe_ids([]) == []
+
+
 class TestCvesForKeyword:
     def test_parses_typed_cve_entry(self):
         with patch("tools.nvd.http.get", return_value=_ok(_cve_payload())) as mget:
             results = nvd.cves_for_keyword("log4shell")
         assert len(results) == 1
-        assert isinstance(results[0], CveEntry)
+        assert isinstance(results[0], CVE)
         assert results[0].id == "CVE-2021-44228"
         assert results[0].cvss_score == 10.0
         assert results[0].description == "Log4Shell RCE"
+        # CWE comes from NVD's weaknesses (authoritative), not an agent guess;
+        # the NVD-CWE-noinfo placeholder is dropped.
+        assert results[0].cwe_ids == [502, 917]
         # keyword path uses the CVE endpoint + keywordSearch
         assert mget.call_args.kwargs["params"]["keywordSearch"] == "log4shell"
 

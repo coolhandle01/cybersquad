@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from models.primitives import FQDN, IPAddress
+from models.primitives import FQDN, IpAddr
 
 
 class TakeoverCandidate(BaseModel):
@@ -45,7 +45,7 @@ class PtrRecord(BaseModel):
     returns whatever names the in-addr.arpa zone publishes.
     """
 
-    ip: IPAddress
+    ip: IpAddr
     hostnames: list[FQDN] = Field(default_factory=list)
 
 

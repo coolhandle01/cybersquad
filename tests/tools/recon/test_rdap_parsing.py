@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from models.network import ContactRole
+from models.asset.network import ContactRole
 from tools.recon import rdap
 
 pytestmark = pytest.mark.unit

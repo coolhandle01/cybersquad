@@ -57,9 +57,9 @@ esac
 # appears later (more prominent) in context.
 #
 # cybersquad-tool covers any Python file under squad/ at any depth -
-# the catch-all pattern matches the 18+ wrapper files under
-# squad/<member>/<sub>/*.py (probes/, cloud/) alongside the member
-# __init__.py files and the workspace_tools shared layer. Decorator
+# the catch-all pattern matches the wrapper files under
+# squad/<member>/tools/**/*.py (including probes/, cloud/) alongside the
+# member __init__.py files and the squad/tools/ shared layer. Decorator
 # implementation files (_decorator.py) are inclusive false positives:
 # they implement the conventions the skill enforces, so loading is
 # appropriate rather than noisy.
@@ -70,14 +70,14 @@ if [ "$in_tests" = 0 ]; then
             ;;
     esac
     # cybersquad-pentest-tool covers the @pentest_tool wrapper surface
-    # (probes/) and its check_X helper layer (tools/pentest/). Cloud
-    # wrappers use @cyber_tool, not @pentest_tool, so they correctly
-    # stay on the universal skill only.
+    # (squad/penetration_tester/tools/probes/) and its check_X helper
+    # layer (tools/pentest/). Cloud wrappers use @cyber_tool, not
+    # @pentest_tool, so they correctly stay on the universal skill only.
     case "$file_path" in
         */tools/pentest/*.py \
         |*/squad/penetration_tester/__init__.py \
-        |*/squad/penetration_tester/_decorator.py \
-        |*/squad/penetration_tester/probes/*.py)
+        |*/squad/penetration_tester/tools/_decorator.py \
+        |*/squad/penetration_tester/tools/probes/*.py)
             matches+=(cybersquad-pentest-tool)
             ;;
     esac
@@ -99,6 +99,18 @@ fi
 case "$file_path" in
     */models/*.py)
         matches+=(cybersquad-models)
+        ;;
+esac
+
+# cybersquad-oam stacks on cybersquad-models for the OAM asset layer - the
+# asset / property / relation shapes under models/asset/ that implement
+# OWASP amass's Open Asset Model. Generic model rules load first; the OAM
+# specialist (faithful-to-amass, OAM-names-win, properties-as-annotations)
+# layers on top. No in_tests guard, matching cybersquad-models: the OAM
+# contract is relevant when testing the asset shapes too.
+case "$file_path" in
+    */models/asset/*.py)
+        matches+=(cybersquad-oam)
         ;;
 esac
 

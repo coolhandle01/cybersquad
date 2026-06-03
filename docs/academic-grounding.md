@@ -8,7 +8,7 @@ how it maps to the pipeline.
 Covers the OWASP Open Asset Model (the graph shape cybersquad emits
 into, when amass lands per #45) and the academic papers that ground
 the `AttackGraph` / `AttackTree` / `AttackForest` naming in
-`models/attack.py` and `models/asset.py`.
+`models/attack/` and `models/asset/`.
 
 cybersquad's design favours open-source, community-maintained tooling
 and standardised vocabularies (notably OWASP Amass, the OWASP Top 10,
@@ -45,16 +45,20 @@ resolve to IPs in ASN X?" and the model has the shape to answer.
 
 ### How cybersquad uses it
 
-The typed shapes in `models/asset.py` and `models/network.py` are
-designed to round-trip into OAM:
+The typed shapes in the `models/asset/` package (one module per OAM
+asset family) are designed to round-trip into OAM:
 
-- `FQDN`, `IPAddress` primitives map to OAM asset identifiers.
-- `AsnRecord` carries an AutonomousSystem asset plus its SimpleProperty
-  group (organisation name, country).
-- `RdapRecord` carries an RIROrganization asset plus its `Contact`
-  records.
-- `IpAsset` composes one IPAddress asset with its ASN, RDAP, and PTR
-  properties as a single cybersquad-native shape.
+- The `FQDN` / `IpAddr` primitives validate the identifiers OAM assets
+  are keyed on. The OAM `IPAddress` *asset* lives in
+  `models/asset/network.py`; the `IpAddr` primitive that validates an IP
+  literal lives in `models/primitives/ip_addr.py` (the primitive yields
+  the `IPAddress` name to the asset).
+- `AutonomousSystem` / `Netblock` carry the ASN and announced-prefix
+  assets (the legacy `AsnRecord` shape feeds them).
+- `Organization` plus its `ContactRecord` records carry the RIR
+  registrant data (RDAP).
+- `IpEnrichment` composes one IP's ASN / RDAP / PTR facets into a single
+  cybersquad-native subgraph bundle.
 
 When #45 lands, the OSINT Analyst writes these records into the OAM
 graph (Postgres-backed). Downstream agents query the graph for context
@@ -85,7 +89,7 @@ Two important properties:
 In cybersquad this maps to the **VR's worldview**. Per probe + target the
 Vulnerability Researcher is asking "what would success look like and what
 are the sub-conditions for it" - that decomposition is a Schneier tree.
-The `AttackTree` shape in `models/attack.py` is intentionally degenerate
+The `AttackTree` shape in `models/attack/tree.py` is intentionally degenerate
 today (no `children`, no `decomposition: Literal["AND", "OR"]`) but the
 naming reserves the room for a recursive shape later without renaming.
 
@@ -126,8 +130,8 @@ handled. The output is the graph.
 In cybersquad this maps to the **PT's worldview**. Given the trees the VR
 produced, plan a search that maximises expected value of finding bugs -
 Sheyner-style MDP reasoning, A\* + domain heuristic in practice. The
-`AttackForest` docstring in `models/attack.py` cites Sheyner specifically
-for this MDP framing.
+`AttackForest` docstring in `models/attack/forest.py` cites Sheyner
+specifically for this MDP framing.
 
 ## Related work: Ou et al. 2005 - MulVAL
 
@@ -152,6 +156,6 @@ attack-path enumeration.
 | Penetration Tester | Searches the forest. Expected-value path selection across trees. | Sheyner 2002 (MDP), A\* with a domain heuristic in practice |
 
 Three formalisms from three traditions, each in the role its formalism is
-good at. The naming in `models/attack.py` (`AttackGraph`, `AttackTree`,
+good at. The naming in `models/attack/` (`AttackGraph`, `AttackTree`,
 `AttackForest`) is meant to make the role each agent plays legible to a
 contributor who knows the literature.
