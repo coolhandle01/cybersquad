@@ -77,7 +77,7 @@ class TestCurrentProgramme:
     """
 
     def test_returns_programme_from_run_dir(self, programme, run_dir) -> None:
-        from squad.workspace_tools import current_programme
+        from squad.tools.workspace_tools import current_programme
 
         (run_dir / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
         result = current_programme()
@@ -85,7 +85,7 @@ class TestCurrentProgramme:
         assert result.in_scope == programme.in_scope
 
     def test_raises_when_programme_json_missing(self, run_dir) -> None:
-        from squad.workspace_tools import current_programme
+        from squad.tools.workspace_tools import current_programme
 
         with pytest.raises(FileNotFoundError):
             current_programme()
@@ -105,7 +105,7 @@ class TestCurrentProgramme:
 # this block holds the schema-side contract.
 def _load_workspace_schemas() -> dict[str, type[BaseModel]]:
     """Resolve the schemas lazily so the module imports without the env vars."""
-    from squad.workspace_tools import (
+    from squad.tools.workspace_tools import (
         _ListRunFilesArgs,
         _ReadAttackForestArgs,
         _ReadRunFileArgs,
@@ -146,28 +146,28 @@ class TestWorkspaceArgsSchemas:
 
     def test_list_run_files_accepts_empty_payload(self) -> None:
         """``List Run Files`` takes no parameters; the empty payload is canonical."""
-        from squad.workspace_tools import _ListRunFilesArgs
+        from squad.tools.workspace_tools import _ListRunFilesArgs
 
         instance = _ListRunFilesArgs.model_validate({})
         assert isinstance(instance, _ListRunFilesArgs)
 
     def test_read_attack_forest_accepts_empty_payload(self) -> None:
         """``Read Attack Plan`` takes no parameters; the empty payload is canonical."""
-        from squad.workspace_tools import _ReadAttackForestArgs
+        from squad.tools.workspace_tools import _ReadAttackForestArgs
 
         instance = _ReadAttackForestArgs.model_validate({})
         assert isinstance(instance, _ReadAttackForestArgs)
 
     def test_read_run_file_accepts_relative_path(self) -> None:
         """``Read Run File`` accepts a bare relative-path string."""
-        from squad.workspace_tools import _ReadRunFileArgs
+        from squad.tools.workspace_tools import _ReadRunFileArgs
 
         instance = _ReadRunFileArgs.model_validate({"relative_path": "recon.json"})
         assert instance.relative_path == "recon.json"
 
     def test_read_run_file_rejects_missing_relative_path(self) -> None:
         """``relative_path`` is required - the wrapper has no default."""
-        from squad.workspace_tools import _ReadRunFileArgs
+        from squad.tools.workspace_tools import _ReadRunFileArgs
 
         with pytest.raises(ValidationError):
             _ReadRunFileArgs.model_validate({})

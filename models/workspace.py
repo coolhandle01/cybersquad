@@ -1,7 +1,7 @@
 """
 models.workspace - shared @tool return shapes for the per-run workspace.
 
-Lives alongside ``squad.workspace_tools``: the readers there return one of
+Lives alongside ``squad.tools.workspace_tools``: the readers there return one of
 these models so consumers work against a typed shape instead of a bare
 ``dict``.
 """

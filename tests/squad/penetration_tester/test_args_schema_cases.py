@@ -72,7 +72,7 @@ from squad.penetration_tester import (
     _XssArgs,
     _XxeArgs,
 )
-from squad.workspace_tools import (
+from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadAttackForestArgs,
     _ReadRunFileArgs,

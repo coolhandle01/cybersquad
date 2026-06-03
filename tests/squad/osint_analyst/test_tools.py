@@ -26,7 +26,7 @@ class TestOsintAnalystTools:
         from squad.osint_analyst import list_subdomains_tool
 
         with patch(
-            "squad.osint_analyst.discovery.recon_subdomains",
+            "squad.osint_analyst.tools.discovery.recon_subdomains",
             return_value=[f"api.{target_apex}", f"admin.{target_apex}"],
         ) as mimpl:
             result = list_subdomains_tool.func(
@@ -49,7 +49,7 @@ class TestOsintAnalystTools:
             returned=1,
         )
         with patch(
-            "squad.osint_analyst.discovery.recon_endpoints",
+            "squad.osint_analyst.tools.discovery.recon_endpoints",
             return_value=page,
         ) as mimpl:
             result = list_endpoints_tool.func(
@@ -74,7 +74,7 @@ class TestOsintAnalystTools:
 
         host = f"api.{target_apex}"
         with patch(
-            "squad.osint_analyst.discovery.recon_open_ports",
+            "squad.osint_analyst.tools.discovery.recon_open_ports",
             return_value={host: [80, 443]},
         ) as mimpl:
             result = list_open_ports_tool.func(attack_graph_path="attack_graph.json", host=host)
@@ -86,7 +86,9 @@ class TestOsintAnalystTools:
     def test_run_initial_sweep_tool(self, programme_in_workspace, recon_result, tmp_path) -> None:
         from squad.osint_analyst import run_initial_sweep_tool
 
-        with patch("squad.osint_analyst.discovery.run_recon", return_value=recon_result) as mrun:
+        with patch(
+            "squad.osint_analyst.tools.discovery.run_recon", return_value=recon_result
+        ) as mrun:
             result = run_initial_sweep_tool.func()
 
         assert result == "attack_graph.json"
@@ -197,7 +199,7 @@ class TestOsintAnalystTools:
         from squad.osint_analyst import discover_webpages_tool
 
         with patch(
-            "squad.osint_analyst.discovery.probe_endpoints_impl",
+            "squad.osint_analyst.tools.discovery.probe_endpoints_impl",
             return_value=[endpoint],
         ):
             result = discover_webpages_tool.func([f"api.{target_apex}"])
@@ -230,7 +232,7 @@ class TestOsintAnalystTools:
 
         oos_host = urlparse(bystander_url).hostname
         mprobe = MagicMock()
-        with patch("squad.osint_analyst.discovery.probe_endpoints_impl", mprobe):
+        with patch("squad.osint_analyst.tools.discovery.probe_endpoints_impl", mprobe):
             result = invoke_tool(discover_webpages_tool, hostnames=[oos_host])
 
         assert result == []
@@ -248,7 +250,7 @@ class TestOsintAnalystTools:
             service="AWS S3",
         )
         with patch(
-            "squad.osint_analyst.discovery.detect_takeover_candidates",
+            "squad.osint_analyst.tools.discovery.detect_takeover_candidates",
             return_value=[candidate],
         ):
             result = discover_takeover_candidates_tool.func([host])
@@ -274,7 +276,7 @@ class TestOsintAnalystTools:
 
         oos_host = urlparse(bystander_url).hostname
         mdetect = MagicMock()
-        with patch("squad.osint_analyst.discovery.detect_takeover_candidates", mdetect):
+        with patch("squad.osint_analyst.tools.discovery.detect_takeover_candidates", mdetect):
             result = invoke_tool(discover_takeover_candidates_tool, hostnames=[oos_host])
 
         assert result == []
@@ -304,7 +306,7 @@ class TestOsintAnalystTools:
 
         names = [f"api.{target_apex}", f"admin.{target_apex}"]
         with patch(
-            "squad.osint_analyst.discovery.cert_transparency",
+            "squad.osint_analyst.tools.discovery.cert_transparency",
             return_value=names,
         ) as m:
             result = discover_subdomains_tool.func(target_apex)
@@ -320,7 +322,7 @@ class TestOsintAnalystTools:
         # waybackurls occasionally emits a schemeless / malformed entry; the
         # wrapper drops it rather than failing the whole batch.
         with patch(
-            "squad.osint_analyst.discovery.historical_urls",
+            "squad.osint_analyst.tools.discovery.historical_urls",
             return_value=[good, "not a url", f"{target_apex}/no-scheme"],
         ) as m:
             result = discover_historical_urls_tool.func(target_apex)
@@ -339,7 +341,7 @@ class TestOsintAnalystTools:
         # instances or dicts, so this exercises the dict path.
         endpoints_payload = [endpoint.model_dump(mode="json")]
         with patch(
-            "squad.osint_analyst.discovery.detect_llm_endpoints",
+            "squad.osint_analyst.tools.discovery.detect_llm_endpoints",
             return_value=[endpoint],
         ) as m:
             result = discover_llm_endpoints_tool.func(endpoints_payload)

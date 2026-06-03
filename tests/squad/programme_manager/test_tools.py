@@ -29,7 +29,7 @@ class TestBrowseProgrammesTool:
             ProgrammePreview(handle="beta", name="Beta", offers_bounties=True),
         ]
         with patch(
-            "squad.programme_manager.h1.browse_programmes",
+            "squad.programme_manager.tools.selection.h1.browse_programmes",
             return_value=previews,
         ) as mbrowse:
             result = browse_programmes_tool.func(offers_bounties=True)
@@ -50,7 +50,7 @@ class TestBrowseProgrammesTool:
         from squad.programme_manager import browse_programmes_tool
 
         with patch(
-            "squad.programme_manager.h1.browse_programmes",
+            "squad.programme_manager.tools.selection.h1.browse_programmes",
             return_value=[],
         ) as mbrowse:
             browse_programmes_tool.func(
@@ -83,7 +83,7 @@ class TestHydrateProgrammeTool:
 
         with (
             patch(
-                "squad.programme_manager.h1.hydrate_programme",
+                "squad.programme_manager.tools.selection.h1.hydrate_programme",
                 return_value=programme,
             ) as mhydrate,
             patch(

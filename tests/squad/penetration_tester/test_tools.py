@@ -26,7 +26,7 @@ class TestPenetrationTesterTools:
         from squad.penetration_tester import nuclei_scan_tool
 
         with patch(
-            "squad.penetration_tester.probes.external.run_nuclei",
+            "squad.penetration_tester.tools.probes.external.run_nuclei",
             return_value=[raw_finding_low],
         ):
             result = nuclei_scan_tool.func([endpoint.model_dump(mode="json")], ["wordpress"])
@@ -37,7 +37,7 @@ class TestPenetrationTesterTools:
         from squad.penetration_tester import sqlmap_tool
 
         with patch(
-            "squad.penetration_tester.probes.injection.run_sqlmap",
+            "squad.penetration_tester.tools.probes.injection.run_sqlmap",
             return_value=[raw_finding_low],
         ):
             result = sqlmap_tool.func([endpoint.model_dump(mode="json")])
@@ -49,7 +49,7 @@ class TestPenetrationTesterTools:
 
         stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
-            "squad.penetration_tester.probes.headers.check_cookies",
+            "squad.penetration_tester.tools.probes.headers.check_cookies",
             return_value=[raw_finding_low],
         ):
             result = cookie_check_tool.func("recon.json")
@@ -61,7 +61,7 @@ class TestPenetrationTesterTools:
 
         stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
-            "squad.penetration_tester.probes.headers.check_cors_misconfiguration",
+            "squad.penetration_tester.tools.probes.headers.check_cors_misconfiguration",
             return_value=[raw_finding_low],
         ):
             result = cors_check_tool.func("recon.json")
@@ -73,7 +73,7 @@ class TestPenetrationTesterTools:
 
         stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
-            "squad.penetration_tester.probes.headers.check_csrf",
+            "squad.penetration_tester.tools.probes.headers.check_csrf",
             return_value=[raw_finding_low],
         ):
             result = csrf_check_tool.func("recon.json")
@@ -84,7 +84,7 @@ class TestPenetrationTesterTools:
         from squad.penetration_tester import ssrf_probe_tool
 
         with patch(
-            "squad.penetration_tester.probes.network.check_ssrf",
+            "squad.penetration_tester.tools.probes.network.check_ssrf",
             return_value=[raw_finding_low],
         ):
             result = ssrf_probe_tool.func([endpoint.model_dump(mode="json")], None)
@@ -96,7 +96,7 @@ class TestPenetrationTesterTools:
 
         stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
-            "squad.penetration_tester.probes.headers.check_header_injection",
+            "squad.penetration_tester.tools.probes.headers.check_header_injection",
             return_value=[raw_finding_low],
         ):
             result = header_injection_tool.func("recon.json")
@@ -108,7 +108,7 @@ class TestPenetrationTesterTools:
 
         stage_model_json(run_dir, "recon.json", recon_result)
         with patch(
-            "squad.penetration_tester.probes.headers.check_host_headers",
+            "squad.penetration_tester.tools.probes.headers.check_host_headers",
             return_value=[raw_finding_low],
         ):
             result = host_header_tool.func("recon.json")
