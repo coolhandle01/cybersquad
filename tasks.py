@@ -17,6 +17,7 @@ from crewai import Agent, Task
 from config import config
 from squad import build_task
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
+from squad.guardrails import validate_select_output
 from squad.osint_analyst import MEMBER as OSINT_ANALYST
 from squad.penetration_tester import MEMBER as PENETRATION_TESTER
 from squad.programme_manager import MEMBER as PROGRAMME_MANAGER
@@ -27,7 +28,14 @@ from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER
 def build_tasks(agents: dict[str, Agent]) -> list[Task]:
     hi = config.human_input
 
-    select = build_task("select", PROGRAMME_MANAGER, agents["programme_manager"], human_input=hi)
+    select = build_task(
+        "select",
+        PROGRAMME_MANAGER,
+        agents["programme_manager"],
+        human_input=hi,
+        guardrail=validate_select_output,
+        max_retries=2,
+    )
 
     recon = build_task(
         "recon", OSINT_ANALYST, agents["osint_analyst"], context=[select], human_input=hi

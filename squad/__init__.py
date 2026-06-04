@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from crewai import LLM, Agent, Task
 from crewai.tools import BaseTool, tool
@@ -210,10 +210,21 @@ def build_task(
     agent: Agent,
     context: list[Task] | None = None,
     human_input: bool = False,
+    *,
+    guardrail: Callable[..., tuple[bool, Any]] | None = None,
+    max_retries: int | None = None,
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
     Reads description and expected_output from ``<member.dir>/<task_name>/``.
+
+    ``guardrail`` is an optional CrewAI *function* guardrail
+    (``(TaskOutput) -> (bool, Any)``) that validates the task output and, on
+    failure, feeds the reason back to the agent for a retry. ``max_retries``
+    bounds those retries; pass it alongside a guardrail so failures converge or
+    fail loudly rather than looping. Both default to ``None`` (CrewAI's own
+    defaults), keeping un-guarded tasks byte-for-byte unchanged. See the
+    ``cybersquad-task`` skill's guardrails section and ``squad/guardrails.py``.
     """
     return Task(
         description=member.read(task_name, "description"),
@@ -221,6 +232,8 @@ def build_task(
         agent=agent,
         context=context or [],
         human_input=human_input,
+        guardrail=guardrail,
+        max_retries=max_retries,
     )
 
 

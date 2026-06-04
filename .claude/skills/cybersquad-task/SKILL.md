@@ -69,6 +69,27 @@ triage = build_task(
 
 Always pass `human_input=hi` where `hi = config.human_input` (set via the `CYBERSQUAD_HUMAN_INPUT` env var). Never hardcode `True` or `False` - the toggle exists so production runs can be unattended while interactive runs gate at each step.
 
+## Guardrails: validate a handoff before it derails downstream
+
+A CrewAI *function* guardrail is `(TaskOutput) -> tuple[bool, Any]`: return `(True, value)` to pass `value` to the next task, or `(False, error)` to feed `error` back to the agent, which re-runs the task up to `max_retries`. Use the **function** variant (plain Python against our typed artefacts), not the LLM-judge variant - our workspace outputs are typed models we can just construct, so there is no free-text judgement to delegate and no extra LLM spend.
+
+Canonical example: `squad/guardrails.py:validate_select_output`, guarding `select -> recon`.
+
+**Validate the workspace artefact, not `result.raw`.** Inter-agent handoff flows through workspace files (see the section above), so the thing that actually derails recon is a malformed `<run_dir>/programme.json`, not the agent's prose answer. `validate_select_output` therefore calls the same `current_programme()` recon will call - validating the exact artefact the next agent reads - and only passes `result.raw` *through* (as the `True` value) so the `context=` chain is unchanged. Keying a guardrail off `result.raw` instead would validate the agent's free-text, which is fragile (agents wrap JSON in prose / fences) and checks the wrong surface.
+
+Wire it through `build_task`, never a bare `Task(guardrail=...)`:
+
+```python
+select = build_task(
+    "select", PROGRAMME_MANAGER, agents["programme_manager"],
+    human_input=hi,
+    guardrail=validate_select_output,
+    max_retries=2,
+)
+```
+
+`build_task`'s `guardrail` / `max_retries` params default to `None` (CrewAI's own defaults), so un-guarded tasks are unchanged. Keep `max_retries` modest - guardrail failures should converge or fail loudly, not loop expensively. Unit-test the guardrail directly with the `make_task_output` fixture (`tests/fixtures/task_output.py`) plus the rundir-staging fixtures (`run_dir` / `programme_in_workspace`); see `tests/squad/test_guardrails.py`. Other handoff boundaries (`recon -> research`, ...) stay un-guarded until the pattern earns its keep there.
+
 ## Upstream alignment
 
 CrewAI's [crewAIInc/skills `design-task`](https://github.com/crewAIInc/skills/blob/main/skills/design-task/SKILL.md) is the canonical upstream best-practice for task design. Its strong recommendation is `output_pydantic` for structured handoff between tasks. Cybersquad deliberately diverges on that one point - see the "workspace files" section above. The rest of upstream `design-task` (single-purpose tasks, specific `expected_output`, function/LLM guardrails, conditional tasks, async, callbacks) we follow without exception.

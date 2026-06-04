@@ -19,6 +19,7 @@ Use these fixtures rather than redefining local equivalents - duplicates drift, 
 | `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_tree`, `attack_forest`; helpers `draft_report_kwargs(**overrides)` / `assess_finding_kwargs(**overrides)` (canonical `Draft Vulnerability Report` / `Assess Raw Finding` kwargs - the inner `Authored*` shape is at `["authored"]`; imported, not fixtures) |
 | `tests/fixtures/responses.py` | `make_response`, `clean_response_body` |
 | `tests/fixtures/tools.py` | `invoke_tool`, `reload_module` |
+| `tests/fixtures/task_output.py` | `make_task_output` |
 
 When adding a new fixture, put it in the matching module rather than re-opening `conftest.py` - that's the single rule that keeps the catalogue navigable.
 
@@ -50,6 +51,7 @@ When adding a new fixture, put it in the matching module rather than re-opening 
 | `clean_response_body` | An HTML body verified at setup time to contain no pentest probe marker - use for "no finding" cases. |
 | `invoke_tool` | Invoke a `@cyber_tool` wrapper through its args_schema (CrewAI's production path). Tests that exercise the `Target*` scope guard take this instead of `.func(...)` so the `AfterValidator` actually fires. |
 | `reload_module` | Wraps `importlib.reload` so tests can pick up env-var changes on module-level singletons. |
+| `make_task_output` | Factory for a real `crewai.TaskOutput` (leading positional `raw`; `description` / `agent` required by the model carry placeholders). The unit-test surface for *task guardrails*, whose signature is `(TaskOutput) -> (bool, Any)` - hands the guardrail the real type rather than a `MagicMock`. Pair with `run_dir` / `programme_in_workspace` when the guardrail validates a workspace artefact (e.g. `validate_select_output`). |
 
 ## Authoring a new in-scope fixture
 
