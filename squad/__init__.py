@@ -112,6 +112,9 @@ def cyber_tool(
 # would hit a circular import if pulled in alongside the top-of-module
 # imports. The deferred-import pattern is explicitly endorsed by ruff for
 # this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
+from squad.tools.recon_search import (  # noqa: E402 - deferred to break import cycle (see comment above)
+    recon_semantic_search_tool,
+)
 from squad.tools.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
     read_attack_forest_tool,
     read_run_file_tool,
@@ -246,4 +249,5 @@ __all__ = [
     "read_attack_forest_tool",
     "read_run_file_tool",
     "read_run_filelist_tool",
+    "recon_semantic_search_tool",
 ]

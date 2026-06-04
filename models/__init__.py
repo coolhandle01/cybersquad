@@ -33,7 +33,7 @@ across every consumer.
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
 | ``models.attack`` | ``AttackGraph``, ``AttackForest``, ``AttackTree``, |
 |                   | ``AttackForestValidationIssue``, ``AttackForestValidationReport``, |
-|                   | ``AttackForestFinalisationError`` |
+|                   | ``AttackForestFinalisationError``, ``ReconSearchResult`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
 
@@ -87,6 +87,7 @@ from models.attack import (
     AttackForestValidationReport,
     AttackGraph,
     AttackTree,
+    ReconSearchResult,
 )
 from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
@@ -183,6 +184,7 @@ __all__ = [
     "RawFindingSummary",
     "RdapRecord",
     "ReconFinalisationError",
+    "ReconSearchResult",
     "RegistrantBundle",
     "Relation",
     "RelationType",
