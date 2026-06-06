@@ -1,16 +1,17 @@
 """
-tests/test_main.py - covers the dry-run-vs-kickoff dispatch added by #144.
+tests/test_main.py - covers ``main.main()``'s single run-scope dispatch.
 
-Only the new MCP-wrapping branches in ``main.main()`` are exercised here.
-The two-line check is: dry-run does *not* enter the
-``provisioned_mcp_tools()`` CM (no MCP subprocess starts during preview);
-a full run *does*, and ``build_crew`` receives the registry the CM
-yielded.
+``main()`` opens ``build_pipeline`` (the MCP scope lives there - see
+test_crew.py) and hands the crew to ``_present``, which routes to one of three
+renderers: dry-run preview, headless run, or the Textual TUI. The crew is
+already built by the time a renderer sees it, so these tests stub the leaf
+calls and assert the routing and the run-metrics handling.
 """
 
 from __future__ import annotations
 
 from argparse import Namespace
+from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
@@ -18,166 +19,178 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-def _mock_kickoff_dependencies(monkeypatch, *, dry_run: bool):
-    """Stub everything ``main.main()`` reaches into except the new MCP wiring.
+def _args(*, dry_run: bool, headless: bool, verbose: bool = False) -> Namespace:
+    return Namespace(verbose=verbose, dry_run=dry_run, headless=headless)
 
-    Yields the captured mocks so tests can assert against them.
-    """
-    import crew
-    import main
-    import mcp_servers
+
+class TestPresent:
+    """``_present`` routes a built crew to exactly one renderer per flag combo."""
+
+    def test_dry_run_routes_to_dry_run_renderer(self, monkeypatch) -> None:
+        import main
+
+        render = MagicMock()
+        monkeypatch.setattr(main, "_render_dry_run", render)
+        monkeypatch.setattr(main, "_run_headless", MagicMock())
+
+        crew = MagicMock(name="crew")
+        main._present(crew, _args(dry_run=True, headless=True))
+
+        render.assert_called_once_with(crew, headless=True)
+
+    def test_headless_routes_to_headless_runner(self, monkeypatch) -> None:
+        import main
+
+        run = MagicMock()
+        monkeypatch.setattr(main, "_run_headless", run)
+        monkeypatch.setattr(main, "_render_dry_run", MagicMock())
+
+        crew = MagicMock(name="crew")
+        main._present(crew, _args(dry_run=False, headless=True, verbose=True))
+
+        run.assert_called_once_with(crew, verbose=True)
+
+    def test_default_routes_to_tui(self, monkeypatch) -> None:
+        import main
+
+        app = MagicMock()
+        tui_cls = MagicMock(return_value=app)
+        monkeypatch.setattr("tui.CybersquadTUI", tui_cls)
+
+        crew = MagicMock(name="crew")
+        main._present(crew, _args(dry_run=False, headless=False, verbose=True))
+
+        tui_cls.assert_called_once_with(crew=crew, verbose=True)
+        app.run.assert_called_once()
+
+
+class TestRenderDryRun:
+    """``_render_dry_run`` previews the layout without kicking off."""
+
+    def test_headless_uses_rich_tables(self, monkeypatch) -> None:
+        import main
+
+        summary = MagicMock()
+        monkeypatch.setattr(main, "dry_run_summary", summary)
+        tui_cls = MagicMock()
+        monkeypatch.setattr("tui.CybersquadTUI", tui_cls)
+
+        crew = MagicMock(name="crew")
+        main._render_dry_run(crew, headless=True)
+
+        summary.assert_called_once_with(crew)
+        tui_cls.assert_not_called()
+
+    def test_tui_renders_app_in_dry_run_mode(self, monkeypatch) -> None:
+        import main
+
+        app = MagicMock()
+        tui_cls = MagicMock(return_value=app)
+        monkeypatch.setattr("tui.CybersquadTUI", tui_cls)
+        monkeypatch.setattr(main, "dry_run_summary", MagicMock())
+
+        crew = MagicMock(name="crew")
+        main._render_dry_run(crew, headless=False)
+
+        tui_cls.assert_called_once_with(crew=crew, dry_run=True)
+        app.run.assert_called_once()
+
+
+def _stub_headless_metrics(monkeypatch):
+    """Stub the metrics + run-id side effects of ``_run_headless``."""
     import runtime
+    import tools.metrics as metrics_mod
 
-    monkeypatch.setattr(
-        main, "parse_args", lambda: Namespace(verbose=False, dry_run=dry_run, headless=True)
-    )
-    monkeypatch.setattr(main, "check_env", lambda: None)
-    monkeypatch.setattr(main, "dry_run_summary", lambda _crew: None)
     monkeypatch.setattr(runtime, "bind_run_id", lambda _run_id: None)
-
-    fake_crew = MagicMock()
-    fake_crew.kickoff = MagicMock(return_value=MagicMock(token_usage=None))
-    fake_build_crew = MagicMock(return_value=fake_crew)
-    monkeypatch.setattr(crew, "build_crew", fake_build_crew)
-
-    sentinel_registry = MagicMock(name="provisioned_mcp_registry")
-    fake_cm = MagicMock()
-    fake_cm.__enter__ = MagicMock(return_value=sentinel_registry)
-    fake_cm.__exit__ = MagicMock(return_value=None)
-    fake_provisioned = MagicMock(return_value=fake_cm)
-    monkeypatch.setattr(mcp_servers, "provisioned_mcp_tools", fake_provisioned)
-
-    return {
-        "build_crew": fake_build_crew,
-        "crew": fake_crew,
-        "provisioned": fake_provisioned,
-        "cm": fake_cm,
-        "sentinel_registry": sentinel_registry,
-    }
+    fake_build = MagicMock(return_value=MagicMock(name="metrics"))
+    monkeypatch.setattr(metrics_mod, "build_run_metrics", fake_build)
+    monkeypatch.setattr(metrics_mod, "print_metrics", MagicMock())
+    monkeypatch.setattr(metrics_mod, "save_metrics", MagicMock())
+    return fake_build
 
 
-class TestMainMCPDispatch:
-    def test_dry_run_skips_mcp_provisioning(self, monkeypatch):
-        """Dry-run path: ``provisioned_mcp_tools()`` is never entered.
-
-        Pins the explicit dry-run skip in ``main.main()`` so a future
-        refactor that accidentally re-routes dry-run through the CM
-        (and thereby starts subprocesses on a preview run) gets caught.
-        """
+class TestRunHeadless:
+    def test_kickoff_without_usage_skips_metrics(self, monkeypatch) -> None:
         import main
 
-        mocks = _mock_kickoff_dependencies(monkeypatch, dry_run=True)
+        fake_build = _stub_headless_metrics(monkeypatch)
+        crew = MagicMock()
+        crew.kickoff.return_value = MagicMock(token_usage=None)
 
-        main.main()
+        main._run_headless(crew, verbose=False)
 
-        # build_crew called once (for dry_run_summary) WITHOUT mcp_tools.
-        mocks["build_crew"].assert_called_once_with(verbose=False)
-        # provisioned_mcp_tools never invoked.
-        mocks["provisioned"].assert_not_called()
-        # kickoff not reached on the dry-run path.
-        mocks["crew"].kickoff.assert_not_called()
+        crew.kickoff.assert_called_once()
+        fake_build.assert_not_called()
 
-    def test_normal_run_wraps_kickoff_in_provisioned_mcp_cm(self, monkeypatch):
-        """Full run: kickoff lives inside the ``provisioned_mcp_tools()`` CM,
-        and ``build_crew`` receives the registry the CM yielded.
-
-        Pins the cybersquad-mcp skill's Rule 2 (no runtime MCP attach):
-        MCPs are wired in *at build_crew() time*, so the kickoff must
-        run with the same registry that ``provisioned_mcp_tools()``
-        yielded - if a future refactor moved kickoff outside the CM,
-        adapter teardown would race the agent's last tool call.
-        """
+    def test_kickoff_with_usage_builds_and_saves_metrics(self, monkeypatch) -> None:
         import main
+        import tools.metrics as metrics_mod
 
-        mocks = _mock_kickoff_dependencies(monkeypatch, dry_run=False)
-
-        main.main()
-
-        mocks["provisioned"].assert_called_once()
-        mocks["cm"].__enter__.assert_called_once()
-        mocks["cm"].__exit__.assert_called_once()
-        mocks["build_crew"].assert_called_once_with(
-            verbose=False, mcp_tools=mocks["sentinel_registry"]
+        fake_build = _stub_headless_metrics(monkeypatch)
+        crew = MagicMock()
+        crew.kickoff.return_value = MagicMock(
+            token_usage=MagicMock(prompt_tokens=10, completion_tokens=20)
         )
-        mocks["crew"].kickoff.assert_called_once()
 
+        main._run_headless(crew, verbose=False)
 
-def _mock_tui_dependencies(monkeypatch, *, dry_run: bool):
-    """Stub the default (non-headless) TUI launch path of ``main.main()``.
+        fake_build.assert_called_once()
+        metrics_mod.save_metrics.assert_called_once()
 
-    The TUI's kickoff runs inside ``App.run()``, so a full run must keep the
-    ``provisioned_mcp_tools()`` CM open for the App's lifetime; a dry-run TUI
-    skips MCP startup. Yields the captured mocks so tests assert against them.
-    """
-    import main
-    import mcp_servers
-
-    monkeypatch.setattr(
-        main, "parse_args", lambda: Namespace(verbose=False, dry_run=dry_run, headless=False)
-    )
-    monkeypatch.setattr(main, "check_env", lambda: None)
-
-    fake_app = MagicMock()
-    fake_tui_cls = MagicMock(return_value=fake_app)
-    monkeypatch.setattr("tui.CybersquadTUI", fake_tui_cls)
-
-    sentinel_registry = MagicMock(name="provisioned_mcp_registry")
-    fake_cm = MagicMock()
-    fake_cm.__enter__ = MagicMock(return_value=sentinel_registry)
-    fake_cm.__exit__ = MagicMock(return_value=None)
-    fake_provisioned = MagicMock(return_value=fake_cm)
-    monkeypatch.setattr(mcp_servers, "provisioned_mcp_tools", fake_provisioned)
-
-    return {
-        "tui_cls": fake_tui_cls,
-        "app": fake_app,
-        "provisioned": fake_provisioned,
-        "cm": fake_cm,
-        "sentinel_registry": sentinel_registry,
-    }
-
-
-class TestMainTUIDispatch:
-    def test_dry_run_tui_skips_mcp_provisioning(self, monkeypatch):
-        """Dry-run TUI renders the layout without kickoff, so it never enters
-        ``provisioned_mcp_tools()`` - the TUI mirror of the headless dry-run
-        bypass, keeping subprocesses off a preview run.
-        """
+    def test_keyboard_interrupt_exits_zero(self, monkeypatch) -> None:
         import main
 
-        mocks = _mock_tui_dependencies(monkeypatch, dry_run=True)
+        _stub_headless_metrics(monkeypatch)
+        crew = MagicMock()
+        crew.kickoff.side_effect = KeyboardInterrupt
+
+        with pytest.raises(SystemExit) as exc:
+            main._run_headless(crew, verbose=False)
+        assert exc.value.code == 0
+
+    def test_unexpected_exception_exits_one(self, monkeypatch) -> None:
+        import main
+
+        _stub_headless_metrics(monkeypatch)
+        crew = MagicMock()
+        crew.kickoff.side_effect = RuntimeError("boom")
+
+        with pytest.raises(SystemExit) as exc:
+            main._run_headless(crew, verbose=False)
+        assert exc.value.code == 1
+
+
+class TestMain:
+    def test_builds_pipeline_then_presents(self, monkeypatch) -> None:
+        """main() opens build_pipeline with the parsed flags and hands the
+        yielded crew to _present - one run-scope, one exit."""
+        import crew as crew_mod
+        import main
+
+        captured: dict[str, object] = {}
+        fake_crew = MagicMock(name="crew")
+
+        @contextmanager
+        def fake_build_pipeline(verbose, dry_run):
+            captured["verbose"] = verbose
+            captured["dry_run"] = dry_run
+            yield fake_crew
+
+        present = MagicMock()
+        args = _args(dry_run=False, headless=True, verbose=True)
+        monkeypatch.setattr(main, "parse_args", lambda: args)
+        monkeypatch.setattr(main, "check_env", lambda: None)
+        monkeypatch.setattr(crew_mod, "build_pipeline", fake_build_pipeline)
+        monkeypatch.setattr(main, "_present", present)
 
         main.main()
 
-        mocks["tui_cls"].assert_called_once_with(verbose=False, dry_run=True)
-        mocks["app"].run.assert_called_once()
-        mocks["provisioned"].assert_not_called()
-
-    def test_normal_tui_run_wraps_app_in_provisioned_mcp_cm(self, monkeypatch):
-        """Full TUI run: the App lives inside the ``provisioned_mcp_tools()``
-        CM, and ``CybersquadTUI`` receives the registry the CM yielded.
-
-        Pins the cybersquad-mcp skill's Rule 2 for the TUI path: kickoff runs
-        during ``App.run()``, so the CM must stay open for the App's lifetime
-        or adapter teardown would race the agent's last tool call.
-        """
-        import main
-
-        mocks = _mock_tui_dependencies(monkeypatch, dry_run=False)
-
-        main.main()
-
-        mocks["provisioned"].assert_called_once()
-        mocks["cm"].__enter__.assert_called_once()
-        mocks["cm"].__exit__.assert_called_once()
-        mocks["tui_cls"].assert_called_once_with(
-            verbose=False, mcp_tools=mocks["sentinel_registry"]
-        )
-        mocks["app"].run.assert_called_once()
+        assert captured == {"verbose": True, "dry_run": False}
+        present.assert_called_once_with(fake_crew, args)
 
 
 class TestParseArgs:
-    def test_headless_flag_defaults_false_and_parses(self, monkeypatch):
+    def test_headless_flag_defaults_false_and_parses(self, monkeypatch) -> None:
         """The ``--headless`` flag is off by default (TUI is the default) and
         flips on when passed.
         """

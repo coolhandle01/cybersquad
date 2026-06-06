@@ -152,14 +152,14 @@ class TestFormatStepMessage:
 
 class TestCybersquadTUIWrapper:
     """Cover tui.py's CybersquadTUI - the cybersquad-specific binding of the
-    generic CrewAIPipelineTUI. The Textual App itself needs textual.pilot to
-    exercise meaningfully; here we only verify that the wrapper passes
-    build_crew() output, record_prefix='cybersquad', and the verbose/dry_run
-    flags through to the base class init. The sidebar reads task names and
-    roles off the crew, so there is no task map to forward.
+    generic CrewAIPipelineTUI. It is a thin pass-through: it forwards an
+    already-built crew and record_prefix='cybersquad' to the base, taking no
+    part in crew construction or MCP provisioning (main builds the crew and
+    hands it in). The sidebar reads task names and roles off the crew, so
+    there is no task map to forward either.
     """
 
-    def test_wires_crew_prefix_and_flags(self) -> None:
+    def test_forwards_crew_prefix_and_flags(self) -> None:
         from unittest.mock import MagicMock
 
         captured: dict[str, object] = {}
@@ -167,43 +167,18 @@ class TestCybersquadTUIWrapper:
         def fake_base_init(self, **kw):
             captured.update(kw)
 
-        fake_crew = MagicMock(tasks=[])
+        fake_crew = MagicMock(name="crew")
 
-        with (
-            patch("crew.build_crew", return_value=fake_crew) as mb,
-            patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init),
-        ):
+        with patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init):
             from tui import CybersquadTUI
 
-            CybersquadTUI(verbose=True, dry_run=False)
+            CybersquadTUI(crew=fake_crew, verbose=True, dry_run=True)
 
-        mb.assert_called_once_with(verbose=True, mcp_tools=None)
         assert captured["crew"] is fake_crew
-        assert "task_map" not in captured
         assert captured["record_prefix"] == "cybersquad"
         assert captured["verbose"] is True
-        assert captured["dry_run"] is False
-
-    def test_forwards_mcp_tools_to_build_crew(self) -> None:
-        from unittest.mock import MagicMock
-
-        captured: dict[str, object] = {}
-
-        def fake_base_init(self, **kw):
-            captured.update(kw)
-
-        fake_crew = MagicMock(tasks=[])
-        sentinel_mcp = MagicMock(name="provisioned_mcp_registry")
-
-        with (
-            patch("crew.build_crew", return_value=fake_crew) as mb,
-            patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init),
-        ):
-            from tui import CybersquadTUI
-
-            CybersquadTUI(verbose=False, mcp_tools=sentinel_mcp)
-
-        mb.assert_called_once_with(verbose=False, mcp_tools=sentinel_mcp)
+        assert captured["dry_run"] is True
+        assert "mcp_tools" not in captured
 
 
 class TestThemeOwnership:

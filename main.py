@@ -102,38 +102,44 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrap
     console.print()
 
 
-def main() -> None:
-    args = parse_args()
-    check_env()
+def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - already-built, decorator-wrapped Crew; see dry_run_summary
+    """Dispatch an already-built crew to the chosen renderer.
 
-    if not args.headless:
-        from mcp_servers import provisioned_mcp_tools
+    One place decides among the three modes - dry-run preview, headless run,
+    Textual TUI - so ``main()`` keeps a single run-scope and a single exit. On
+    a non-dry run the crew's MCP servers are live for the enclosing
+    ``build_pipeline`` block, which spans whichever renderer runs here.
+    """
+    if args.dry_run:
+        _render_dry_run(crew, headless=args.headless)
+    elif args.headless:
+        _run_headless(crew, verbose=args.verbose)
+    else:
         from tui import CybersquadTUI
 
-        # Dry-run TUI renders the layout without kickoff, so it skips MCP
-        # startup - mirroring the headless dry-run bypass below.
-        if args.dry_run:
-            CybersquadTUI(verbose=args.verbose, dry_run=True).run()
-            return
-        # kickoff runs inside the App's worker thread (during .run()), so the
-        # provisioned-MCP CM must stay open for the App's lifetime - the same
-        # build-time-only wiring as the headless path.
-        with provisioned_mcp_tools() as mcp_tools:
-            CybersquadTUI(verbose=args.verbose, mcp_tools=mcp_tools).run()
-        return
+        CybersquadTUI(crew=crew, verbose=args.verbose).run()
 
-    # Import crew after env check
+
+def _render_dry_run(crew: Any, *, headless: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
+    """Show the crew layout without executing it.
+
+    Rich tables on the CLI; the TUI sidebar (with a zeroed metrics block)
+    otherwise. Neither kicks off, so no MCP subprocess is needed - which is why
+    ``build_pipeline`` skips provisioning on a dry run.
+    """
+    if headless:
+        dry_run_summary(crew)
+    else:
+        from tui import CybersquadTUI
+
+        CybersquadTUI(crew=crew, dry_run=True).run()
+
+
+def _run_headless(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
+    """Kick off the crew on the CLI and report its result and run metrics."""
     import runtime
     from config import config
-    from crew import build_crew
-    from mcp_servers import provisioned_mcp_tools
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
-
-    # Dry-run bypasses MCP startup - the agent menu is shown from a no-MCP
-    # build so dry-run does not pull in uvx / subprocess deps.
-    if args.dry_run:
-        dry_run_summary(build_crew(verbose=args.verbose))
-        return
 
     runtime.bind_run_id(datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6])
     started_at = datetime.now(UTC)
@@ -148,10 +154,7 @@ def main() -> None:
     )
 
     try:
-        with provisioned_mcp_tools() as mcp_tools:
-            crew = build_crew(verbose=args.verbose, mcp_tools=mcp_tools)
-            result = crew.kickoff()
-
+        result = crew.kickoff()
         console.print()
         console.print(
             Panel(
@@ -161,7 +164,6 @@ def main() -> None:
                 padding=(1, 2),
             )
         )
-
         usage = getattr(result, "token_usage", None)
         if usage is not None:
             metrics = build_run_metrics(
@@ -173,13 +175,26 @@ def main() -> None:
             )
             print_metrics(metrics)
             save_metrics(metrics, config.reports_dir)
-
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(0)
     except Exception:
         console.print_exception()
         sys.exit(1)
+
+
+def main() -> None:
+    args = parse_args()
+    check_env()
+
+    # Deferred until after check_env so a run missing required credentials
+    # fails with check_env's clear message rather than an import-time error
+    # from config. build_pipeline opens the provisioned-MCP scope (skipped on
+    # a dry run) and yields a ready crew; that scope spans the renderer.
+    from crew import build_pipeline
+
+    with build_pipeline(verbose=args.verbose, dry_run=args.dry_run) as crew:
+        _present(crew, args)
 
 
 if __name__ == "__main__":

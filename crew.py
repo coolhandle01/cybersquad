@@ -6,6 +6,8 @@ Call build_crew() to get a fully wired crew, then crew.kickoff() to run it.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from crewai import LLM, Agent, Crew, Process, Task
@@ -14,7 +16,7 @@ from crewai.memory import Memory
 
 import runtime
 from config import config
-from mcp_servers import ProvisionedMCPTools
+from mcp_servers import ProvisionedMCPTools, provisioned_mcp_tools
 from squad import SQUAD_SKILLS_DIR, SquadMember, build_agent
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
 from squad.osint_analyst import MEMBER as OSINT_ANALYST
@@ -138,3 +140,25 @@ def build_crew(
         skills=[SQUAD_SKILLS_DIR] if SQUAD_SKILLS_DIR.is_dir() else None,
         output_log_file=_resolve_output_log_file(),
     )
+
+
+@contextmanager
+def build_pipeline(verbose: bool | None = None, dry_run: bool = False) -> Iterator[Crew]:
+    """Yield a ready-to-run crew with its MCP servers live for the block.
+
+    Bundles the two-step MCP wiring - open ``provisioned_mcp_tools()``, then
+    ``build_crew`` with the tools it yields - behind one scope, so a caller
+    (``main.py`` and its renderers) gets a finished crew without touching MCP
+    provisioning itself. The MCP subprocesses stay up for the lifetime of the
+    ``with`` block, so that block must enclose ``crew.kickoff()`` /
+    ``App.run()`` - per the ``cybersquad-mcp`` skill (Rule 2, build-time only).
+
+    ``dry_run`` skips MCP startup entirely: a preview never calls a tool, so it
+    must not spawn subprocesses. The yielded crew then carries no MCP-sourced
+    tools (``build_crew``'s ``mcp_tools=None`` path).
+    """
+    if dry_run:
+        yield build_crew(verbose=verbose)
+        return
+    with provisioned_mcp_tools() as mcp_tools:
+        yield build_crew(verbose=verbose, mcp_tools=mcp_tools)
