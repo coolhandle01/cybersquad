@@ -3,7 +3,9 @@ tui.py - Cybersquad Textual TUI.
 
 Wraps the generic CrewAIPipelineTUI with the cybersquad crew. The sidebar
 reads each task's display name and agent role off the crew, so there is no
-separate task map to wire here.
+separate task map to wire here, and the base ships the default theme, so there
+is no CSS to wire either (override CSS_PATH here if cybersquad ever needs its
+own).
 Launch with: python main.py  (default) or python main.py --headless to skip the TUI.
 """
 
@@ -14,8 +16,6 @@ from tools.tui import CrewAIPipelineTUI
 
 
 class CybersquadTUI(CrewAIPipelineTUI):
-    CSS_PATH = "tui.tcss"
-
     def __init__(
         self,
         verbose: bool = False,

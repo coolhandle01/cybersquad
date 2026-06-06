@@ -195,3 +195,29 @@ class TestCybersquadTUIWrapper:
             CybersquadTUI(verbose=False, mcp_tools=sentinel_mcp)
 
         mb.assert_called_once_with(verbose=False, mcp_tools=sentinel_mcp)
+
+
+class TestThemeOwnership:
+    """The generic base owns its default stylesheet; a subclass inherits it
+    and may override by setting its own CSS_PATH. The path is absolute because
+    Textual resolves a relative CSS_PATH against the concrete subclass's module
+    file, not the base's.
+    """
+
+    def test_base_owns_absolute_default_stylesheet(self) -> None:
+        from pathlib import Path
+
+        from tools.tui import CrewAIPipelineTUI
+
+        css = Path(CrewAIPipelineTUI.CSS_PATH)
+        assert css.is_absolute()
+        assert css.name == "default.tcss"
+        assert css.is_file()
+
+    def test_cybersquad_inherits_base_default(self) -> None:
+        from tools.tui import CrewAIPipelineTUI
+        from tui import CybersquadTUI
+
+        # No own CSS_PATH on the subclass -> it inherits the base default.
+        assert "CSS_PATH" not in CybersquadTUI.__dict__
+        assert CybersquadTUI.CSS_PATH == CrewAIPipelineTUI.CSS_PATH

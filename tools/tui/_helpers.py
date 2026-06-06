@@ -34,12 +34,11 @@ def task_layout(tasks: list) -> list[tuple[str, str]]:
     """Build the sidebar entries for a sequential pipeline.
 
     For each task that has an assigned agent, return a ``(heading, role)``
-    pair in pipeline order. ``heading`` is the task's display name -
-    ``Task.name``, stamped from the member's ``name.md`` - falling back to the
-    agent role when a task carries no name; ``role`` is the agent role shown on
-    the task's status row. Because the heading is per-task rather than
-    per-agent, an agent that runs more than one task (the Vulnerability
-    Researcher runs research then triage) gets a distinct heading for each.
+    pair in pipeline order. ``heading`` is the task's display name
+    (``Task.name``), falling back to the agent role when a task carries no
+    name; ``role`` is the agent role shown on the task's status row. Because
+    the heading is per-task rather than per-agent, an agent that runs more than
+    one task in the pipeline gets a distinct heading for each.
 
     Tasks with no agent are skipped, so a partially-wired crew never raises.
     """

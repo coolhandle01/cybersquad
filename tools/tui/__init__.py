@@ -9,6 +9,8 @@ Typical usage in a host application::
     from tools.tui import CrewAIPipelineTUI
 
     class MyAppTUI(CrewAIPipelineTUI):
+        # Optional: the base ships a default theme. Set CSS_PATH to override
+        # it with your own .tcss (resolved next to your subclass's module).
         CSS_PATH = "my_app.tcss"
 
         def __init__(self, verbose: bool = False) -> None:
@@ -29,6 +31,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from crewai import Crew
@@ -50,8 +53,12 @@ logger = logging.getLogger(__name__)
 
 
 class CrewAIPipelineTUI(App):
-    # TODO: implement theming by allowing the client to pass in the path to a .tcss file
-    CSS_PATH = ""
+    # The base owns the default theme. Absolute (not the bare "default.tcss")
+    # because Textual resolves a relative CSS_PATH against the *concrete*
+    # subclass's module file, not this one - so a host app's subclass would
+    # otherwise look for the stylesheet next to its own module. Subclasses
+    # override by setting their own CSS_PATH.
+    CSS_PATH = str(Path(__file__).parent / "default.tcss")
 
     def __init__(
         self,
