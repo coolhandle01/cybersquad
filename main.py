@@ -105,17 +105,18 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrap
 def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - already-built, decorator-wrapped Crew; see dry_run_summary
     """Dispatch an already-built crew to the chosen renderer.
 
-    One place decides among the three modes - dry-run preview, headless run,
-    Textual TUI - so ``main()`` keeps a single run-scope and a single exit. On
-    a non-dry run the crew's MCP servers are live for the enclosing
-    ``build_pipeline`` block, which spans whichever renderer runs here.
+    Two surfaces, each with a dry-run mode: the headless CLI (rich-table preview
+    or a real kickoff) and the Textual TUI (one construction site, told whether
+    it's a dry run). The crew's MCP servers are live for the enclosing
+    ``build_crew`` block, which spans whichever renderer runs here.
     """
-    if args.dry_run:
-        _render_dry_run(crew, headless=args.headless)
-    elif args.headless:
-        _run_headless(crew, verbose=args.verbose)
+    if args.headless:
+        if args.dry_run:
+            dry_run_summary(crew)
+        else:
+            _run_headless(crew, verbose=args.verbose)
     else:
-        _run_tui(crew)
+        _run_tui(crew, dry_run=args.dry_run)
 
 
 def _new_run_id() -> str:
@@ -123,21 +124,20 @@ def _new_run_id() -> str:
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
 
 
-def _run_tui(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
-    """Run the crew in the Textual TUI, injecting cybersquad's run lifecycle.
+def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
+    """Run, or on a dry run preview, the crew in the Textual TUI.
 
-    The TUI package knows only CrewAI + Textual; the cybersquad-specific bits -
-    binding the run id, persisting run metrics, estimating USD cost - are passed
-    in as callbacks, and the run id surfaces only as the human-readable
-    ``pipeline_name`` title. Token usage for the live display is read off CrewAI
-    inside the TUI itself.
+    The single TUI construction site. The TUI package knows only CrewAI +
+    Textual; the cybersquad-specific bits - binding the run id, persisting run
+    metrics, estimating USD cost - are passed in as callbacks, and the run id
+    surfaces only as the human-readable ``pipeline_name`` title. On a dry run
+    nothing kicks off, so the callbacks never fire and no run id is bound.
     """
     import runtime
     from config import config
     from tools.metrics import build_run_metrics, estimate_cost, save_metrics
     from tools.tui import CybersquadTUI
 
-    runtime.bind_run_id(_new_run_id())
     # Seeded so a freakishly fast run can't race on_start; on_start overwrites
     # it right before kickoff for an accurate duration.
     state: dict[str, datetime] = {"started_at": datetime.now(UTC)}
@@ -161,35 +161,21 @@ def _run_tui(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see d
     def get_token_cost(input_tokens: int, output_tokens: int) -> float:
         return estimate_cost(config.llm.model, input_tokens, output_tokens)
 
+    if dry_run:
+        pipeline_name = "Bug Bounty"
+    else:
+        runtime.bind_run_id(_new_run_id())
+        pipeline_name = f"Bug Bounty #{runtime.run_id}"
+
     CybersquadTUI(
         crew=crew,
         record_prefix="cybersquad",
-        pipeline_name=f"Bug Bounty #{runtime.run_id}",
+        pipeline_name=pipeline_name,
+        dry_run=dry_run,
         on_start=on_start,
         on_complete=on_complete,
         get_token_cost=get_token_cost,
     ).run()
-
-
-def _render_dry_run(crew: Any, *, headless: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
-    """Show the crew layout without executing it.
-
-    Rich tables on the CLI; the TUI sidebar (with a zeroed metrics block)
-    otherwise. Neither kicks off - ``build_pipeline`` still provisions the MCP
-    servers (a dry run is about not executing tasks, not skipping provisioning),
-    they just go unused here.
-    """
-    if headless:
-        dry_run_summary(crew)
-    else:
-        from tools.tui import CybersquadTUI
-
-        CybersquadTUI(
-            crew=crew,
-            record_prefix="cybersquad",
-            pipeline_name="Bug Bounty (dry run)",
-            dry_run=True,
-        ).run()
 
 
 def _run_headless(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
@@ -246,12 +232,11 @@ def main() -> None:
 
     # Deferred until after check_env so a run missing required credentials
     # fails with check_env's clear message rather than an import-time error
-    # from config. build_pipeline opens the provisioned-MCP scope and yields a
-    # ready crew; that scope spans the renderer (dry-run still provisions - it
-    # just doesn't kick off).
-    from crew import build_pipeline
+    # from config. build_crew opens the provisioned-MCP scope and yields a ready
+    # crew; that scope spans the renderer (dry-run still provisions).
+    from crew import build_crew
 
-    with build_pipeline(verbose=args.verbose) as crew:
+    with build_crew(verbose=args.verbose) as crew:
         _present(crew, args)
 
 

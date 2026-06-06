@@ -1,11 +1,12 @@
 """
 tests/test_main.py - covers ``main.main()``'s single run-scope dispatch.
 
-``main()`` opens ``build_pipeline`` (the MCP scope lives there - see
-test_crew.py) and hands the crew to ``_present``, which routes to one of three
-renderers: dry-run preview, headless run, or the Textual TUI. The crew is
-already built by the time a renderer sees it, so these tests stub the leaf
-calls and assert the routing and the run-metrics handling.
+``main()`` opens ``build_crew`` (the MCP scope lives there - see test_crew.py)
+and hands the crew to ``_present``, which routes to the headless CLI (rich-table
+dry-run preview or a real kickoff) or the Textual TUI (one construction site,
+told whether it's a dry run). The crew is already built by the time a renderer
+sees it, so these tests stub the leaf calls and assert the routing and the
+run-metrics handling.
 """
 
 from __future__ import annotations
@@ -28,79 +29,45 @@ def _args(*, dry_run: bool, headless: bool, verbose: bool = False) -> Namespace:
 class TestPresent:
     """``_present`` routes a built crew to exactly one renderer per flag combo."""
 
-    def test_dry_run_routes_to_dry_run_renderer(self, monkeypatch) -> None:
+    def test_headless_dry_run_uses_rich_tables(self, monkeypatch) -> None:
         import main
 
-        render = MagicMock()
-        monkeypatch.setattr(main, "_render_dry_run", render)
+        summary = MagicMock()
+        monkeypatch.setattr(main, "dry_run_summary", summary)
         monkeypatch.setattr(main, "_run_headless", MagicMock())
+        monkeypatch.setattr(main, "_run_tui", MagicMock())
 
         crew = MagicMock(name="crew")
         main._present(crew, _args(dry_run=True, headless=True))
 
-        render.assert_called_once_with(crew, headless=True)
+        summary.assert_called_once_with(crew)
 
-    def test_headless_routes_to_headless_runner(self, monkeypatch) -> None:
+    def test_headless_run_routes_to_headless_runner(self, monkeypatch) -> None:
         import main
 
         run = MagicMock()
         monkeypatch.setattr(main, "_run_headless", run)
-        monkeypatch.setattr(main, "_render_dry_run", MagicMock())
+        monkeypatch.setattr(main, "dry_run_summary", MagicMock())
+        monkeypatch.setattr(main, "_run_tui", MagicMock())
 
         crew = MagicMock(name="crew")
         main._present(crew, _args(dry_run=False, headless=True, verbose=True))
 
         run.assert_called_once_with(crew, verbose=True)
 
-    def test_default_routes_to_tui(self, monkeypatch) -> None:
+    def test_tui_routes_to_run_tui_carrying_dry_run(self, monkeypatch) -> None:
         import main
 
         run_tui = MagicMock()
         monkeypatch.setattr(main, "_run_tui", run_tui)
-        monkeypatch.setattr(main, "_render_dry_run", MagicMock())
         monkeypatch.setattr(main, "_run_headless", MagicMock())
-
-        crew = MagicMock(name="crew")
-        main._present(crew, _args(dry_run=False, headless=False, verbose=True))
-
-        run_tui.assert_called_once_with(crew)
-
-
-class TestRenderDryRun:
-    """``_render_dry_run`` previews the layout without kicking off."""
-
-    def test_headless_uses_rich_tables(self, monkeypatch) -> None:
-        import main
-
-        summary = MagicMock()
-        monkeypatch.setattr(main, "dry_run_summary", summary)
-        tui_cls = MagicMock()
-        monkeypatch.setattr("tools.tui.CybersquadTUI", tui_cls)
-
-        crew = MagicMock(name="crew")
-        main._render_dry_run(crew, headless=True)
-
-        summary.assert_called_once_with(crew)
-        tui_cls.assert_not_called()
-
-    def test_tui_renders_app_in_dry_run_mode(self, monkeypatch) -> None:
-        import main
-
-        app = MagicMock()
-        tui_cls = MagicMock(return_value=app)
-        monkeypatch.setattr("tools.tui.CybersquadTUI", tui_cls)
         monkeypatch.setattr(main, "dry_run_summary", MagicMock())
 
         crew = MagicMock(name="crew")
-        main._render_dry_run(crew, headless=False)
+        main._present(crew, _args(dry_run=True, headless=False))
 
-        tui_cls.assert_called_once_with(
-            crew=crew,
-            record_prefix="cybersquad",
-            pipeline_name="Bug Bounty (dry run)",
-            dry_run=True,
-        )
-        app.run.assert_called_once()
+        # One TUI path, told whether it's a dry run.
+        run_tui.assert_called_once_with(crew, dry_run=True)
 
 
 def _stub_headless_metrics(monkeypatch) -> dict[str, MagicMock]:
@@ -202,7 +169,7 @@ class TestRunTui:
         app = self._patch_tui(monkeypatch, captured)
 
         crew = MagicMock(name="crew")
-        main._run_tui(crew)
+        main._run_tui(crew, dry_run=False)
 
         # A run id was generated and bound; it surfaces only inside the
         # human-readable pipeline_name title, never as a run_id the TUI knows.
@@ -211,10 +178,28 @@ class TestRunTui:
         assert "run_id" not in captured
         assert captured["crew"] is crew
         assert captured["record_prefix"] == "cybersquad"
+        assert captured["dry_run"] is False
         assert callable(captured["on_start"])
         assert callable(captured["on_complete"])
         assert callable(captured["get_token_cost"])
         app.run.assert_called_once()
+
+    def test_dry_run_skips_run_id_and_uses_plain_name(self, monkeypatch) -> None:
+        import main
+        import runtime
+
+        bound: list[str] = []
+        monkeypatch.setattr(runtime, "bind_run_id", lambda rid: bound.append(rid))
+
+        captured: dict[str, object] = {}
+        self._patch_tui(monkeypatch, captured)
+
+        main._run_tui(MagicMock(name="crew"), dry_run=True)
+
+        # No run to identify: no run id bound, plain title, dry_run flag through.
+        assert bound == []
+        assert captured["pipeline_name"] == "Bug Bounty"
+        assert captured["dry_run"] is True
 
     def test_callbacks_persist_metrics_and_estimate_cost(self, monkeypatch) -> None:
         import main
@@ -233,7 +218,7 @@ class TestRunTui:
 
         captured: dict[str, object] = {}
         self._patch_tui(monkeypatch, captured)
-        main._run_tui(MagicMock(name="crew"))
+        main._run_tui(MagicMock(name="crew"), dry_run=False)
 
         on_start = cast(Callable[[], None], captured["on_start"])
         on_complete = cast(Callable[[object], None], captured["on_complete"])
@@ -260,9 +245,9 @@ class TestRunTui:
 
 
 class TestMain:
-    def test_builds_pipeline_then_presents(self, monkeypatch) -> None:
-        """main() opens build_pipeline with the parsed flags and hands the
-        yielded crew to _present - one run-scope, one exit."""
+    def test_builds_crew_then_presents(self, monkeypatch) -> None:
+        """main() opens build_crew with the parsed flags and hands the yielded
+        crew to _present - one run-scope, one exit."""
         import crew as crew_mod
         import main
 
@@ -270,7 +255,7 @@ class TestMain:
         fake_crew = MagicMock(name="crew")
 
         @contextmanager
-        def fake_build_pipeline(verbose):
+        def fake_build_crew(verbose):
             captured["verbose"] = verbose
             yield fake_crew
 
@@ -278,7 +263,7 @@ class TestMain:
         args = _args(dry_run=False, headless=True, verbose=True)
         monkeypatch.setattr(main, "parse_args", lambda: args)
         monkeypatch.setattr(main, "check_env", lambda: None)
-        monkeypatch.setattr(crew_mod, "build_pipeline", fake_build_pipeline)
+        monkeypatch.setattr(crew_mod, "build_crew", fake_build_crew)
         monkeypatch.setattr(main, "_present", present)
 
         main.main()

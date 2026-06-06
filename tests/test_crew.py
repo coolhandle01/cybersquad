@@ -49,7 +49,7 @@ class TestBuildCrewMCPDistribution:
         captured: dict[str, tuple] = {}
         _wire_build_crew_mocks(monkeypatch, captured)
 
-        crew.build_crew()
+        crew._assemble_crew()
 
         # All six members got an empty crew-wide MCP tuple.
         assert captured, "expected build_agent to be called for at least one member"
@@ -70,22 +70,22 @@ class TestBuildCrewMCPDistribution:
         fake_tool.name = "get_current_time"
         registry = ProvisionedMCPTools(crew_wide=(fake_tool,))
 
-        crew.build_crew(mcp_tools=registry)
+        crew._assemble_crew(mcp_tools=registry)
 
         assert captured, "expected build_agent to be called for at least one member"
         for slug, extras in captured.items():
             assert extras == (fake_tool,), f"member {slug!r} did not receive the MCP tool"
 
     def test_build_crew_forwards_resolved_output_log_file(self, monkeypatch):
-        """``build_crew`` passes ``_resolve_output_log_file()``'s value straight
-        through to ``Crew(output_log_file=...)`` (#167)."""
+        """``_assemble_crew`` passes ``_resolve_output_log_file()``'s value
+        straight through to ``Crew(output_log_file=...)`` (#167)."""
         import crew
 
         captured: dict[str, tuple] = {}
         _wire_build_crew_mocks(monkeypatch, captured)
         monkeypatch.setattr(crew, "_resolve_output_log_file", lambda: "/runs/r1/crew.log")
 
-        crew.build_crew()
+        crew._assemble_crew()
 
         _, kwargs = crew.Crew.call_args
         assert kwargs["output_log_file"] == "/runs/r1/crew.log"
@@ -133,28 +133,28 @@ class TestResolveOutputLogFile:
         assert crew._resolve_output_log_file() is None
 
 
-class TestBuildPipeline:
-    """``build_pipeline`` is the single seam that opens the provisioned-MCP
-    scope and yields a ready crew. Pins the ``cybersquad-mcp`` skill's Rule 2
-    (build-time provisioning): it always opens the CM and keeps it open for the
-    block. Dry-run is about not executing tasks, not about skipping
-    provisioning, so it provisions the same way.
+class TestBuildCrew:
+    """``build_crew`` is the single seam that opens the provisioned-MCP scope and
+    yields a ready crew (assembled by ``_assemble_crew``). Pins the
+    ``cybersquad-mcp`` skill's Rule 2 (build-time provisioning): it always opens
+    the CM and keeps it open for the block. Dry-run is about not executing tasks,
+    not about skipping provisioning, so it provisions the same way.
     """
 
     def test_opens_cm_and_passes_registry(self, monkeypatch) -> None:
         import crew
 
         fake_crew = MagicMock(name="crew")
-        fake_build_crew = MagicMock(return_value=fake_crew)
+        fake_assemble = MagicMock(return_value=fake_crew)
         sentinel_registry = MagicMock(name="provisioned_mcp_registry")
         fake_cm = MagicMock()
         fake_cm.__enter__ = MagicMock(return_value=sentinel_registry)
         fake_cm.__exit__ = MagicMock(return_value=None)
         fake_provisioned = MagicMock(return_value=fake_cm)
-        monkeypatch.setattr(crew, "build_crew", fake_build_crew)
+        monkeypatch.setattr(crew, "_assemble_crew", fake_assemble)
         monkeypatch.setattr(crew, "provisioned_mcp_tools", fake_provisioned)
 
-        with crew.build_pipeline(verbose=False) as built:
+        with crew.build_crew(verbose=False) as built:
             assert built is fake_crew
             # CM is open across the block - teardown has not run yet.
             fake_cm.__exit__.assert_not_called()
@@ -162,4 +162,4 @@ class TestBuildPipeline:
         fake_provisioned.assert_called_once()
         fake_cm.__enter__.assert_called_once()
         fake_cm.__exit__.assert_called_once()
-        fake_build_crew.assert_called_once_with(verbose=False, mcp_tools=sentinel_registry)
+        fake_assemble.assert_called_once_with(verbose=False, mcp_tools=sentinel_registry)

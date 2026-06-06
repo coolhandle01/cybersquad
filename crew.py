@@ -98,23 +98,26 @@ def _resolve_output_log_file() -> str | None:
     return str(log_path)
 
 
-def build_crew(
+def _assemble_crew(
     verbose: bool | None = None,
     mcp_tools: ProvisionedMCPTools | None = None,
 ) -> Crew:
     """
     Instantiate agents and tasks, then wire them into a sequential Crew.
 
+    The pure assembler behind ``build_crew``; callers go through that context
+    manager, which provisions the MCP servers and keeps them live for the crew's
+    lifetime.
+
     Args:
         verbose: Override config.verbose for this run.
                  Defaults to the value in config.py.
         mcp_tools: The provisioned-MCP tool registry produced by
                  ``mcp_servers.provisioned_mcp_tools()``. ``None`` means
-                 no MCP tools (the dry-run path, and the default for tests
-                 that do not exercise MCP wiring). Per the
-                 ``cybersquad-mcp`` skill, this is the only injection
-                 point for MCP-sourced tools - agents cannot attach an
-                 ``MCPServerAdapter`` at runtime.
+                 no MCP tools (the default for tests that do not exercise
+                 MCP wiring). Per the ``cybersquad-mcp`` skill, this is the
+                 only injection point for MCP-sourced tools - agents cannot
+                 attach an ``MCPServerAdapter`` at runtime.
     """
     be_verbose = verbose if verbose is not None else config.verbose
     crew_wide_mcp_tools = mcp_tools.crew_wide if mcp_tools is not None else ()
@@ -143,19 +146,17 @@ def build_crew(
 
 
 @contextmanager
-def build_pipeline(verbose: bool | None = None) -> Iterator[Crew]:
-    """Yield a ready-to-run crew with its MCP servers live for the block.
+def build_crew(verbose: bool | None = None) -> Iterator[Crew]:
+    """Provision the squad's MCP servers and yield a ready-to-run crew.
 
-    Bundles the two-step MCP wiring - open ``provisioned_mcp_tools()``, then
-    ``build_crew`` with the tools it yields - behind one scope, so a caller
-    (``main.py`` and its renderers) gets a finished crew without touching MCP
-    provisioning itself. The MCP subprocesses stay up for the lifetime of the
-    ``with`` block, so that block must enclose ``crew.kickoff()`` /
-    ``App.run()`` - per the ``cybersquad-mcp`` skill (Rule 2, build-time only).
+    The single entry point: it opens ``provisioned_mcp_tools()`` and assembles
+    the crew against the tools it yields, so callers never touch MCP wiring. The
+    MCP subprocesses stay up for the lifetime of the ``with`` block, so that
+    block must enclose ``crew.kickoff()`` / ``App.run()`` - per the
+    ``cybersquad-mcp`` skill (Rule 2, build-time only).
 
-    A dry run uses the same wiring: dry-run means the tasks are not executed,
-    not that provisioning is skipped, so the previewed crew reflects the real
-    tool surface (MCP tools included).
+    Provisioning is unconditional: a dry run still gets the real tool surface
+    (dry-run means the tasks are not executed, not that provisioning is skipped).
     """
     with provisioned_mcp_tools() as mcp_tools:
-        yield build_crew(verbose=verbose, mcp_tools=mcp_tools)
+        yield _assemble_crew(verbose=verbose, mcp_tools=mcp_tools)
