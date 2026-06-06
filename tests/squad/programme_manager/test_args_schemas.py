@@ -9,6 +9,13 @@ against the wrong target. The ``handle`` field in particular is the
 most-mis-called field type in the codebase, so the per-field
 descriptions enforced here are the primary signal the LLM reads.
 
+The generic contract loop (tool wires the explicit schema, every field
+has a description, closed-world mapping) lives in
+``tests/squad/_contract_assertions.py`` and is exercised below by
+parametrising over ``MEMBER.schemas`` - the per-agent schema registry
+moved onto the squad member alongside ``tools``. Agent-specific
+accept / reject cases stay in this file.
+
 The wrappers do not call the H1 API at validation time - the existing
 H1 behavioural tests in ``test_tools.py`` keep their mocking; this
 file only exercises the schema contract.
@@ -20,74 +27,36 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from models.h1 import ScopeType, SubmissionState
-from squad import SquadTool
 from squad.programme_manager import (
     MEMBER,
     _BrowseProgrammesArgs,
     _HydrateProgrammeArgs,
     _SaveProgrammeArgs,
 )
+from tests.squad._contract_assertions import (
+    assert_closed_world_mapping,
+    assert_field_descriptions_present,
+    assert_tool_wires_explicit_schema,
+)
 
 pytestmark = pytest.mark.unit
 
 
-# Tool-name -> explicit schema class. Covers every PM @cyber_tool wrapper.
-_PM_SCHEMAS: dict[str, type[BaseModel]] = {
-    "Browse HackerOne Programmes": _BrowseProgrammesArgs,
-    "Hydrate HackerOne Programme": _HydrateProgrammeArgs,
-    "Save Selected Programme": _SaveProgrammeArgs,
-}
-
-
-def _tools_by_name() -> dict[str, SquadTool]:
-    """Look up MEMBER.tools by display name once, share across tests."""
-    return {t.name: t for t in MEMBER.tools}
-
-
 class TestPmArgsSchemaContracts:
-    @pytest.mark.parametrize("tool_name", sorted(_PM_SCHEMAS))
+    @pytest.mark.parametrize("tool_name", sorted(MEMBER.schemas))
     def test_tool_wires_explicit_schema(self, tool_name: str) -> None:
-        """Every PM typed tool registers the explicit schema class on its Tool."""
-        tool_obj = _tools_by_name()[tool_name]
-        expected = _PM_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
-        )
+        assert_tool_wires_explicit_schema(MEMBER, tool_name)
 
     @pytest.mark.parametrize(
         ("tool_name", "schema_cls"),
-        sorted(_PM_SCHEMAS.items()),
-        ids=sorted(_PM_SCHEMAS),
+        sorted(MEMBER.schemas.items()),
+        ids=sorted(MEMBER.schemas),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Every field on every PM typed-tool schema carries a description."""
-        for field_name, field_info in schema_cls.model_fields.items():
-            desc = field_info.description
-            assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
-            assert isinstance(desc, str) and desc.strip(), (
-                f"{tool_name}::{field_name} description is blank"
-            )
+        assert_field_descriptions_present(tool_name, schema_cls)
 
-    def test_every_pm_cyber_tool_has_schema_mapping(self) -> None:
-        """The mapping above must cover every PM ``@cyber_tool`` wrapper.
-
-        Closed-world structural check: every PM tool whose Tool exposes a
-        private (``_*``) args_schema class name is in ``_PM_SCHEMAS``;
-        every entry in ``_PM_SCHEMAS`` resolves to a registered tool.
-        A new typed tool added without a mapping entry fires this test
-        before reviewers see the PR.
-        """
-        tools = _tools_by_name()
-        private_schema_tools = {
-            name
-            for name, t in tools.items()
-            if getattr(getattr(t, "args_schema", None), "__name__", "").startswith("_")
-        }
-        assert private_schema_tools == set(_PM_SCHEMAS), (
-            "Mismatch between PM typed-tool wrappers and _PM_SCHEMAS: "
-            f"in registry but not mapping = {private_schema_tools - set(_PM_SCHEMAS)}; "
-            f"in mapping but not registry = {set(_PM_SCHEMAS) - private_schema_tools}"
-        )
+    def test_closed_world_mapping(self) -> None:
+        assert_closed_world_mapping(MEMBER)
 
 
 class TestSchemaAcceptReject:

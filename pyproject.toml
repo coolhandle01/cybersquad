@@ -10,15 +10,66 @@ requires-python = ">=3.12"
 dependencies = [
     "crewai[anthropic]>=1.14.0",
     "crewai-tools>=0.15.0",
+    "mcp>=1.0.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
     "beautifulsoup4>=4.12,<5.0",
     "dnspython>=2.6",
+    # email-validator is the canonical Python email validator (the same
+    # library Pydantic's EmailStr uses under the hood). Used by the
+    # ``Email`` primitive in models.primitives - keeps the typed-str
+    # primitive pattern consistent with FQDN / IPAddress / HttpUrl.
+    "email-validator>=2.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0",
+    # CPE (Common Platform Enumeration) parsing + binding normalisation.
+    # nmap -sV emits the legacy CPE 2.2 URI binding (cpe:/a:...); this
+    # library converts it to the canonical CPE 2.3 formatted string so the
+    # typed ``cpe`` fields and the VR's CVE lookup speak one binding.
+    # NOTE: LGPLv3 - the repo's first copyleft dependency. Imported as a
+    # library only (no modification / static linking), so the obligations
+    # are light, but flagging it for the licence record.
+    "cpe>=1.3",
+    # CVSS vector parsing + base-score + severity, the canonical RedHat
+    # implementation of the CVSS spec. Replaces the hand-derived CVSS 3.1
+    # formula in tools/report_tools.calculate_cvss_score and backs the
+    # ``CvssVector`` primitive's validation in models.nvd. Pure-Python, zero
+    # runtime deps. NOTE: LGPLv3+ (same copyleft posture as ``cpe`` above) -
+    # imported as a library only, flagged for the licence record.
+    "cvss>=3.4",
+    # CWE corpus: the full MITRE Common Weakness Enumeration database, bundled
+    # offline (ships the CWE XML inside the wheel - no network). Backs the
+    # ``models.mitre.CWE`` type, which validates a CWE id by corpus membership
+    # and carries MITRE's canonical name/description - no hand-vendored CWE
+    # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
+    "cwe2>=3.0",
 ]
 
 [project.optional-dependencies]
+# Provisioned MCP servers - see the cybersquad-mcp contributor skill and
+# `mcp_servers.py`. Each server is gated by its own `CYBERSQUAD_MCP_*_ENABLED`
+# env var defaulting `false`, so installing the extra is a separate decision
+# from turning the server on.
+#
+# Versions are pinned EXACTLY (==) deliberately. The MCP spec treats every
+# tool's name, description, and inputSchema as untrusted input to the agent
+# (modelcontextprotocol/spec 2025-06-18, basic/index "Security and Trust &
+# Safety"). A vendor minor / patch bump can re-word those fields. Bumping a
+# pin here is therefore a review event - the cybersquad-mcp skill spells
+# out the upgrade ritual (re-vet tool prose; refresh allowlist if the
+# vendor added a tool).
+mcp = [
+    # crewai-tools' MCPServerAdapter depends on `mcpadapt`, shipped under the
+    # `[mcp]` extra. Without it, `MCPServerAdapter.__init__` aborts with an
+    # interactive `click.confirm` install prompt the moment any provisioned
+    # MCP is constructed - a non-TTY environment (CI, web session, daemon)
+    # then crashes the host. Pull the extra explicitly so the dependency is
+    # declared, not inferred from "we installed crewai-tools and hoped".
+    "crewai-tools[mcp]>=1.14.5",
+    # The official Anthropic reference time server.
+    # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
+    "mcp-server-time==2026.6.4",
+]
 dev = [
     # Testing
     "pytest>=8.2",
@@ -26,6 +77,7 @@ dev = [
     "pytest-mock>=3.14",
     "pytest-bdd>=7.2",
     "respx>=0.21",          # mock httpx/requests at transport level
+    "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
     # Linting & formatting
     "ruff>=0.4",
@@ -43,7 +95,7 @@ dev = [
 bounty-squad = "main:main"
 
 [tool.setuptools]
-packages = ["tools"]
+packages = ["tools", "mcp_servers"]
 py-modules = ["config", "models", "tasks", "crew", "main", "runtime"]
 
 # -- pytest --------------------------------------------------------------------
@@ -151,12 +203,12 @@ disallow_untyped_defs = false
 recursive = true
 ignore = [".venv"]
 ignore-paths = ["tests/.*"]
-# Locks the current design-rule health (full-repo score ~9.90; the
+# Locks the current design-rule health (full-repo score ~9.91; the
 # agent-orchestration layer alone scores ~9.97) with a small epsilon
 # for typo-grade noise. A new C0302 file-too-big suppression or a
 # handful of new R0913 / R0914 functions slipping in fails CI - either
 # fix the underlying smell or raise this knob deliberately.
-fail-under = 9.85
+fail-under = 9.88
 
 [tool.pylint."messages control"]
 disable = ["all"]

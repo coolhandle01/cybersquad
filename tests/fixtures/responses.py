@@ -22,8 +22,10 @@ def make_response():
     """Factory for building MagicMock objects shaped like requests.Response.
 
     Use this instead of local _resp/_mock_resp helpers in individual test files.
-    Tool-specific builders (e.g. _post_resp in test_csrf.py, the cookie-aware
-    _resp in test_cookies.py) stay local - they are not generic response mocks.
+    Tool-specific builders that carry extra logic stay local - the cookie-aware
+    _resp in test_cookies.py (exposes ``.raw.headers.getlist`` for multiple
+    Set-Cookie headers) and the POST-context _post_resp in test_csrf.py
+    (intended naming convenience for ``requests.post`` return-value mocks).
     """
 
     def _make(

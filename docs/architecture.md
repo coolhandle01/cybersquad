@@ -16,14 +16,15 @@ cybersquad is a six-agent CrewAI pipeline that autonomously selects HackerOne bu
 | `squad/__init__.py` | `SquadMember` dataclass + `build_agent()` / `build_task()` helpers. Each helper reads prose from a single-purpose `.md` file. |
 | `squad/<member>/{role,goal,backstory}.md` | Three single-purpose files driving the CrewAI Agent. Edit to tune agent behaviour. |
 | `squad/<member>/{description,expected_output}.md` | Two single-purpose files driving the Task description and expected output. |
-| `squad/<member>/__init__.py` | Tool functions (`@tool`) + a module-level `MEMBER = SquadMember(...)` constant. |
+| `squad/<member>/__init__.py` | Registry assembly: imports the member's wrappers, builds the module-level `MEMBER = SquadMember(...)` constant, and re-exports the wrappers. |
+| `squad/<member>/tools/` | The member's `@tool` / `@cyber_tool` / `@pentest_tool` wrapper modules (the CrewAI wrapper layer; kernels live in the top-level `tools/`). Shared wrappers live in `squad/tools/`. |
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
 | `tools/recon/` | Recon tools: subfinder, httpx, dnsx (subdomain-takeover detection), nmap, TLS, DNS, dirfuzz, waybackurls, cert transparency, traceroute, scope guard. |
 | `tools/recon/scope.py` | `filter_in_scope()` - hard scope enforcement boundary. Do not weaken. |
-| `tools/recon_insights.py` | Host-annotation authoring primitives for the OSINT Analyst: HostInsight persistence, quality validation, and final consolidation of sweep.json + insights into recon.json. |
+| `tools/recon_insights.py` | Host-annotation authoring primitives for the OSINT Analyst: HostInsight persistence, quality validation, and final consolidation of attack_graph.json + insights into recon.json. |
 | `tools/pentest/` | Pentest tools: nuclei, sqlmap, CORS, SSRF, XSS, SRI, header injection, source maps, error disclosure. |
 | `tools/cloud/` | Cloud/service checks: S3, Azure Blob, per-engine databases, admin panels, branded panels. |
 | `tools/cloud/databases/` | Per-engine unauthenticated database checks: one file per engine. |
 | `tools/triage_tools.py` | Authoring primitives for the Vulnerability Researcher: per-finding assessment / discard, quality validation, and final consolidation into verified.json. |
 | `tools/report_tools.py` | Authoring primitives for the Technical Author: evidence sanitisation, draft persistence, quality validation, and final consolidation into reports.json. |
-| `tools/cwe_data.py` / `tools/owasp_data.py` | Local CWE / OWASP cheat-sheet catalogues both the Vulnerability Researcher and Technical Author cite. |
+| `models/mitre/cwe.py` (`CWE`) / `tools/owasp_data.py` | CWE enrichment from the bundled MITRE corpus (by id) and the local OWASP cheat-sheet catalogue, both cited by the Vulnerability Researcher and Technical Author. |

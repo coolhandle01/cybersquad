@@ -2,7 +2,7 @@
 
 ``check_s3_buckets`` probes each supplied S3 hostname for public
 listing (HTTP 200 with ``<ListBucketResult``) or bare 200 (publicly
-accessible but no listing). Hostnames come from the wrapper's
+accessible but no listing). FQDNs come from the wrapper's
 scope-filtered agent pick - typically ``*.s3.*.amazonaws.com``
 entries the OSINT Analyst surfaced in ``recon.subdomains``.
 """

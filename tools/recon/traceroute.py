@@ -6,6 +6,7 @@ import logging
 import re
 import shutil
 
+from config import config
 from tools._helpers import _run
 
 logger = logging.getLogger(__name__)
@@ -70,9 +71,20 @@ def run_traceroute(hostnames: list[str], max_hops: int = 20) -> dict[str, list[s
 
     Uses tracepath (no root required) with fallback to traceroute. Returns an
     empty list for any host that times out or where the binary is unavailable.
-    Result is stored in ReconResult.network_hops so all downstream agents can
+    Result is stored in AttackGraph.network_hops so all downstream agents can
     reason about CDN/WAF bypass opportunities (e.g. origin IP directly reachable).
+
+    Skips entirely when ``config.scan.traceroute_enabled`` is False - ICMP
+    from the operator IP is the OA's loudest tool against the target, so
+    STEALTH posture trades the CDN-bypass signal for a quieter footprint.
+    Gated here rather than at the call site so any caller (the sweep,
+    a future per-host pivot tool, a one-off agent invocation) inherits
+    the stealth contract.
     """
+    if not config.scan.traceroute_enabled:
+        logger.debug("traceroute disabled by scan_mode posture; skipping")
+        return {}
+
     binary = shutil.which("tracepath") or shutil.which("traceroute")
     if not binary:
         logger.debug("No tracepath or traceroute binary found; skipping network path trace")

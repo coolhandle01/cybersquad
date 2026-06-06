@@ -18,6 +18,7 @@ from typing import ClassVar
 import pytest
 
 from squad import SQUAD_SKILLS_DIR
+from squad.osint_analyst import MEMBER as OSINT_ANALYST
 from squad.programme_manager import MEMBER as PROGRAMME_MANAGER
 
 pytestmark = pytest.mark.unit
@@ -68,6 +69,30 @@ class TestProgrammeManagerSkills:
     @pytest.mark.parametrize("slug", sorted(EXPECTED))
     def test_skill_frontmatter_name_matches_dir(self, slug: str) -> None:
         skill_md = PROGRAMME_MANAGER.skills_dir / slug / "SKILL.md"
+        name = _frontmatter_name(skill_md)
+        assert name == slug, (name, slug)
+        assert NAME_RE.match(name), name
+
+
+class TestOsintAnalystSkills:
+    EXPECTED: ClassVar[set[str]] = {
+        "recon-flow",
+    }
+
+    def test_skills_dir_exists(self) -> None:
+        assert OSINT_ANALYST.skills_dir.is_dir()
+
+    def test_expected_skills_present(self) -> None:
+        found = {
+            child.name
+            for child in OSINT_ANALYST.skills_dir.iterdir()
+            if child.is_dir() and (child / "SKILL.md").is_file()
+        }
+        assert self.EXPECTED.issubset(found), found
+
+    @pytest.mark.parametrize("slug", sorted(EXPECTED))
+    def test_skill_frontmatter_name_matches_dir(self, slug: str) -> None:
+        skill_md = OSINT_ANALYST.skills_dir / slug / "SKILL.md"
         name = _frontmatter_name(skill_md)
         assert name == slug, (name, slug)
         assert NAME_RE.match(name), name

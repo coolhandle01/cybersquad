@@ -1,0 +1,14 @@
+# Code owners for cybersquad.
+# The last matching pattern takes precedence; a match auto-requests review from
+# the listed owner(s) on every PR that touches it.
+# See https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything in the repository.
+*                       @coolhandle01
+
+# Security-sensitive surfaces, called out explicitly so they keep routing to the
+# maintainer even after ownership is split across co-maintainers.
+/SECURITY.md            @coolhandle01
+/.github/               @coolhandle01
+# Scope enforcement is a documented safety invariant (see CONTRIBUTING.md).
+/tools/recon/scope.py   @coolhandle01

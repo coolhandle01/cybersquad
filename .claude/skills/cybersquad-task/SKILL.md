@@ -30,13 +30,13 @@ This separation is deliberate: prompt iteration is a markdown edit, wiring is a 
 
 When data flows between agents (recon -> attack plan -> findings -> verified -> reports), use the workspace-file pair pattern:
 
-- Producer agent calls a typed `@tool` like `Finalise Research(plan: AttackPlan)` that validates and writes `attack_plan.json` to the run directory; returns the bare filename.
+- Producer agent calls a typed `@tool` like `Finalise Research(plan: AttackForest)` that validates and writes `attack_forest.json` to the run directory; returns the bare filename.
 - The *task's* textual output is freeform briefing prose plus that filename.
-- Consumer agent calls a typed `@tool` like `Read Attack Plan -> AttackPlan` to deserialise the artefact.
+- Consumer agent calls a typed `@tool` like `Read Attack Plan -> AttackForest` to deserialise the artefact.
 
 DO NOT use `output_pydantic=SomeModel` on tasks for inter-agent flow. Three reasons:
 
-1. **Size.** ReconResult is ~115KB / ~30K tokens on real targets. `output_pydantic` puts the full JSON in every downstream `context=`, which torches the LLM window.
+1. **Size.** AttackGraph is ~115KB / ~30K tokens on real targets. `output_pydantic` puts the full JSON in every downstream `context=`, which torches the LLM window.
 2. **Prose-coercion cost.** `output_pydantic` constrains the agent to JSON-only output. Agents naturally want to produce "Here is my reasoning, then the JSON" and JSON parsing breaks on the prose. Suppressing the prose reliably takes non-trivial prompt engineering.
 3. **Both-and.** Workspace files let the task's textual output be reasoning-narrative (which the next agent uses to orient) AND the typed artefact be the structured contract (which downstream code consumes). `output_pydantic` collapses these into one.
 
@@ -68,6 +68,27 @@ triage = build_task(
 ## `human_input` toggle
 
 Always pass `human_input=hi` where `hi = config.human_input` (set via the `CYBERSQUAD_HUMAN_INPUT` env var). Never hardcode `True` or `False` - the toggle exists so production runs can be unattended while interactive runs gate at each step.
+
+## Guardrails: validate a handoff before it derails downstream
+
+A CrewAI *function* guardrail is `(TaskOutput) -> tuple[bool, Any]`: return `(True, value)` to pass `value` to the next task, or `(False, error)` to feed `error` back to the agent, which re-runs the task up to `max_retries`. Use the **function** variant (plain Python against our typed artefacts), not the LLM-judge variant - our workspace outputs are typed models we can just construct, so there is no free-text judgement to delegate and no extra LLM spend.
+
+Canonical example: `squad/guardrails.py:validate_select_output`, guarding `select -> recon`.
+
+**Validate the workspace artefact, not `result.raw`.** Inter-agent handoff flows through workspace files (see the section above), so the thing that actually derails recon is a malformed `<run_dir>/programme.json`, not the agent's prose answer. `validate_select_output` therefore calls the same `current_programme()` recon will call - validating the exact artefact the next agent reads - and only passes `result.raw` *through* (as the `True` value) so the `context=` chain is unchanged. Keying a guardrail off `result.raw` instead would validate the agent's free-text, which is fragile (agents wrap JSON in prose / fences) and checks the wrong surface.
+
+Wire it through `build_task`, never a bare `Task(guardrail=...)`:
+
+```python
+select = build_task(
+    "select", PROGRAMME_MANAGER, agents["programme_manager"],
+    human_input=hi,
+    guardrail=validate_select_output,
+    max_retries=2,
+)
+```
+
+`build_task`'s `guardrail` / `max_retries` params default to `None` (CrewAI's own defaults), so un-guarded tasks are unchanged. Keep `max_retries` modest - guardrail failures should converge or fail loudly, not loop expensively. Unit-test the guardrail directly with the `make_task_output` fixture (`tests/fixtures/task_output.py`) plus the rundir-staging fixtures (`run_dir` / `programme_in_workspace`); see `tests/squad/test_guardrails.py`. Other handoff boundaries (`recon -> research`, ...) stay un-guarded until the pattern earns its keep there.
 
 ## Upstream alignment
 

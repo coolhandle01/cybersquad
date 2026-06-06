@@ -14,11 +14,12 @@ Use these fixtures rather than redefining local equivalents - duplicates drift, 
 | Module | Holds |
 |---|---|
 | `tests/fixtures/domains.py` | `target_url`, `bystander_url`, `callback_url`, `target_apex`, `target_sld`, `make_html_page` |
-| `tests/fixtures/programme.py` | `scope_item_*`, `programme`, `programme_in_workspace`, `dvwa_programme`, `dvwa_in_workspace`, `run_dir` |
+| `tests/fixtures/programme.py` | `scope_item_*`, `programme`, `programme_in_workspace`, `dvwa_programme`, `dvwa_in_workspace`, `run_dir`; staging helpers (imported, not fixtures): `stage_models_json(run_dir, name, model_or_list)` writes a JSON **array** (`findings.json` / `verified.json`), `stage_model_json(run_dir, name, model)` writes a single **object** (`recon.json` / `attack_graph.json`) |
 | `tests/fixtures/recon.py` | `endpoint`, `recon_result`, `make_s3_hostname` / `s3_hostname`, `make_azure_blob_hostname` / `azure_blob_hostname`, `azure_sas_endpoint` |
-| `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_plan_item`, `attack_plan` |
+| `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_tree`, `attack_forest`; helpers `draft_report_kwargs(**overrides)` / `assess_finding_kwargs(**overrides)` (canonical `Draft Vulnerability Report` / `Assess Raw Finding` kwargs - the inner `Authored*` shape is at `["authored"]`; imported, not fixtures) |
 | `tests/fixtures/responses.py` | `make_response`, `clean_response_body` |
 | `tests/fixtures/tools.py` | `invoke_tool`, `reload_module` |
+| `tests/fixtures/task_output.py` | `make_task_output` |
 
 When adding a new fixture, put it in the matching module rather than re-opening `conftest.py` - that's the single rule that keeps the catalogue navigable.
 
@@ -28,7 +29,7 @@ When adding a new fixture, put it in the matching module rather than re-opening 
 |---|---|
 | `make_response` | Factory for `MagicMock` shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, `json`. |
 | `make_html_page` | Factory for minimal HTML pages with `<script>` tags. Default: one script at `{target_url}/app.js`. |
-| `target_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `target_apex`. Flip `target_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_plan_item` all follow. |
+| `target_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `target_apex`. Flip `target_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_tree` all follow. |
 | `target_apex` | Apex domain parsed out of `target_url` (e.g. `example.com`). The derivation point every in-scope fixture builds against - use it when authoring a new in-scope fixture rather than embedding a literal. |
 | `bystander_url` | `https://bystander.example.org` - out-of-scope; use whenever a test exercises the scope guard. |
 | `callback_url` | `https://callback.cybersquad.com` - OOB receiver placeholder. |
@@ -38,7 +39,7 @@ When adding a new fixture, put it in the matching module rather than re-opening 
 | `dvwa_programme` | A `Programme` shaped like Damn Vulnerable Web Application on `http://localhost` / `http://127.0.0.1`. Use for BDD scenarios and integration work that point at a real runnable target (the usual deployment is a local Docker container). |
 | `dvwa_in_workspace` | DVWA staged into the rundir - same shape as `programme_in_workspace` but the in-flight programme is DVWA. Composes on top of `run_dir`. |
 | `endpoint` | An `Endpoint` model at `https://api.<target_apex>`. |
-| `recon_result` | A `ReconResult` combining `programme` and `endpoint`. |
+| `recon_result` | A `AttackGraph` combining `programme` and `endpoint`. |
 | `target_sld` | Second-level-domain prefix of `target_apex` (`example` from `example.com`). The basis for cloud bucket / account names, which cannot embed the apex's dot. |
 | `make_s3_hostname` / `s3_hostname` | Factory + canonical value for in-scope-themed S3 hostnames (`example-assets.s3.us-east-1.amazonaws.com`). Pair shape: factory when a test needs variants, single value for the common case. |
 | `make_azure_blob_hostname` / `azure_blob_hostname` | Same pair shape, for Azure Blob hostnames (`examplestorage.blob.core.windows.net`). |
@@ -46,10 +47,11 @@ When adding a new fixture, put it in the matching module rather than re-opening 
 | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
 | `verified_vuln` | A `VerifiedVulnerability` model. |
 | `disclosure_report` | A `DisclosureReport` derived from `verified_vuln`. |
-| `attack_plan_item` / `attack_plan` | The VR's research artefact the PT consumes. |
+| `attack_tree` / `attack_forest` | The VR's research artefact the PT consumes. |
 | `clean_response_body` | An HTML body verified at setup time to contain no pentest probe marker - use for "no finding" cases. |
 | `invoke_tool` | Invoke a `@cyber_tool` wrapper through its args_schema (CrewAI's production path). Tests that exercise the `Target*` scope guard take this instead of `.func(...)` so the `AfterValidator` actually fires. |
 | `reload_module` | Wraps `importlib.reload` so tests can pick up env-var changes on module-level singletons. |
+| `make_task_output` | Factory for a real `crewai.TaskOutput` (leading positional `raw`; `description` / `agent` required by the model carry placeholders). The unit-test surface for *task guardrails*, whose signature is `(TaskOutput) -> (bool, Any)` - hands the guardrail the real type rather than a `MagicMock`. Pair with `run_dir` / `programme_in_workspace` when the guardrail validates a workspace artefact (e.g. `validate_select_output`). |
 
 ## Authoring a new in-scope fixture
 
@@ -95,4 +97,17 @@ def test_drops_out_of_scope(make_response):
 
 ## Tool-specific response builders
 
-A local response builder that carries extra logic (cookie-jar inspection, POST body reflection - see `_post_resp` in `test_csrf.py`, the cookie-aware `_resp` in `test_cookies.py`) can stay local. The rule is: if the local helper is just constructing a generic mock response, replace it with `make_response`.
+A local response builder that carries extra logic can stay local. Two specific keepers:
+
+- `_resp` in `test_cookies.py` - cookie-jar inspection via `raw.headers.getlist` for multiple Set-Cookie headers.
+- `_post_resp` in `test_csrf.py` - generic in shape but kept for POST-context naming convenience at the call site (16 usages mocking `requests.post` return values).
+
+Otherwise the rule is: if the local helper is just constructing a generic mock response, replace it with `make_response`.
+
+## Args-schema contract tests
+
+Per-agent `tests/squad/<agent>/test_args_schemas.py` files parametrise over `MEMBER.schemas` and call the shared assertions in `tests/squad/_contract_assertions.py` (`assert_tool_wires_explicit_schema`, `assert_field_descriptions_present`, `assert_closed_world_mapping`). The helper module is intentionally not a `test_*.py` so pytest does not collect it; it is imported by each per-agent file. Agent-specific accept / reject cases (StrEnum payload rejection, hostname-shape rejection, wording pins like `Submit Report`'s irreversibility description) stay in the per-agent file.
+
+When those case tables outgrow the file-size bar - the Penetration Tester is the first - split along the seam the imports already draw: the generic contract loop (needs `MEMBER` + the shared assertions) stays in `test_args_schemas.py`, and the accept / reject cases (need the individual `_XArgs` schema classes) move to a sibling `test_args_schema_cases.py`. The two import sets are disjoint, so nothing is duplicated across the split. Keep the autouse `programme_in_workspace` seeding fixture (the one the typed-target `AfterValidator`s need) in the cases file only - the contract-loop assertions never call `model_validate`, so they do not need it.
+
+When adding a new typed tool, add the schema to `MEMBER.schemas` in the agent's `__init__.py` alongside `tools`; the closed-world test refuses the PR if the registry and the mapping disagree.

@@ -116,12 +116,13 @@ def main() -> None:
     import runtime
     from config import config
     from crew import build_crew
+    from mcp_servers import provisioned_mcp_tools
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
 
-    crew = build_crew(verbose=args.verbose)
-
+    # Dry-run bypasses MCP startup - the agent menu is shown from a no-MCP
+    # build so dry-run does not pull in uvx / subprocess deps.
     if args.dry_run:
-        dry_run_summary(crew)
+        dry_run_summary(build_crew(verbose=args.verbose))
         return
 
     runtime.bind_run_id(datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6])
@@ -137,7 +138,9 @@ def main() -> None:
     )
 
     try:
-        result = crew.kickoff()
+        with provisioned_mcp_tools() as mcp_tools:
+            crew = build_crew(verbose=args.verbose, mcp_tools=mcp_tools)
+            result = crew.kickoff()
 
         console.print()
         console.print(

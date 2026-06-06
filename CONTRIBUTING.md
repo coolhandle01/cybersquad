@@ -13,6 +13,8 @@ python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
+Use Python 3.12 - it is the version CI pins (`.github/workflows/ci.yml`) and the `requires-python` floor.
+
 Then run the full CI stack locally, in this order. All six must pass before pushing - never "push and let CI tell me":
 
 ```bash
@@ -157,7 +159,16 @@ When you find yourself wanting to break a stated rule (rename for clarity in a n
 
 1. Ask. A one-line question is cheap and prevents wrong work.
 2. Note it via FIXME or TODO using the grammar above, and proceed with the original task untouched.
-3. Defer it by opening a follow-up issue and linking it.
+3. Open an issue. Default to a **sub-issue of the parent feature** so it lands in the same PR. Standalone "follow-up" issues need explicit justification of why the concern is orthogonal - name the parent feature or issue number the work belongs under. A feature PR that opens three "follow-on" `feat` issues is the same PR landing with three known gaps; the burnup graph notices.
+
+### Reviewer-surfaced gaps default to blockers
+
+When a PR review surfaces a gap - UA not wired, evidence flow missing, scope guard incomplete, invariant the rest of the codebase enforces this one wrapper does not - the default is **blocker, sub-issue under the parent feature, address before merge**. The exceptions are narrow:
+
+- The gap is genuinely about a different feature. Name it: "this belongs under #N, not the current PR".
+- The cost of holding the PR exceeds the cost of two follow-ups landing later. Justify in the PR thread, not as an unspoken assumption.
+
+If you find yourself reaching for the exception, write down the orthogonal scope explicitly. "Follow-up" as a verbal shrug is the trap this section is closing - the same PR landing with three "follow-on" issues attached is the same PR landing with three known gaps, and the project's issue count grows linearly with features-shipped-with-gaps rather than features-shipped-clean.
 
 ### Tests: derive variants with `model_copy(update=...)`
 

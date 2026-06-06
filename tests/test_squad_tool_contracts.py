@@ -16,8 +16,9 @@ introduces it, before any downstream agent sees the half-typed contract.
 
 from __future__ import annotations
 
+import types
 import typing
-from typing import get_args, get_origin
+from typing import Union, get_args, get_origin
 
 import pytest
 from pydantic import BaseModel
@@ -64,6 +65,24 @@ def _every_tool() -> list[tuple[str, SquadTool]]:
         for tool_obj in member.tools:
             out.append((member.slug, tool_obj))
     return out
+
+
+def _unwrap_optional(annotation: object) -> object:
+    """Strip a trailing ``| None`` so the inner type is what gets checked.
+
+    A lookup tool that returns ``Model | None`` (None as the documented
+    miss / not-found sentinel - e.g. ``Lookup RDAP for ASN`` when the
+    bootstrap registry has no entry for the ASN) is still typed: the
+    schema the agent reads on a hit is the inner model. Only the literal
+    ``None``-union is unwrapped; a two-real-type union (``A | B``) is left
+    intact so it falls through to the failure path. ``dict | None`` also
+    falls through - the inner ``dict`` is not a model.
+    """
+    if get_origin(annotation) in (Union, types.UnionType):
+        non_none = [a for a in get_args(annotation) if a is not type(None)]
+        if len(non_none) == 1:
+            return non_none[0]
+    return annotation
 
 
 def _is_pydantic_model(annotation: object) -> bool:
@@ -114,7 +133,9 @@ class TestSquadToolContracts:
         fail."""
         hints = typing.get_type_hints(tool_obj.func)
         assert "return" in hints, f"{agent_slug}::{tool_obj.name} has no return annotation"
-        ret = hints["return"]
+        # A documented ``Model | None`` miss sentinel is still typed - check
+        # the inner type. ``dict | None`` and ``A | B`` fall through.
+        ret = _unwrap_optional(hints["return"])
 
         if _is_pydantic_model(ret):
             return

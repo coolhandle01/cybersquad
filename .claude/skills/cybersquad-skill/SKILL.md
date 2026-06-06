@@ -108,6 +108,15 @@ Real bad-good pairs from runtime prose shipped under this skill:
 - Bad: "...nothing further down the pipeline will." Architecture
   jargon. Good: "...no other squad member will." (Same leak in three
   files before this skill was tightened.)
+- Bad: "the detail a downstream tester would need", "the downstream
+  VR consumes this directly". "Downstream" frames the squad as a
+  pipeline even when the role beside it is named correctly - the same
+  pipeline-jargon leak wearing a role name. Naming the member is
+  right; the directional qualifier is the leak. Good: "the detail the
+  Penetration Tester would need", "the Vulnerability Researcher
+  consumes this directly." (Five instances across the OSINT Analyst's
+  backstory / description / expected_output before this skill was
+  tightened.)
 - Bad: "the scope-discipline crew skill is the final word." The
   qualifier "crew" is framework-side; the agent sees one class of
   skill. Good: "the scope-discipline skill is the final word."

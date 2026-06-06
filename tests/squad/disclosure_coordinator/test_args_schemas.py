@@ -10,9 +10,13 @@ The per-field description for ``report`` names the consequence; the
 contract test ensures the description is present and that the
 irreversibility wording survives any future rewording.
 
-The two shared workspace readers re-exported into the DC's registry
-(``List Run Files``, ``Read Run File``) are part of the closed-world
-check below.
+The generic contract loop (tool wires the explicit schema, every field
+has a description, closed-world mapping) lives in
+``tests/squad/_contract_assertions.py`` and is exercised below by
+parametrising over ``MEMBER.schemas`` - the per-agent schema registry
+moved onto the squad member alongside ``tools``. Agent-specific cases
+(``Submit Report``'s irreversibility wording, accept / reject shapes)
+stay in this file.
 
 The wrappers do not call the H1 API at validation time - the existing
 H1 behavioural tests in ``test_tools.py`` keep their mocking; this
@@ -24,80 +28,35 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from squad import SquadTool
 from squad.disclosure_coordinator import (
     MEMBER,
     _CheckDuplicateArgs,
     _SubmitReportArgs,
 )
-from squad.workspace_tools import (
-    _ListRunFilesArgs,
-    _ReadRunFileArgs,
+from tests.squad._contract_assertions import (
+    assert_closed_world_mapping,
+    assert_field_descriptions_present,
+    assert_tool_wires_explicit_schema,
 )
 
 pytestmark = pytest.mark.unit
 
 
-# Tool-name -> explicit schema class. Covers every DC @cyber_tool
-# wrapper plus the two shared workspace readers.
-_DC_SCHEMAS: dict[str, type[BaseModel]] = {
-    "Submit Report": _SubmitReportArgs,
-    "Check H1 Duplicate": _CheckDuplicateArgs,
-    # Shared workspace wrappers (re-exported via squad.workspace_tools)
-    "List Run Files": _ListRunFilesArgs,
-    "Read Run File": _ReadRunFileArgs,
-}
-
-
-def _tools_by_name() -> dict[str, SquadTool]:
-    """Look up MEMBER.tools by display name once, share across tests."""
-    return {t.name: t for t in MEMBER.tools}
-
-
 class TestDcArgsSchemaContracts:
-    @pytest.mark.parametrize("tool_name", sorted(_DC_SCHEMAS))
+    @pytest.mark.parametrize("tool_name", sorted(MEMBER.schemas))
     def test_tool_wires_explicit_schema(self, tool_name: str) -> None:
-        """Every DC typed tool registers the explicit schema class on its Tool."""
-        tool_obj = _tools_by_name()[tool_name]
-        expected = _DC_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
-        )
+        assert_tool_wires_explicit_schema(MEMBER, tool_name)
 
     @pytest.mark.parametrize(
         ("tool_name", "schema_cls"),
-        sorted(_DC_SCHEMAS.items()),
-        ids=sorted(_DC_SCHEMAS),
+        sorted(MEMBER.schemas.items()),
+        ids=sorted(MEMBER.schemas),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Every field on every DC typed-tool schema carries a description."""
-        for field_name, field_info in schema_cls.model_fields.items():
-            desc = field_info.description
-            assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
-            assert isinstance(desc, str) and desc.strip(), (
-                f"{tool_name}::{field_name} description is blank"
-            )
+        assert_field_descriptions_present(tool_name, schema_cls)
 
-    def test_every_dc_cyber_tool_has_schema_mapping(self) -> None:
-        """The mapping above must cover every DC ``@cyber_tool`` wrapper.
-
-        Closed-world structural check: every DC tool whose Tool exposes a
-        private (``_*``) args_schema class name is in ``_DC_SCHEMAS``;
-        every entry in ``_DC_SCHEMAS`` resolves to a registered tool.
-        A new typed tool added without a mapping entry fires this test
-        before reviewers see the PR.
-        """
-        tools = _tools_by_name()
-        private_schema_tools = {
-            name
-            for name, t in tools.items()
-            if getattr(getattr(t, "args_schema", None), "__name__", "").startswith("_")
-        }
-        assert private_schema_tools == set(_DC_SCHEMAS), (
-            "Mismatch between DC typed-tool wrappers and _DC_SCHEMAS: "
-            f"in registry but not mapping = {private_schema_tools - set(_DC_SCHEMAS)}; "
-            f"in mapping but not registry = {set(_DC_SCHEMAS) - private_schema_tools}"
-        )
+    def test_closed_world_mapping(self) -> None:
+        assert_closed_world_mapping(MEMBER)
 
     def test_submit_report_description_names_irreversibility(self) -> None:
         """The irreversible operation's field description must name the

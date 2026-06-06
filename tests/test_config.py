@@ -111,6 +111,51 @@ class TestLLMConfig:
             LLMConfig()
 
 
+class TestMCPConfig:
+    def test_time_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_TIME_ENABLED", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_enabled is False
+
+    def test_time_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_enabled is True
+
+    def test_time_timezone_defaults_to_utc(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_TIME_TIMEZONE", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_timezone == "UTC"
+
+    def test_time_timezone_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_TIMEZONE", "Europe/London")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_timezone == "Europe/London"
+
+    def test_connect_timeout_default_is_tighter_than_crewai(self, monkeypatch):
+        """Default 10s vs CrewAI's 30s - stdio should come up fast."""
+        monkeypatch.delenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.connect_timeout_s == 10
+
+    def test_connect_timeout_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", "45")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.connect_timeout_s == 45
+
+
 class TestScanConfig:
     def test_defaults(self, monkeypatch):
         for var in [
@@ -160,3 +205,17 @@ class TestAppConfig:
 
         c = AppConfig()
         assert c.verbose is False
+
+    def test_output_log_enabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_OUTPUT_LOG", raising=False)
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.output_log_enabled is True
+
+    def test_output_log_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_OUTPUT_LOG", "false")
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.output_log_enabled is False

@@ -1,4 +1,4 @@
-"""Recon-shaped fixtures: ``Endpoint`` / ``ReconResult`` plus the
+"""Recon-shaped fixtures: ``Endpoint`` / ``AttackGraph`` plus the
 cloud-storage hostname factories.
 
 Bucket / container names are built from ``target_sld`` (the
@@ -19,7 +19,72 @@ from collections.abc import Callable
 
 import pytest
 
-from models import Endpoint, ReconResult
+from models import AttackGraph, Endpoint, HostInsight, HostPriority, HostRole
+
+
+@pytest.fixture()
+def nmap_xml_two_hosts() -> str:
+    """Real-shape nmap ``-oX`` output: two IPv4 hosts, banners on the first
+    (http/nginx, ssh/OpenSSH), a bare redis service on the second."""
+    return """<?xml version="1.0"?>
+<nmaprun>
+  <host>
+    <address addr="93.184.216.34" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="80">
+        <state state="open"/>
+        <service name="http" product="nginx" version="1.18.0"/>
+      </port>
+      <port protocol="tcp" portid="22">
+        <state state="open"/>
+        <service name="ssh" product="OpenSSH" version="7.6p1" extrainfo="Ubuntu"/>
+      </port>
+    </ports>
+  </host>
+  <host>
+    <address addr="93.184.216.35" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="6379">
+        <state state="open"/>
+        <service name="redis"/>
+      </port>
+    </ports>
+  </host>
+</nmaprun>
+"""
+
+
+@pytest.fixture()
+def nmap_xml_no_hosts() -> str:
+    """nmap ``-oX`` output with zero hosts (host down / nothing matched)."""
+    return '<?xml version="1.0"?>\n<nmaprun></nmaprun>\n'
+
+
+@pytest.fixture()
+def make_host_insight(target_apex: str) -> Callable[..., HostInsight]:
+    """Factory for a well-formed ``HostInsight`` (api.<apex>, HIGH, valid notes).
+
+    ``make_host_insight()`` -> the canonical in-scope insight;
+    ``make_host_insight(hostname=f"admin.{target_apex}", priority=...)`` for
+    variants. Shared so the recon_insights / recon_host_store suites build
+    one insight instead of each redefining a local ``_good_insight``.
+    """
+
+    def _make(**overrides: object) -> HostInsight:
+        base: dict = {
+            "hostname": f"api.{target_apex}",
+            "role": HostRole.API,
+            "priority": HostPriority.HIGH,
+            "notes": (
+                "Public REST API gateway running Spring Boot 2.6 behind Nginx; "
+                "primary target for the programme."
+            ),
+            "detected_tech": ["Nginx", "Spring Boot 2.6"],
+        }
+        base.update(overrides)
+        return HostInsight(**base)
+
+    return _make
 
 
 @pytest.fixture()
@@ -33,8 +98,8 @@ def endpoint(target_apex: str) -> Endpoint:
 
 
 @pytest.fixture()
-def recon_result(programme, endpoint, target_apex: str) -> ReconResult:
-    return ReconResult(
+def recon_result(programme, endpoint, target_apex: str) -> AttackGraph:
+    return AttackGraph(
         programme=programme,
         subdomains=[f"api.{target_apex}", f"admin.{target_apex}"],
         endpoints=[endpoint],

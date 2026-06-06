@@ -1,6 +1,6 @@
 # Adding a new tool
 
-Tools are `@tool`-decorated functions in a `squad/<agent>/__init__.py`. The docstring is the agent's only guidance for when and how to call the tool - write it as an instruction, not a description.
+Tools are `@tool`-decorated functions in a wrapper module under `squad/<agent>/tools/` (shared wrappers live under `squad/tools/`); the agent's `squad/<agent>/__init__.py` imports each wrapper, assembles `MEMBER.tools`, and re-exports it. The docstring is the agent's only guidance for when and how to call the tool - write it as an instruction, not a description.
 
 One concern per tool. The PT agent selects tools based on nmap evidence and detected technologies; bundling unrelated checks removes that selectivity.
 

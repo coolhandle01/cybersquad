@@ -26,13 +26,13 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
-from crewai import Agent, Task
-from crewai.tools import tool
+from crewai import LLM, Agent, Task
+from crewai.tools import BaseTool, tool
 from pydantic import BaseModel
 
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
@@ -90,8 +90,8 @@ def cyber_tool(
 
     Scope safety is a Pydantic-native property of the args_schema, not
     of this decorator: agent-facing target fields are typed via the
-    ``TargetHostnames`` / ``TargetEndpoints`` (list, filter) or
-    ``TargetHostname`` / ``TargetEndpoint`` (single, reject) aliases
+    ``TargetFQDNs`` / ``TargetEndpoints`` (list, filter) or
+    ``TargetFQDN`` / ``TargetEndpoint`` (single, reject) aliases
     in ``tools.recon.scope``. The ``AfterValidator`` on each alias
     consults ``current_programme()`` during
     ``args_schema.model_validate(...)`` - CrewAI's tool-call path runs
@@ -108,12 +108,12 @@ def cyber_tool(
 
 
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,
-# because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
+# because ``squad/tools/workspace_tools.py`` decorates with ``@cyber_tool`` and
 # would hit a circular import if pulled in alongside the top-of-module
 # imports. The deferred-import pattern is explicitly endorsed by ruff for
 # this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
-from squad.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
-    read_attack_plan_tool,
+from squad.tools.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
+    read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,
 )
@@ -131,6 +131,11 @@ class SquadMember:
     dir: Path
     tools: list[SquadTool] = field(default_factory=list)
     task: str = ""
+    # tool-name -> explicit Pydantic args_schema class. Populated alongside
+    # ``tools`` so each member's typed-tool contract lives next to the
+    # registry it describes; the closed-world cross-agent contract test in
+    # ``tests/squad/test_args_schemas.py`` walks every member's schemas.
+    schemas: dict[str, type[BaseModel]] = field(default_factory=dict)
 
     @property
     def slug(self) -> str:
@@ -151,7 +156,12 @@ class SquadMember:
         return self.dir / "skills"
 
 
-def build_agent(member: SquadMember, llm: object, verbose: bool = False) -> Agent:
+def build_agent(
+    member: SquadMember,
+    llm: LLM,
+    verbose: bool = False,
+    crew_wide_mcp_tools: Sequence[BaseTool] = (),
+) -> Agent:
     """Construct a CrewAI Agent from the member's role/goal/backstory files.
 
     Member-specialist skills are passed as a directory path; crewai.skills
@@ -159,13 +169,35 @@ def build_agent(member: SquadMember, llm: object, verbose: bool = False) -> Agen
     (frontmatter only) so the agent sees a cheap menu of what is available
     and pays the body cost only on activation. Squad-wide skills are merged
     in at Crew construction (crew.py) so they are discovered once per run.
+
+    ``crew_wide_mcp_tools`` is the *only* injection point for
+    provisioned-MCP tools. Per the ``cybersquad-mcp`` skill (Rule 2 - no
+    runtime MCP attach), MCP tools come exclusively from
+    ``mcp_servers.provisioned_mcp_tools()`` and are wired in here at
+    ``build_crew()`` time. The list is appended to ``member.tools`` so
+    the per-member typed registry stays authoritative for the
+    cybersquad-side contract tests; MCP tools come from a third-party
+    adapter and live outside the ``SquadTool`` Protocol surface by
+    design.
     """
     skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
+    # Static, contract-tested tools first; provisioned-MCP tools spliced
+    # on the end. The order is observable in the LLM-visible tool menu -
+    # the agent's canonical typed surface opens the menu, MCP-sourced
+    # tools sit after as opaque BaseTool instances (per the discipline
+    # in the cybersquad-mcp skill, see also #144 and #141).
+    #
+    # No explicit `list[BaseTool]` annotation here: `member.tools` is
+    # `list[SquadTool]` - a Protocol that BaseTool satisfies structurally
+    # - but `list[...]` is invariant so mypy cannot reconcile the splat
+    # against a concrete `list[BaseTool]` literal. The runtime contract
+    # (Agent(tools=...) accepts BaseTool) is the same either way.
+    agent_tools = [*member.tools, *crew_wide_mcp_tools]
     return Agent(
         role=member.read("role"),
         goal=member.read("goal"),
         backstory=member.read("backstory"),
-        tools=member.tools,
+        tools=agent_tools,
         skills=skills,
         allow_delegation=False,
         llm=llm,
@@ -179,10 +211,21 @@ def build_task(
     agent: Agent,
     context: list[Task] | None = None,
     human_input: bool = False,
+    *,
+    guardrail: Callable[..., tuple[bool, Any]] | None = None,
+    max_retries: int | None = None,
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
     Reads description and expected_output from ``<member.dir>/<task_name>/``.
+
+    ``guardrail`` is an optional CrewAI *function* guardrail
+    (``(TaskOutput) -> (bool, Any)``) that validates the task output and, on
+    failure, feeds the reason back to the agent for a retry. ``max_retries``
+    bounds those retries; pass it alongside a guardrail so failures converge or
+    fail loudly rather than looping. Both default to ``None`` (CrewAI's own
+    defaults), keeping un-guarded tasks byte-for-byte unchanged. See the
+    ``cybersquad-task`` skill's guardrails section and ``squad/guardrails.py``.
     """
     return Task(
         description=member.read(task_name, "description"),
@@ -190,6 +233,8 @@ def build_task(
         agent=agent,
         context=context or [],
         human_input=human_input,
+        guardrail=guardrail,
+        max_retries=max_retries,
     )
 
 
@@ -199,7 +244,7 @@ __all__ = [
     "build_agent",
     "build_task",
     "cyber_tool",
-    "read_attack_plan_tool",
+    "read_attack_forest_tool",
     "read_run_file_tool",
     "read_run_filelist_tool",
 ]

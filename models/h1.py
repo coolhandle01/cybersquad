@@ -21,7 +21,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from models.finding import VerifiedVulnerability
-from models.primitives import Severity
+from models.nvd import Severity
 
 
 class ScopeType(StrEnum):

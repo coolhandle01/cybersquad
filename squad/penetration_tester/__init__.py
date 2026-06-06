@@ -17,7 +17,7 @@ file owns one cohesive responsibility:
 This module imports each wrapper, assembles ``MEMBER.tools``, and re-
 exports both the wrappers and their args_schema classes so existing
 consumers (tests, ``crew.py``, the contract tests in
-``tests/test_pt_args_schemas.py``) keep importing from
+``tests/squad/penetration_tester/test_args_schemas.py``) keep importing from
 ``squad.penetration_tester`` directly.
 """
 
@@ -25,18 +25,18 @@ from pathlib import Path
 
 from squad import (
     SquadMember,
-    read_attack_plan_tool,
+    read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,
 )
-from squad.penetration_tester._decorator import (
+from squad.penetration_tester.tools._decorator import (
     _parse_endpoints,
     _PentestFn,
     _PentestTool,
     _recon_from_path,
     pentest_tool,
 )
-from squad.penetration_tester.cloud import (
+from squad.penetration_tester.tools.cloud import (
     _AdminPanelsArgs,
     _AzureBlobContainerArgs,
     _AzureSasTokenArgs,
@@ -84,8 +84,8 @@ from squad.penetration_tester.cloud import (
     sensitive_files_tool,
     webmin_tool,
 )
-from squad.penetration_tester.findings import _SaveFindingsArgs, save_findings_tool
-from squad.penetration_tester.probes import (
+from squad.penetration_tester.tools.findings import _SaveFindingsArgs, save_findings_tool
+from squad.penetration_tester.tools.probes import (
     _CmdInjectionArgs,
     _CookieCheckArgs,
     _CorsCheckArgs,
@@ -137,13 +137,18 @@ from squad.penetration_tester.probes import (
     xss_probe_tool,
     xxe_probe_tool,
 )
-from squad.penetration_tester.recon import (
+from squad.penetration_tester.tools.recon import (
     _PtReconEndpointsArgs,
     _PtReconOpenPortsArgs,
     _PtReconSubdomainsArgs,
     recon_endpoints_tool,
     recon_open_ports_tool,
     recon_subdomains_tool,
+)
+from squad.tools.workspace_tools import (
+    _ListRunFilesArgs,
+    _ReadAttackForestArgs,
+    _ReadRunFileArgs,
 )
 
 MEMBER = SquadMember(
@@ -206,10 +211,71 @@ MEMBER = SquadMember(
         recon_open_ports_tool,
         save_findings_tool,
         # Shared workspace wrappers
-        read_attack_plan_tool,
+        read_attack_forest_tool,
         read_run_filelist_tool,
         read_run_file_tool,
     ],
+    schemas={
+        # @pentest_tool probes
+        "Nuclei Scan": _NucleiScanArgs,
+        "SQLMap Injection Scan": _SqlmapArgs,
+        "Cookie Security Check": _CookieCheckArgs,
+        "CORS Misconfiguration Check": _CorsCheckArgs,
+        "CSRF Detection": _CsrfCheckArgs,
+        "SSRF Probe": _SsrfArgs,
+        "Header Injection Check": _HeaderInjectionArgs,
+        "Host Header Attack Check": _HostHeaderArgs,
+        "Header XSS Probe": _HeaderXssArgs,
+        "JS Source Map Scan": _SourceMapsArgs,
+        "Path Traversal Probe": _PathTraversalArgs,
+        "HTTP Parameter Pollution Probe": _HppArgs,
+        "Server-Side Template Injection Probe": _SstiArgs,
+        "Open Redirect Probe": _OpenRedirectArgs,
+        "Reflected XSS Probe": _XssArgs,
+        "Subresource Integrity Check": _SriCheckArgs,
+        "Error and Stack Trace Disclosure Check": _ErrorDisclosureArgs,
+        "NoSQL Injection Scan": _NosqliArgs,
+        "Prompt Injection Probe": _PromptInjectionArgs,
+        "LDAP Injection Probe": _LdapInjectionArgs,
+        "Command Injection Probe": _CmdInjectionArgs,
+        "XXE Probe": _XxeArgs,
+        "Prototype Pollution Check": _PrototypePollutionArgs,
+        "IDOR Probe": _IdorArgs,
+        "JWT Vulnerability Check": _JwtCheckArgs,
+        # @cyber_tool cloud / infra wrappers
+        "S3 Bucket Check": _S3CheckArgs,
+        "Azure Blob Container Check": _AzureBlobContainerArgs,
+        "Azure SAS Token Check": _AzureSasTokenArgs,
+        "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
+        "Unauthenticated CouchDB Check": _CouchdbCheckArgs,
+        "Unauthenticated Redis Check": _RedisCheckArgs,
+        "Unauthenticated MongoDB Check": _MongodbCheckArgs,
+        "Exposed PostgreSQL Check": _PostgresqlCheckArgs,
+        "Exposed MySQL/MariaDB Check": _MysqlCheckArgs,
+        "Sensitive Files Check": _SensitiveFilesArgs,
+        "Admin Panels Check": _AdminPanelsArgs,
+        "cPanel/WHM Check": _CpanelArgs,
+        "Plesk Check": _PleskArgs,
+        "DirectAdmin Check": _DirectadminArgs,
+        "Webmin Check": _WebminArgs,
+        "Grafana Port Check": _GrafanaPortArgs,
+        "Grafana Path Check": _GrafanaPathArgs,
+        "Kibana Port Check": _KibanaPortArgs,
+        "Kibana Path Check": _KibanaPathArgs,
+        "Portainer Port Check": _PortainerPortArgs,
+        "Portainer Path Check": _PortainerPathArgs,
+        "Consul/Vault Port Check": _ConsulVaultPortArgs,
+        "Consul/Vault Path Check": _ConsulVaultPathArgs,
+        # PT recon slicers + Save Findings
+        "Recon Subdomains": _PtReconSubdomainsArgs,
+        "Recon Endpoints": _PtReconEndpointsArgs,
+        "Recon Open Ports": _PtReconOpenPortsArgs,
+        "Save Findings": _SaveFindingsArgs,
+        # Shared workspace wrappers (re-exported via squad.tools.workspace_tools)
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+        "Read Attack Plan": _ReadAttackForestArgs,
+    },
 )
 
 __all__ = [  # noqa: RUF022 - grouped by purpose (Public API / Probes / Cloud / ...), not alphabetised
@@ -277,7 +343,7 @@ __all__ = [  # noqa: RUF022 - grouped by purpose (Public API / Probes / Cloud / 
     "recon_subdomains_tool",
     "save_findings_tool",
     # args_schema classes (per-tool contracts) - re-exported so
-    # tests/test_pt_args_schemas.py and any future consumer can keep
+    # tests/squad/penetration_tester/test_args_schemas.py and any future consumer can keep
     # importing from squad.penetration_tester directly.
     "_AdminPanelsArgs",
     "_AzureBlobContainerArgs",

@@ -8,22 +8,32 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``Hostname``, ``HttpUrl`` |
+| ``models.primitives`` | ``FQDN``, ``HttpUrl``, ``IpAddr``, ``Cidr``, ``Email``, ``IPType`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
-| ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
+| ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpEnrichment``, |
+|                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
+|                  | ``TLSCertificate``, ``LlmEndpoint``; properties |
+|                  | ``DNSRecordProperty``, ``SimpleProperty``, ``SourceProperty``, |
+|                  | ``VulnProperty``; |
+|                  | relations ``RelationType``, ``RRHeader``, ``Relation`` |
+| ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
+|                          | ``RdapRecord`` |
+| ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
-| ``models.cve`` | ``CveEntry`` |
-| ``models.cwe`` | ``CWEEntry`` |
+| ``models.nvd`` | ``CVE``, ``CvssVector``, ``Severity`` |
+| ``models.mitre`` | ``CWE`` |
 | ``models.owasp`` | ``OWASPEntry`` |
-| ``models.dns`` | ``TakeoverCandidate`` |
-| ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
+| ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
+| ``models.insight`` | ``HostRole``, ``HostPriority``, ``HostInsight``, ``HostScore``, |
+|                    | ``OpenPortsMap``, ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
+| ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
+|                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackPlan``, ``AttackPlanItem``, |
-|                   | ``AttackPlanValidationIssue``, ``AttackPlanValidationReport``, |
-|                   | ``AttackPlanFinalisationError`` |
+| ``models.attack`` | ``AttackGraph``, ``AttackForest``, ``AttackTree``, |
+|                   | ``AttackForestValidationIssue``, ``AttackForestValidationReport``, |
+|                   | ``AttackForestFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
 
@@ -36,73 +46,157 @@ that the pre-split layout had to dance around.
 from __future__ import annotations
 
 from models.asset import (
+    AsnRecord,
+    AutnumRecord,
+    AutonomousSystem,
+    Contact,
+    ContactRecord,
+    ContactRole,
+    DNSRecordProperty,
+    DomainRecord,
     Endpoint,
     EndpointPage,
-    HostInsight,
-    HostPriority,
-    HostRole,
+    Identifier,
+    IPAddress,
+    IpEnrichment,
+    IPNetRecord,
     LlmEndpoint,
-    OpenPortsMap,
-    ReconResult,
+    Location,
+    Netblock,
+    Organization,
+    Person,
+    Phone,
+    Product,
+    ProductRelease,
+    RdapRecord,
+    RegistrantBundle,
+    Relation,
+    RelationType,
+    RRHeader,
+    Service,
+    SimpleProperty,
+    SourceProperty,
+    TLSCertificate,
+    Url,
+    VulnProperty,
 )
 from models.attack import (
-    AttackPlan,
-    AttackPlanFinalisationError,
-    AttackPlanItem,
-    AttackPlanValidationIssue,
-    AttackPlanValidationReport,
+    AttackForest,
+    AttackForestFinalisationError,
+    AttackForestValidationIssue,
+    AttackForestValidationReport,
+    AttackGraph,
+    AttackTree,
 )
-from models.cve import CveEntry
-from models.cwe import CWEEntry
-from models.dns import TakeoverCandidate
+from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
     HostAnnotation,
+    HostInsight,
+    HostPriority,
+    HostRole,
+    HostScore,
     InsightValidationIssue,
     InsightValidationReport,
+    OpenPortsMap,
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
+from models.mitre import CWE
+from models.nvd import CVE, CvssVector, Severity
 from models.owasp import OWASPEntry
-from models.primitives import Hostname, HttpUrl, Severity
+from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType
 from models.report import AuthoredDraft
+from models.scanner import (
+    HttpxMode,
+    NmapBanner,
+    NmapHostResult,
+    NmapMode,
+    NmapScanResult,
+    NmapScripts,
+    NmapService,
+)
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
-    "AttackPlan",
-    "AttackPlanFinalisationError",
-    "AttackPlanItem",
-    "AttackPlanValidationIssue",
-    "AttackPlanValidationReport",
+    "CVE",
+    "CWE",
+    "FQDN",
+    "AsnRecord",
+    "AttackForest",
+    "AttackForestFinalisationError",
+    "AttackForestValidationIssue",
+    "AttackForestValidationReport",
+    "AttackGraph",
+    "AttackTree",
     "AuthoredAssessment",
     "AuthoredDraft",
-    "CWEEntry",
-    "CveEntry",
+    "AutnumRecord",
+    "AutonomousSystem",
+    "Cidr",
+    "Contact",
+    "ContactRecord",
+    "ContactRole",
+    "CvssVector",
+    "DNSRecordProperty",
+    "DomainRecord",
+    "Email",
     "Endpoint",
     "EndpointPage",
     "HostAnnotation",
     "HostInsight",
     "HostPriority",
     "HostRole",
-    "Hostname",
+    "HostScore",
     "HttpUrl",
+    "HttpxMode",
+    "IPAddress",
+    "IPNetRecord",
+    "IPType",
+    "Identifier",
     "InsightValidationIssue",
     "InsightValidationReport",
+    "IpAddr",
+    "IpEnrichment",
     "LlmEndpoint",
+    "Location",
+    "Netblock",
+    "NmapBanner",
+    "NmapHostResult",
+    "NmapMode",
+    "NmapScanResult",
+    "NmapScripts",
+    "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
+    "Organization",
+    "Person",
+    "Phone",
+    "Product",
+    "ProductRelease",
     "ProgrammeReportSummary",
+    "PtrRecord",
+    "RRHeader",
     "RawFinding",
     "RawFindingSummary",
+    "RdapRecord",
     "ReconFinalisationError",
-    "ReconResult",
+    "RegistrantBundle",
+    "Relation",
+    "RelationType",
     "RunFile",
     "RunFileContent",
     "RunMetrics",
+    "Service",
     "Severity",
     "SeverityDecision",
+    "SimpleProperty",
+    "SourceProperty",
+    "TLSCertificate",
     "TakeoverCandidate",
+    "Url",
     "VerifiedVulnerability",
+    "VulnProperty",
 ]

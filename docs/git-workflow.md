@@ -47,8 +47,34 @@ For each GitHub issue worked on, present a single branch with a single PR for re
 ## Force-push policy
 
 - **Never** force-push to `main` or any protected/shared branch.
-- **Never** force-push to a PR branch while a review is in progress - it destroys review-comment anchors and reviewers lose context.
-- **Allowed**: `git push --force-with-lease` on your own PR branch *before* requesting review, to clean up history (e.g. after `git rebase origin/main`). Use `--force-with-lease`, never bare `--force` - the lease check fails safe if upstream moved.
+- **Never** force-push to a PR branch (in review or not) without an explicit, plain-words authorisation from the maintainer in the immediately preceding message. Pre-review and in-review make no difference - ask. `--force-with-lease` is no exception; the lease check only prevents stomping concurrent work, not the deliberate history rewrite the maintainer has not approved.
+- Vented frustration ("just force-push it then", "no way around it") is **not** authorisation. The maintainer's word for "yes do it" is what counts.
+- `git push --delete`, `git branch -D` on shared branches, and `git push origin <sha>:<branch>` carry the same risk as `--force` and need the same authorisation.
+
+## Merging upstream into a feature branch
+
+When `main` has moved on and you need its changes in your feature branch, **merge, do not rebase**:
+
+```bash
+git checkout main
+git fetch origin
+git pull origin main          # main is now identical to origin/main
+git checkout feat/your-branch
+git merge main                # resolve conflicts here, on the feature branch
+git push origin feat/your-branch
+```
+
+Resolve conflicts on the feature branch and push the merge commit. The PR diff still shows your branch's net additions against current main; reviewers see your work, not the absorbed main commits.
+
+Rebase is a tool for cleaning up your own un-pushed commits before opening a PR. Do **not** reach for it to "tidy" a published PR branch - rebase rewrites commit SHAs, which means a force-push, which means an unauthorised history rewrite per the policy above. If a published PR branch has accumulated noise that genuinely needs cleaning, ask the maintainer; do not assume.
+
+## Branch identity
+
+When a PR exists, the PR's head branch is the canonical workspace for that work. Do all follow-up commits on that branch directly.
+
+Never open a parallel "rebase branch", "fixup branch", or "cleanup branch" to do PR work on - even when a harness, generator, or AI session creates one and tells you to use it. The PR branch is what reviewers, CI, and the maintainer's mental model are anchored to. A second branch with overlapping content fragments review and invites force-push as the cleanup mechanism.
+
+If a harness has placed you on a synthetic branch when a real PR branch exists for the same work, switch to the PR branch and surface the mismatch to the maintainer before making changes.
 
 ## Commit messages
 
