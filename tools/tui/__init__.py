@@ -2,10 +2,21 @@
 tools/tui/__init__.py - Cybersquad's Textual TUI for the CrewAI pipeline.
 
 CybersquadTUI is a Textual App that renders a sidebar task tracker, an agent
-output log, and a pipeline log for the squad's sequential crew. Its interface
-is a built crew plus a few flags: ``main.py`` builds the crew inside the
-provisioned-MCP scope and hands it in, so the TUI stays out of crew
-construction and MCP provisioning.
+output log, and a pipeline log for the squad's sequential crew. ``main.py``
+builds the crew inside the provisioned-MCP scope and hands it in, so the TUI
+stays out of crew construction and MCP provisioning.
+
+The package depends only on ``crewai`` and ``textual``. Live metrics come
+straight from CrewAI (token usage off ``kickoff()``'s result); everything
+cybersquad-specific is delegated to injected callbacks, so nothing here reaches
+up into ``runtime`` / ``config`` / ``tools.metrics``:
+
+- ``on_start()`` - fired in the worker thread right before kickoff (e.g. to
+  bind a run id and stamp the start time)
+- ``on_complete(result)`` - fired right after kickoff (e.g. to persist run
+  metrics)
+- ``get_token_cost(input_tokens, output_tokens)`` - returns the USD estimate to
+  display; cost is not a CrewAI metric, so the host supplies it
 
 The class owns a default theme (``CSS_PATH`` below); a derived class ships its
 own look by setting its own ``CSS_PATH``.
@@ -19,9 +30,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
 from crewai import Crew
 from textual import work
@@ -55,12 +64,20 @@ class CybersquadTUI(App):
         record_prefix: str = "pipeline",
         verbose: bool = False,
         dry_run: bool = False,
+        run_id: str = "",
+        on_start: Callable[[], None] | None = None,
+        on_complete: Callable[[object], None] | None = None,
+        get_token_cost: Callable[[int, int], float] | None = None,
     ) -> None:
         super().__init__()
         self._crew = crew
         self._record_prefix = record_prefix
         self._verbose = verbose
         self._dry_run = dry_run
+        self._run_id = run_id
+        self._on_start = on_start
+        self._on_complete = on_complete
+        self._get_token_cost = get_token_cost
         self._task_widgets: list[tuple[Label, Label]] = []
         self._crew.step_callback = self._make_step_callback()
 
@@ -109,11 +126,8 @@ class CybersquadTUI(App):
 
     @work(thread=True)
     def _start_run(self) -> None:
-        import runtime
-
-        run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
-        runtime.run_id = run_id
-        started_at = datetime.now(UTC)
+        if self._on_start is not None:
+            self._on_start()
 
         for i, task in enumerate(self._crew.tasks):
             orig: Callable[..., None] | None = task.callback
@@ -123,7 +137,7 @@ class CybersquadTUI(App):
 
         try:
             result = self._crew.kickoff()
-            self.call_from_thread(self._on_done, result, run_id, started_at)
+            self.call_from_thread(self._on_done, result)
         except Exception as exc:
             self.call_from_thread(self._write_agent, f"[bold red]Pipeline error: {exc}[/bold red]")
             self.call_from_thread(self._write_crew, f"[bold red]Pipeline error: {exc}[/bold red]")
@@ -168,36 +182,35 @@ class CybersquadTUI(App):
         if next_idx < len(self._task_widgets):
             self._set_task_running(next_idx)
 
-    def _on_done(self, result: object, run_id: str, started_at: datetime) -> None:
-        from config import config
-        from tools.metrics import build_run_metrics, save_metrics
-
+    def _on_done(self, result: object) -> None:
         raw = getattr(result, "raw", str(result))
         self._write_agent("[bold green]Pipeline complete.[/bold green]")
         self._write_agent(truncate(raw, 2000))
+
+        # Hand the result to the host for persistence; a save failure must not
+        # take the UI down, so swallow and surface it in the pipeline log.
+        if self._on_complete is not None:
+            try:
+                self._on_complete(result)
+            except Exception as exc:
+                logger.debug("on_complete callback error: %s", exc)
+                self._write_crew(f"[yellow]Metrics error: {exc}[/yellow]")
 
         usage = getattr(result, "token_usage", None)
         if usage is None:
             return
 
+        input_tokens = getattr(usage, "prompt_tokens", 0)
+        output_tokens = getattr(usage, "completion_tokens", 0)
+        cost = self._get_token_cost(input_tokens, output_tokens) if self._get_token_cost else 0.0
         try:
-            metrics = build_run_metrics(
-                run_id=run_id,
-                started_at=started_at,
-                llm_model=config.llm.model,
-                input_tokens=getattr(usage, "prompt_tokens", 0),
-                output_tokens=getattr(usage, "completion_tokens", 0),
-            )
-            save_metrics(metrics, config.reports_dir)
             self.query_one("#metrics", Static).update(
                 format_metrics_block(
-                    total_tokens=metrics.total_tokens,
-                    estimated_cost_usd=metrics.estimated_cost_usd,
-                    run_id=run_id,
+                    total_tokens=getattr(usage, "total_tokens", input_tokens + output_tokens),
+                    estimated_cost_usd=cost,
+                    run_id=self._run_id,
                 )
             )
-        except OSError as exc:
-            self._write_crew(f"[yellow]Metrics error: {exc}[/yellow]")
         except NoMatches:
             logger.debug("metrics widget not mounted")
 

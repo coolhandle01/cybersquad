@@ -115,9 +115,60 @@ def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - alr
     elif args.headless:
         _run_headless(crew, verbose=args.verbose)
     else:
-        from tools.tui import CybersquadTUI
+        _run_tui(crew, verbose=args.verbose)
 
-        CybersquadTUI(crew=crew, record_prefix="cybersquad", verbose=args.verbose).run()
+
+def _new_run_id() -> str:
+    """Return a fresh run identifier: UTC timestamp plus a short random suffix."""
+    return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+
+
+def _run_tui(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
+    """Run the crew in the Textual TUI, injecting cybersquad's run lifecycle.
+
+    The TUI package knows only CrewAI + Textual; the cybersquad-specific bits -
+    binding the run id, persisting run metrics, estimating USD cost - are passed
+    in as callbacks. Token usage for the live display is read off CrewAI inside
+    the TUI itself.
+    """
+    import runtime
+    from config import config
+    from tools.metrics import build_run_metrics, estimate_cost, save_metrics
+    from tools.tui import CybersquadTUI
+
+    runtime.bind_run_id(_new_run_id())
+    # Seeded so a freakishly fast run can't race on_start; on_start overwrites
+    # it right before kickoff for an accurate duration.
+    state: dict[str, datetime] = {"started_at": datetime.now(UTC)}
+
+    def on_start() -> None:
+        state["started_at"] = datetime.now(UTC)
+
+    def on_complete(result: object) -> None:
+        usage = getattr(result, "token_usage", None)
+        if usage is None:
+            return
+        metrics = build_run_metrics(
+            run_id=runtime.run_id,
+            started_at=state["started_at"],
+            llm_model=config.llm.model,
+            input_tokens=getattr(usage, "prompt_tokens", 0),
+            output_tokens=getattr(usage, "completion_tokens", 0),
+        )
+        save_metrics(metrics, config.reports_dir)
+
+    def get_token_cost(input_tokens: int, output_tokens: int) -> float:
+        return estimate_cost(config.llm.model, input_tokens, output_tokens)
+
+    CybersquadTUI(
+        crew=crew,
+        record_prefix="cybersquad",
+        run_id=runtime.run_id,
+        verbose=verbose,
+        on_start=on_start,
+        on_complete=on_complete,
+        get_token_cost=get_token_cost,
+    ).run()
 
 
 def _render_dry_run(crew: Any, *, headless: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
@@ -142,7 +193,7 @@ def _run_headless(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decora
     from config import config
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
 
-    runtime.bind_run_id(datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6])
+    runtime.bind_run_id(_new_run_id())
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")
