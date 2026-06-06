@@ -131,3 +131,21 @@ class TestResolveOutputLogFile:
         monkeypatch.setattr("runtime.run_id", "")
 
         assert crew._resolve_output_log_file() is None
+
+
+class TestCrewTasks:
+    """``crew_tasks()`` powers the TUI's per-agent task labelling: a sparse
+    role -> task mapping built from the squad metadata, omitting members that
+    carry no ``task``."""
+
+    def test_maps_roles_to_tasks_and_omits_taskless_members(self):
+        from crew import _SQUAD, crew_tasks
+
+        mapping = crew_tasks()
+
+        members_with_task = [m for m in _SQUAD if m.task]
+        # One entry per member that carries a task; task-less members omitted.
+        assert len(mapping) == len(members_with_task)
+        assert set(mapping.values()) == {m.task for m in members_with_task}
+        # Keys are the agents' roles, read from each member's role.md.
+        assert set(mapping) == {m.read("role") for m in members_with_task}

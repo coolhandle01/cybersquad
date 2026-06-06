@@ -107,9 +107,19 @@ def main() -> None:
     check_env()
 
     if not args.headless:
+        from mcp_servers import provisioned_mcp_tools
         from tui import CybersquadTUI
 
-        CybersquadTUI(verbose=args.verbose, dry_run=args.dry_run).run()
+        # Dry-run TUI renders the layout without kickoff, so it skips MCP
+        # startup - mirroring the headless dry-run bypass below.
+        if args.dry_run:
+            CybersquadTUI(verbose=args.verbose, dry_run=True).run()
+            return
+        # kickoff runs inside the App's worker thread (during .run()), so the
+        # provisioned-MCP CM must stay open for the App's lifetime - the same
+        # build-time-only wiring as the headless path.
+        with provisioned_mcp_tools() as mcp_tools:
+            CybersquadTUI(verbose=args.verbose, mcp_tools=mcp_tools).run()
         return
 
     # Import crew after env check

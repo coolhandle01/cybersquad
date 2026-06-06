@@ -100,3 +100,91 @@ class TestMainMCPDispatch:
             verbose=False, mcp_tools=mocks["sentinel_registry"]
         )
         mocks["crew"].kickoff.assert_called_once()
+
+
+def _mock_tui_dependencies(monkeypatch, *, dry_run: bool):
+    """Stub the default (non-headless) TUI launch path of ``main.main()``.
+
+    The TUI's kickoff runs inside ``App.run()``, so a full run must keep the
+    ``provisioned_mcp_tools()`` CM open for the App's lifetime; a dry-run TUI
+    skips MCP startup. Yields the captured mocks so tests assert against them.
+    """
+    import main
+    import mcp_servers
+
+    monkeypatch.setattr(
+        main, "parse_args", lambda: Namespace(verbose=False, dry_run=dry_run, headless=False)
+    )
+    monkeypatch.setattr(main, "check_env", lambda: None)
+
+    fake_app = MagicMock()
+    fake_tui_cls = MagicMock(return_value=fake_app)
+    monkeypatch.setattr("tui.CybersquadTUI", fake_tui_cls)
+
+    sentinel_registry = MagicMock(name="provisioned_mcp_registry")
+    fake_cm = MagicMock()
+    fake_cm.__enter__ = MagicMock(return_value=sentinel_registry)
+    fake_cm.__exit__ = MagicMock(return_value=None)
+    fake_provisioned = MagicMock(return_value=fake_cm)
+    monkeypatch.setattr(mcp_servers, "provisioned_mcp_tools", fake_provisioned)
+
+    return {
+        "tui_cls": fake_tui_cls,
+        "app": fake_app,
+        "provisioned": fake_provisioned,
+        "cm": fake_cm,
+        "sentinel_registry": sentinel_registry,
+    }
+
+
+class TestMainTUIDispatch:
+    def test_dry_run_tui_skips_mcp_provisioning(self, monkeypatch):
+        """Dry-run TUI renders the layout without kickoff, so it never enters
+        ``provisioned_mcp_tools()`` - the TUI mirror of the headless dry-run
+        bypass, keeping subprocesses off a preview run.
+        """
+        import main
+
+        mocks = _mock_tui_dependencies(monkeypatch, dry_run=True)
+
+        main.main()
+
+        mocks["tui_cls"].assert_called_once_with(verbose=False, dry_run=True)
+        mocks["app"].run.assert_called_once()
+        mocks["provisioned"].assert_not_called()
+
+    def test_normal_tui_run_wraps_app_in_provisioned_mcp_cm(self, monkeypatch):
+        """Full TUI run: the App lives inside the ``provisioned_mcp_tools()``
+        CM, and ``CybersquadTUI`` receives the registry the CM yielded.
+
+        Pins the cybersquad-mcp skill's Rule 2 for the TUI path: kickoff runs
+        during ``App.run()``, so the CM must stay open for the App's lifetime
+        or adapter teardown would race the agent's last tool call.
+        """
+        import main
+
+        mocks = _mock_tui_dependencies(monkeypatch, dry_run=False)
+
+        main.main()
+
+        mocks["provisioned"].assert_called_once()
+        mocks["cm"].__enter__.assert_called_once()
+        mocks["cm"].__exit__.assert_called_once()
+        mocks["tui_cls"].assert_called_once_with(
+            verbose=False, mcp_tools=mocks["sentinel_registry"]
+        )
+        mocks["app"].run.assert_called_once()
+
+
+class TestParseArgs:
+    def test_headless_flag_defaults_false_and_parses(self, monkeypatch):
+        """The ``--headless`` flag is off by default (TUI is the default) and
+        flips on when passed.
+        """
+        import main
+
+        monkeypatch.setattr("sys.argv", ["main.py"])
+        assert main.parse_args().headless is False
+
+        monkeypatch.setattr("sys.argv", ["main.py", "--headless"])
+        assert main.parse_args().headless is True

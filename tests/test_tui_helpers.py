@@ -160,10 +160,32 @@ class TestCybersquadTUIWrapper:
 
             CybersquadTUI(verbose=True, dry_run=False)
 
-        mb.assert_called_once_with(verbose=True)
+        mb.assert_called_once_with(verbose=True, mcp_tools=None)
         mt.assert_called_once_with()
         assert captured["crew"] is fake_crew
         assert captured["task_map"] is fake_task_map
         assert captured["record_prefix"] == "cybersquad"
         assert captured["verbose"] is True
         assert captured["dry_run"] is False
+
+    def test_forwards_mcp_tools_to_build_crew(self) -> None:
+        from unittest.mock import MagicMock
+
+        captured: dict[str, object] = {}
+
+        def fake_base_init(self, **kw):
+            captured.update(kw)
+
+        fake_crew = MagicMock(tasks=[])
+        sentinel_mcp = MagicMock(name="provisioned_mcp_registry")
+
+        with (
+            patch("crew.build_crew", return_value=fake_crew) as mb,
+            patch("crew.crew_tasks", return_value={}),
+            patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init),
+        ):
+            from tui import CybersquadTUI
+
+            CybersquadTUI(verbose=False, mcp_tools=sentinel_mcp)
+
+        mb.assert_called_once_with(verbose=False, mcp_tools=sentinel_mcp)
