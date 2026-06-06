@@ -1,7 +1,7 @@
 """
-tools/tui/_helpers.py - Pure functions extracted from CrewAIPipelineTUI.
+tools/tui/_helpers.py - Pure functions extracted from CybersquadTUI.
 
-The TUI class itself (CrewAIPipelineTUI) is App + widgets + threading and needs
+The TUI class itself (CybersquadTUI) is App + widgets + threading and needs
 a textual.pilot harness to test properly. The pure-logic helpers it relies on -
 truncation, log routing, step-message formatting, sidebar layout, metrics
 block formatting - have no Textual or threading dependency and live here so

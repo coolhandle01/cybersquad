@@ -130,7 +130,7 @@ source = ["."]
 # tools/tui/__init__.py is the Textual App + widget + threading layer and
 # needs a textual.pilot harness to exercise; tracked as debt to remove this
 # omit once the harness lands. Pure helpers live in tools/tui/_helpers.py
-# (branch-cov 100%) and the thin app-binding tui.py is covered directly.
+# (branch-cov 100%) and are tested directly.
 omit = ["tests/*", ".venv/*", "tools/tui/__init__.py"]
 branch = true
 

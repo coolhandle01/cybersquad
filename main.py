@@ -115,24 +115,25 @@ def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - alr
     elif args.headless:
         _run_headless(crew, verbose=args.verbose)
     else:
-        from tui import CybersquadTUI
+        from tools.tui import CybersquadTUI
 
-        CybersquadTUI(crew=crew, verbose=args.verbose).run()
+        CybersquadTUI(crew=crew, record_prefix="cybersquad", verbose=args.verbose).run()
 
 
 def _render_dry_run(crew: Any, *, headless: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
     """Show the crew layout without executing it.
 
     Rich tables on the CLI; the TUI sidebar (with a zeroed metrics block)
-    otherwise. Neither kicks off, so no MCP subprocess is needed - which is why
-    ``build_pipeline`` skips provisioning on a dry run.
+    otherwise. Neither kicks off - ``build_pipeline`` still provisions the MCP
+    servers (a dry run is about not executing tasks, not skipping provisioning),
+    they just go unused here.
     """
     if headless:
         dry_run_summary(crew)
     else:
-        from tui import CybersquadTUI
+        from tools.tui import CybersquadTUI
 
-        CybersquadTUI(crew=crew, dry_run=True).run()
+        CybersquadTUI(crew=crew, record_prefix="cybersquad", dry_run=True).run()
 
 
 def _run_headless(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary

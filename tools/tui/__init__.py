@@ -1,29 +1,18 @@
 """
-tools/tui/__init__.py - Generic CrewAI Pipeline TUI base class.
+tools/tui/__init__.py - Cybersquad's Textual TUI for the CrewAI pipeline.
 
-Provides CrewAIPipelineTUI, a Textual App that renders a sidebar task tracker,
-an agent output log, and a pipeline log for any CrewAI sequential crew.
+CybersquadTUI is a Textual App that renders a sidebar task tracker, an agent
+output log, and a pipeline log for the squad's sequential crew. Its interface
+is a built crew plus a few flags: ``main.py`` builds the crew inside the
+provisioned-MCP scope and hands it in, so the TUI stays out of crew
+construction and MCP provisioning.
 
-Typical usage in a host application::
-
-    from tools.tui import CrewAIPipelineTUI
-
-    class MyAppTUI(CrewAIPipelineTUI):
-        # Optional: the base ships a default theme. Set CSS_PATH to override
-        # it with your own .tcss (resolved next to your subclass's module).
-        CSS_PATH = "my_app.tcss"
-
-        def __init__(self, verbose: bool = False) -> None:
-            crew = build_my_crew(verbose=verbose)
-            super().__init__(
-                crew=crew,
-                record_prefix="myapp",
-                verbose=verbose,
-            )
+The class owns a default theme (``CSS_PATH`` below); a derived class ships its
+own look by setting its own ``CSS_PATH``.
 
 The sidebar reads each task's display name (``Task.name``) and agent role
-straight off ``crew.tasks``, so a host app needs only to wire the crew - no
-separate task map.
+straight off ``crew.tasks``, so the caller only wires the crew - no separate
+task map.
 """
 
 from __future__ import annotations
@@ -52,12 +41,12 @@ from tools.tui._helpers import (
 logger = logging.getLogger(__name__)
 
 
-class CrewAIPipelineTUI(App):
-    # The base owns the default theme. Absolute (not the bare "default.tcss")
+class CybersquadTUI(App):
+    # The class owns the default theme. Absolute (not the bare "default.tcss")
     # because Textual resolves a relative CSS_PATH against the *concrete*
-    # subclass's module file, not this one - so a host app's subclass would
-    # otherwise look for the stylesheet next to its own module. Subclasses
-    # override by setting their own CSS_PATH.
+    # class's module file - so a derived class would otherwise look for the
+    # stylesheet next to its own module. A derived class overrides the theme
+    # by setting its own CSS_PATH.
     CSS_PATH = str(Path(__file__).parent / "default.tcss")
 
     def __init__(
@@ -226,7 +215,7 @@ class CrewAIPipelineTUI(App):
 
 
 class _TUILogHandler(logging.Handler):
-    def __init__(self, app: CrewAIPipelineTUI) -> None:
+    def __init__(self, app: CybersquadTUI) -> None:
         super().__init__()
         self._app = app
 

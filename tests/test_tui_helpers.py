@@ -1,6 +1,6 @@
 """
 tests/test_tui_helpers.py - branch-coverage of the pure helpers extracted from
-the CrewAIPipelineTUI class.
+the CybersquadTUI class.
 
 The Textual App / widget / threading layer in tools/tui/__init__.py needs a
 textual.pilot harness to test (tracked separately); the helpers here are pure
@@ -10,7 +10,6 @@ functions so every conditional path can be exercised by ordinary unit tests.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 from crewai.agents.parser import AgentAction, AgentFinish
@@ -150,58 +149,28 @@ class TestFormatStepMessage:
         assert len(msg) == 300
 
 
-class TestCybersquadTUIWrapper:
-    """Cover tui.py's CybersquadTUI - the cybersquad-specific binding of the
-    generic CrewAIPipelineTUI. It is a thin pass-through: it forwards an
-    already-built crew and record_prefix='cybersquad' to the base, taking no
-    part in crew construction or MCP provisioning (main builds the crew and
-    hands it in). The sidebar reads task names and roles off the crew, so
-    there is no task map to forward either.
-    """
-
-    def test_forwards_crew_prefix_and_flags(self) -> None:
-        from unittest.mock import MagicMock
-
-        captured: dict[str, object] = {}
-
-        def fake_base_init(self, **kw):
-            captured.update(kw)
-
-        fake_crew = MagicMock(name="crew")
-
-        with patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init):
-            from tui import CybersquadTUI
-
-            CybersquadTUI(crew=fake_crew, verbose=True, dry_run=True)
-
-        assert captured["crew"] is fake_crew
-        assert captured["record_prefix"] == "cybersquad"
-        assert captured["verbose"] is True
-        assert captured["dry_run"] is True
-        assert "mcp_tools" not in captured
-
-
 class TestThemeOwnership:
-    """The generic base owns its default stylesheet; a subclass inherits it
-    and may override by setting its own CSS_PATH. The path is absolute because
-    Textual resolves a relative CSS_PATH against the concrete subclass's module
-    file, not the base's.
+    """CybersquadTUI owns its default stylesheet, and a derived class supplies
+    its own theme by overriding CSS_PATH. The default is absolute because
+    Textual resolves a relative CSS_PATH against the concrete class's module
+    file, so a derived class would otherwise look for it next to its own module.
     """
 
-    def test_base_owns_absolute_default_stylesheet(self) -> None:
+    def test_owns_absolute_default_stylesheet(self) -> None:
         from pathlib import Path
 
-        from tools.tui import CrewAIPipelineTUI
+        from tools.tui import CybersquadTUI
 
-        css = Path(CrewAIPipelineTUI.CSS_PATH)
+        css = Path(CybersquadTUI.CSS_PATH)
         assert css.is_absolute()
         assert css.name == "default.tcss"
         assert css.is_file()
 
-    def test_cybersquad_inherits_base_default(self) -> None:
-        from tools.tui import CrewAIPipelineTUI
-        from tui import CybersquadTUI
+    def test_derived_class_overrides_theme(self) -> None:
+        from tools.tui import CybersquadTUI
 
-        # No own CSS_PATH on the subclass -> it inherits the base default.
-        assert "CSS_PATH" not in CybersquadTUI.__dict__
-        assert CybersquadTUI.CSS_PATH == CrewAIPipelineTUI.CSS_PATH
+        class _ThemedTUI(CybersquadTUI):
+            CSS_PATH = "custom.tcss"
+
+        assert _ThemedTUI.CSS_PATH == "custom.tcss"
+        assert _ThemedTUI.CSS_PATH != CybersquadTUI.CSS_PATH

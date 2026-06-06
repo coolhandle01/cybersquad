@@ -55,12 +55,12 @@ class TestPresent:
 
         app = MagicMock()
         tui_cls = MagicMock(return_value=app)
-        monkeypatch.setattr("tui.CybersquadTUI", tui_cls)
+        monkeypatch.setattr("tools.tui.CybersquadTUI", tui_cls)
 
         crew = MagicMock(name="crew")
         main._present(crew, _args(dry_run=False, headless=False, verbose=True))
 
-        tui_cls.assert_called_once_with(crew=crew, verbose=True)
+        tui_cls.assert_called_once_with(crew=crew, record_prefix="cybersquad", verbose=True)
         app.run.assert_called_once()
 
 
@@ -73,7 +73,7 @@ class TestRenderDryRun:
         summary = MagicMock()
         monkeypatch.setattr(main, "dry_run_summary", summary)
         tui_cls = MagicMock()
-        monkeypatch.setattr("tui.CybersquadTUI", tui_cls)
+        monkeypatch.setattr("tools.tui.CybersquadTUI", tui_cls)
 
         crew = MagicMock(name="crew")
         main._render_dry_run(crew, headless=True)
@@ -86,13 +86,13 @@ class TestRenderDryRun:
 
         app = MagicMock()
         tui_cls = MagicMock(return_value=app)
-        monkeypatch.setattr("tui.CybersquadTUI", tui_cls)
+        monkeypatch.setattr("tools.tui.CybersquadTUI", tui_cls)
         monkeypatch.setattr(main, "dry_run_summary", MagicMock())
 
         crew = MagicMock(name="crew")
         main._render_dry_run(crew, headless=False)
 
-        tui_cls.assert_called_once_with(crew=crew, dry_run=True)
+        tui_cls.assert_called_once_with(crew=crew, record_prefix="cybersquad", dry_run=True)
         app.run.assert_called_once()
 
 
