@@ -107,7 +107,7 @@ def real_llm() -> LLM:
     BaseLLM``. Constructing the LLM makes no network call; only the Agent
     constructor would, and ``_disable_crewai_telemetry`` gates that. Scoped to
     the integration tests so the unit run constructs no real CrewAI objects."""
-    return LLM(model="anthropic/claude-sonnet-4-20250514", temperature=0.0, max_tokens=1)
+    return LLM(model="anthropic/claude-sonnet-4-6", temperature=0.0, max_tokens=1)
 
 
 @pytest.mark.integration
