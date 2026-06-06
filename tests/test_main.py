@@ -96,37 +96,45 @@ class TestRenderDryRun:
         app.run.assert_called_once()
 
 
-def _stub_headless_metrics(monkeypatch):
-    """Stub the metrics + run-id side effects of ``_run_headless``."""
+def _stub_headless_metrics(monkeypatch) -> dict[str, MagicMock]:
+    """Stub the metrics + run-id side effects of ``_run_headless``.
+
+    Returns the metrics mocks so tests assert on the captured ``MagicMock``
+    objects rather than the module attributes (whose declared types have no
+    mock-assertion methods).
+    """
     import runtime
     import tools.metrics as metrics_mod
 
     monkeypatch.setattr(runtime, "bind_run_id", lambda _run_id: None)
-    fake_build = MagicMock(return_value=MagicMock(name="metrics"))
-    monkeypatch.setattr(metrics_mod, "build_run_metrics", fake_build)
-    monkeypatch.setattr(metrics_mod, "print_metrics", MagicMock())
-    monkeypatch.setattr(metrics_mod, "save_metrics", MagicMock())
-    return fake_build
+    mocks = {
+        "build": MagicMock(return_value=MagicMock(name="metrics")),
+        "print": MagicMock(),
+        "save": MagicMock(),
+    }
+    monkeypatch.setattr(metrics_mod, "build_run_metrics", mocks["build"])
+    monkeypatch.setattr(metrics_mod, "print_metrics", mocks["print"])
+    monkeypatch.setattr(metrics_mod, "save_metrics", mocks["save"])
+    return mocks
 
 
 class TestRunHeadless:
     def test_kickoff_without_usage_skips_metrics(self, monkeypatch) -> None:
         import main
 
-        fake_build = _stub_headless_metrics(monkeypatch)
+        mocks = _stub_headless_metrics(monkeypatch)
         crew = MagicMock()
         crew.kickoff.return_value = MagicMock(token_usage=None)
 
         main._run_headless(crew, verbose=False)
 
         crew.kickoff.assert_called_once()
-        fake_build.assert_not_called()
+        mocks["build"].assert_not_called()
 
     def test_kickoff_with_usage_builds_and_saves_metrics(self, monkeypatch) -> None:
         import main
-        import tools.metrics as metrics_mod
 
-        fake_build = _stub_headless_metrics(monkeypatch)
+        mocks = _stub_headless_metrics(monkeypatch)
         crew = MagicMock()
         crew.kickoff.return_value = MagicMock(
             token_usage=MagicMock(prompt_tokens=10, completion_tokens=20)
@@ -134,8 +142,8 @@ class TestRunHeadless:
 
         main._run_headless(crew, verbose=False)
 
-        fake_build.assert_called_once()
-        metrics_mod.save_metrics.assert_called_once()
+        mocks["build"].assert_called_once()
+        mocks["save"].assert_called_once()
 
     def test_keyboard_interrupt_exits_zero(self, monkeypatch) -> None:
         import main
