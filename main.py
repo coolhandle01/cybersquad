@@ -29,7 +29,6 @@ from uuid import uuid4
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
-from rich.table import Table
 
 try:
     from dotenv import load_dotenv
@@ -70,51 +69,15 @@ def check_env() -> None:
         sys.exit(1)
 
 
-def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrapped by the time the CLI sees it; tighter type buys nothing
-    """Render the crew layout as rich tables without executing."""
-    console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
-    console.print()
+def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Hand the built crew to the chosen surface, carrying the dry-run flag.
 
-    agents_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    agents_table.add_column("Agent", style="cyan")
-    agents_table.add_column("Tools", style="dim")
-    for agent in crew.agents:
-        tools = ", ".join(t.name for t in agent.tools) if agent.tools else "(none)"
-        agents_table.add_row(agent.role, tools)
-    console.print(Panel(agents_table, title="Agents"))
-
-    console.print()
-
-    tasks_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    tasks_table.add_column("#", style="dim", width=3)
-    tasks_table.add_column("Agent", style="cyan")
-    tasks_table.add_column("Task")
-    tasks_table.add_column("Human review")
-    for i, task in enumerate(crew.tasks):
-        review_cell = "[yellow]> pauses for feedback[/yellow]" if task.human_input else ""
-        tasks_table.add_row(
-            str(i + 1),
-            task.agent.role,
-            task.description[:72].strip() + "...",
-            review_cell,
-        )
-    console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))
-    console.print()
-
-
-def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - already-built, decorator-wrapped Crew; see dry_run_summary
-    """Dispatch an already-built crew to the chosen renderer.
-
-    Two surfaces, each with a dry-run mode: the headless CLI (rich-table preview
-    or a real kickoff) and the Textual TUI (one construction site, told whether
-    it's a dry run). The crew's MCP servers are live for the enclosing
-    ``build_crew`` block, which spans whichever renderer runs here.
+    Two surfaces, each holding its own dry-run mode: the headless CLI and the
+    Textual TUI. The crew's MCP servers are live for the enclosing ``build_crew``
+    block, which spans whichever runs here.
     """
     if args.headless:
-        if args.dry_run:
-            dry_run_summary(crew)
-        else:
-            _run_headless(crew, verbose=args.verbose)
+        _run_headless(crew, verbose=args.verbose, dry_run=args.dry_run)
     else:
         _run_tui(crew, dry_run=args.dry_run)
 
@@ -124,7 +87,7 @@ def _new_run_id() -> str:
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
 
 
-def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
+def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
     """Run, or on a dry run preview, the crew in the Textual TUI.
 
     The single TUI construction site. The TUI package knows only CrewAI +
@@ -178,11 +141,19 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
     ).run()
 
 
-def _run_headless(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
-    """Kick off the crew on the CLI and report its result and run metrics."""
+def _run_headless(crew: Any, *, verbose: bool, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Kick off the crew on the CLI - or, on a dry run, print the pipeline and stop."""
     import runtime
     from config import config
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
+
+    if dry_run:
+        console.rule("[bold cyan]Bounty Squad - dry run (pipeline not executed)[/bold cyan]")
+        for i, task in enumerate(crew.tasks, start=1):
+            heading = task.name or task.agent.role
+            gate = "  [yellow](human review)[/yellow]" if task.human_input else ""
+            console.print(f"{i}. [cyan]{heading}[/cyan] - {task.agent.role}{gate}")
+        return
 
     runtime.bind_run_id(_new_run_id())
     started_at = datetime.now(UTC)
