@@ -68,7 +68,7 @@ mcp = [
     "crewai-tools[mcp]>=1.14.5",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
-    "mcp-server-time==2026.1.26",
+    "mcp-server-time==2026.6.4",
 ]
 dev = [
     # Testing
