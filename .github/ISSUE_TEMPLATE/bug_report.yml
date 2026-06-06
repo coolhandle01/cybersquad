@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a defect in cybersquad so it can be reproduced and fixed.
+title: "fix: <short summary of the bug>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Fields marked required must be filled in before
+        the form will submit.
+
+        Do NOT use this form for security vulnerabilities. Report those privately
+        via the GitHub Security tab - see SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing what is wrong.
+      placeholder: The recon finaliser drops hosts whose scope pattern is a bare apex domain.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: The minimal sequence that triggers the bug. Include the command, inputs, and any relevant config or environment variables.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behaviour
+      description: What you expected to happen, and what actually happened.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse --short HEAD`, or the release tag.
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, and anything else relevant. cybersquad targets Python 3.12 (see CONTRIBUTING.md).
+    validations:
+      required: false
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md).
+          required: true

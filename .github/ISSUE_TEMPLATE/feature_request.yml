@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a new capability or enhancement.
+title: "feat: <short description of the feature>"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, skim CONTRIBUTING.md and the skill catalogue in CLAUDE.md -
+        some capabilities are better expressed as a skill update than a code change.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this solve, and for whom (a contributor, a runtime agent, a SOC operator reading the traffic)? Describe the gap, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you imagine it working. Sketch the shape; the implementation can be refined in review.
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: The checklist that, when every item is ticked, means this is done. Be concrete enough that a reviewer can verify each item.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed and why you set them aside.
+    validations:
+      required: false
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
