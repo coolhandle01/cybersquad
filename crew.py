@@ -143,7 +143,7 @@ def build_crew(
 
 
 @contextmanager
-def build_pipeline(verbose: bool | None = None, dry_run: bool = False) -> Iterator[Crew]:
+def build_pipeline(verbose: bool | None = None) -> Iterator[Crew]:
     """Yield a ready-to-run crew with its MCP servers live for the block.
 
     Bundles the two-step MCP wiring - open ``provisioned_mcp_tools()``, then
@@ -153,12 +153,9 @@ def build_pipeline(verbose: bool | None = None, dry_run: bool = False) -> Iterat
     ``with`` block, so that block must enclose ``crew.kickoff()`` /
     ``App.run()`` - per the ``cybersquad-mcp`` skill (Rule 2, build-time only).
 
-    ``dry_run`` skips MCP startup entirely: a preview never calls a tool, so it
-    must not spawn subprocesses. The yielded crew then carries no MCP-sourced
-    tools (``build_crew``'s ``mcp_tools=None`` path).
+    A dry run uses the same wiring: dry-run means the tasks are not executed,
+    not that provisioning is skipped, so the previewed crew reflects the real
+    tool surface (MCP tools included).
     """
-    if dry_run:
-        yield build_crew(verbose=verbose)
-        return
     with provisioned_mcp_tools() as mcp_tools:
         yield build_crew(verbose=verbose, mcp_tools=mcp_tools)

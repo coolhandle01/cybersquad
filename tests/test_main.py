@@ -179,9 +179,8 @@ class TestMain:
         fake_crew = MagicMock(name="crew")
 
         @contextmanager
-        def fake_build_pipeline(verbose, dry_run):
+        def fake_build_pipeline(verbose):
             captured["verbose"] = verbose
-            captured["dry_run"] = dry_run
             yield fake_crew
 
         present = MagicMock()
@@ -193,7 +192,7 @@ class TestMain:
 
         main.main()
 
-        assert captured == {"verbose": True, "dry_run": False}
+        assert captured == {"verbose": True}
         present.assert_called_once_with(fake_crew, args)
 
 

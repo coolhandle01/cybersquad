@@ -189,11 +189,12 @@ def main() -> None:
 
     # Deferred until after check_env so a run missing required credentials
     # fails with check_env's clear message rather than an import-time error
-    # from config. build_pipeline opens the provisioned-MCP scope (skipped on
-    # a dry run) and yields a ready crew; that scope spans the renderer.
+    # from config. build_pipeline opens the provisioned-MCP scope and yields a
+    # ready crew; that scope spans the renderer (dry-run still provisions - it
+    # just doesn't kick off).
     from crew import build_pipeline
 
-    with build_pipeline(verbose=args.verbose, dry_run=args.dry_run) as crew:
+    with build_pipeline(verbose=args.verbose) as crew:
         _present(crew, args)
 
 
