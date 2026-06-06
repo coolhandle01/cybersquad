@@ -52,13 +52,15 @@ def task_layout(tasks: list) -> list[tuple[str, str]]:
     return layout
 
 
-def format_metrics_block(total_tokens: int, estimated_cost_usd: float, run_id: str) -> str:
+def format_metrics_block(
+    total_tokens: int, estimated_cost_usd: float, run_id: str, status: str = "done"
+) -> str:
     """Render the fixed-width metrics summary shown in the sidebar."""
     return (
         f" Tokens:  {total_tokens:,}\n"
         f" Cost:    ${estimated_cost_usd:.4f}\n"
         f" Run:     {run_id}\n"
-        f" Status:  done"
+        f" Status:  {status}"
     )
 
 

@@ -107,6 +107,14 @@ class CrewAIPipelineTUI(App):
         logging.getLogger().addHandler(_TUILogHandler(self))
         if self._dry_run:
             self._write_crew("[yellow]Dry run mode: pipeline not started.[/yellow]")
+            # Render the metrics block zeroed so the sidebar reads as a complete
+            # preview rather than a blank panel - no run happened, so the
+            # figures are zero and the status says so.
+            self.query_one("#metrics", Static).update(
+                format_metrics_block(
+                    total_tokens=0, estimated_cost_usd=0.0, run_id="-", status="dry run"
+                )
+            )
         else:
             self._start_run()
 
