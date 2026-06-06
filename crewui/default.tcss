@@ -1,0 +1,105 @@
+Screen {
+    layout: horizontal;
+    background: $background;
+}
+
+#sidebar {
+    width: 34;
+    border-right: solid $surface;
+    padding: 1 1;
+    layout: vertical;
+    overflow-y: auto;
+}
+
+#sidebar-title {
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.phase-heading {
+    color: $accent;
+    text-style: bold;
+    margin-top: 1;
+}
+
+.task-name {
+    color: $text-muted;
+    padding-left: 2;
+}
+
+.task-name.running {
+    color: $warning;
+    text-style: bold;
+}
+
+.task-name.done {
+    color: $success;
+}
+
+.task-status {
+    color: $text-muted;
+    padding-left: 4;
+    height: 1;
+}
+
+.task-status.running {
+    color: $warning;
+}
+
+.task-status.done {
+    color: $success;
+}
+
+#metrics {
+    dock: bottom;
+    border-top: solid $surface;
+    padding: 1;
+    color: $text-muted;
+    height: 6;
+}
+
+#main {
+    layout: vertical;
+    width: 1fr;
+}
+
+#messages-pane {
+    height: 60%;
+    border-bottom: solid $surface;
+    layout: vertical;
+}
+
+.pane-title {
+    padding: 0 1;
+    color: $accent;
+    text-style: bold;
+    height: 1;
+}
+
+#agent-log {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#human-input {
+    margin: 0 1 1 1;
+    opacity: 0.4;
+}
+
+#logs-pane {
+    height: 40%;
+    layout: vertical;
+}
+
+#logs-title {
+    padding: 0 1;
+    color: $text-muted;
+    text-style: bold;
+    height: 1;
+}
+
+#crew-log {
+    height: 1fr;
+    padding: 0 1;
+}

@@ -13,6 +13,7 @@ from crewai.agents.agent_builder.base_agent import BaseAgent
 
 import runtime
 from config import config
+from crewui import PipelinePhase
 from mcp_servers import ProvisionedMCPTools
 from squad import SQUAD_SKILLS_DIR, SquadMember, build_agent
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
@@ -68,15 +69,15 @@ def _build_long_term_memory() -> Memory | None:
     return Memory(storage="lancedb", root_scope="/long_term")
 
 
-def crew_tasks() -> dict[str, str]:
-    """Return a role -> task mapping built from the squad member metadata.
+def crew_phases() -> list[PipelinePhase]:
+    """Return the sidebar flow-panel phases built from squad member metadata.
 
-    Powers the TUI's per-agent task labelling so a running pipeline
-    surfaces "<role>: <task>" rows rather than role-only ones. Members
-    without a ``task`` set are omitted; the mapping is naturally sparse
-    when only some agents carry one.
+    Each member that carries a ``task`` contributes one ``PipelinePhase``
+    pairing its agent role with that task label, so the TUI sidebar groups a
+    running pipeline by phase. Members without a ``task`` are omitted, so the
+    panel is naturally sparse when only some agents carry one.
     """
-    return {m.read("role"): m.task for m in _SQUAD if m.task}
+    return [PipelinePhase(role=m.read("role"), label=m.task) for m in _SQUAD if m.task]
 
 
 def _resolve_output_log_file() -> str | None:

@@ -1,5 +1,5 @@
 """
-tools/tui/_helpers.py - Pure functions extracted from CrewAIPipelineTUI.
+crewui/_helpers.py - Pure functions extracted from CrewAIPipelineTUI.
 
 The TUI class itself (CrewAIPipelineTUI) is App + widgets + threading and needs
 a textual.pilot harness to test properly. The pure-logic helpers it relies on -

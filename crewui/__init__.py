@@ -1,30 +1,39 @@
 """
-tools/tui/__init__.py - Generic CrewAI Pipeline TUI base class.
+crewui - a Textual TUI for any sequential CrewAI crew.
 
-Provides CrewAIPipelineTUI, a Textual App that renders a sidebar task tracker,
-an agent output log, and a pipeline log for any CrewAI sequential crew.
+``CrewAIPipelineTUI`` renders a sidebar task tracker (grouped into phases), an
+agent output log, and a pipeline log for a CrewAI ``Crew``. It is framework-
+generic: the only CrewAI types it touches are ``Crew`` and the step/task
+callback contract. Anything application-specific - where a ``run_id`` is
+recorded, how run metrics are computed and displayed - is injected via the two
+``on_run_*`` callbacks, so the base class has no dependency on any host app.
 
-Typical usage in a host application::
+Typical usage::
 
-    from tools.tui import CrewAIPipelineTUI
+    from crewui import CrewAIPipelineTUI, PipelinePhase
 
-    class MyAppTUI(CrewAIPipelineTUI):
-        CSS_PATH = "my_app.tcss"
+    class MyTUI(CrewAIPipelineTUI):
+        CSS_PATH = "my_app.tcss"  # optional - defaults to the bundled theme
 
-        def __init__(self, verbose: bool = False) -> None:
-            crew = build_my_crew(verbose=verbose)
+        def __init__(self) -> None:
             super().__init__(
-                crew=crew,
-                task_map=my_crew_tasks(),
+                crew=build_my_crew(),
+                phases=[PipelinePhase(role="My Agent", label="Phase Label")],
                 record_prefix="myapp",
-                verbose=verbose,
             )
+
+The ``phases`` sequence maps each agent role to the phase heading it appears
+under in the sidebar; tasks whose role is absent fall back to their own role as
+the heading. ``record_prefix`` selects which log records render in the agent
+pane vs. the pipeline pane (records whose logger name starts with the prefix
+are treated as agent output).
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -35,7 +44,7 @@ from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.widgets import Input, Label, RichLog, Static
 
-from tools.tui._helpers import (
+from crewui._helpers import (
     format_metrics_block,
     format_step_message,
     route_log_record,
@@ -43,27 +52,62 @@ from tools.tui._helpers import (
     truncate,
 )
 
+__all__ = [
+    "CrewAIPipelineTUI",
+    "PipelinePhase",
+    "format_metrics_block",
+]
+
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class PipelinePhase:
+    """One entry in the sidebar flow panel: an agent role and its phase heading.
+
+    ``role`` is the join key - it matches a task's ``agent.role`` in the crew,
+    and is the text rendered for that row. ``phase`` is the heading the row is
+    grouped under; consecutive rows sharing a ``phase`` render the heading once
+    (see ``task_phase_layout``). Two tasks sharing an agent role therefore
+    share a phase lookup - fine for one-task-per-agent crews.
+    """
+
+    role: str
+    phase: str
+
+
+def _noop_run_start(_run_id: str) -> None:
+    """Default ``on_run_start``: record nothing."""
+
+
+def _noop_run_complete(_result: object, _run_id: str, _started_at: datetime) -> str | None:
+    """Default ``on_run_complete``: contribute no sidebar metrics block."""
+    return None
+
+
 class CrewAIPipelineTUI(App):
-    # TODO: implement theming by allowing the client to pass in the path to a .tcss file
-    CSS_PATH = ""
+    # Host apps override CSS_PATH to theme the TUI; the bundled default ships a
+    # usable dark theme so the base class is runnable as-is.
+    CSS_PATH = "default.tcss"
 
     def __init__(
         self,
         crew: Crew,
-        task_map: dict[str, str],
+        phases: Sequence[PipelinePhase] = (),
         record_prefix: str = "pipeline",
         verbose: bool = False,
         dry_run: bool = False,
+        on_run_start: Callable[[str], None] = _noop_run_start,
+        on_run_complete: Callable[[object, str, datetime], str | None] = _noop_run_complete,
     ) -> None:
         super().__init__()
         self._crew = crew
-        self._task_map = task_map
+        self._phase_by_role = {p.role: p.phase for p in phases}
         self._record_prefix = record_prefix
         self._verbose = verbose
         self._dry_run = dry_run
+        self._on_run_start = on_run_start
+        self._on_run_complete = on_run_complete
         self._task_widgets: list[tuple[Label, Label]] = []
         self._task_names = [t.agent.role for t in self._crew.tasks if t.agent is not None]
         self._crew.step_callback = self._make_step_callback()
@@ -73,7 +117,7 @@ class CrewAIPipelineTUI(App):
             with Vertical(id="sidebar"):
                 yield Label(self._record_prefix, id="sidebar-title")
 
-                for phase, name in task_phase_layout(self._task_names, self._task_map):
+                for phase, name in task_phase_layout(self._task_names, self._phase_by_role):
                     if phase is not None:
                         yield Label(phase, classes="phase-heading")
                     name_lbl = Label(name, classes="task-name")
@@ -106,10 +150,8 @@ class CrewAIPipelineTUI(App):
 
     @work(thread=True)
     def _start_run(self) -> None:
-        import runtime
-
         run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
-        runtime.run_id = run_id
+        self._on_run_start(run_id)
         started_at = datetime.now(UTC)
 
         for i, task in enumerate(self._crew.tasks):
@@ -166,35 +208,15 @@ class CrewAIPipelineTUI(App):
             self._set_task_running(next_idx)
 
     def _on_done(self, result: object, run_id: str, started_at: datetime) -> None:
-        from config import config
-        from tools.metrics import build_run_metrics, save_metrics
-
         raw = getattr(result, "raw", str(result))
         self._write_agent("[bold green]Pipeline complete.[/bold green]")
         self._write_agent(truncate(raw, 2000))
 
-        usage = getattr(result, "token_usage", None)
-        if usage is None:
+        metrics_block = self._on_run_complete(result, run_id, started_at)
+        if metrics_block is None:
             return
-
         try:
-            metrics = build_run_metrics(
-                run_id=run_id,
-                started_at=started_at,
-                llm_model=config.llm.model,
-                input_tokens=getattr(usage, "prompt_tokens", 0),
-                output_tokens=getattr(usage, "completion_tokens", 0),
-            )
-            save_metrics(metrics, config.reports_dir)
-            self.query_one("#metrics", Static).update(
-                format_metrics_block(
-                    total_tokens=metrics.total_tokens,
-                    estimated_cost_usd=metrics.estimated_cost_usd,
-                    run_id=run_id,
-                )
-            )
-        except OSError as exc:
-            self._write_crew(f"[yellow]Metrics error: {exc}[/yellow]")
+            self.query_one("#metrics", Static).update(metrics_block)
         except NoMatches:
             logger.debug("metrics widget not mounted")
 
