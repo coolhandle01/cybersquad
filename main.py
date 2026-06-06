@@ -97,19 +97,6 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew
     console.print()
 
 
-def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
-    """Hand the built crew to the chosen surface, carrying the dry-run flag.
-
-    Two surfaces, each holding its own dry-run mode: the headless CLI and the
-    Textual TUI. The crew's MCP servers are live for the enclosing ``build_crew``
-    block, which spans whichever runs here.
-    """
-    if args.headless:
-        _run_headless(crew, verbose=args.verbose, dry_run=args.dry_run)
-    else:
-        _run_tui(crew, dry_run=args.dry_run)
-
-
 def _new_run_id() -> str:
     """Return a fresh run identifier: UTC timestamp plus a short random suffix."""
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
@@ -228,7 +215,10 @@ def main() -> None:
     from crew import build_crew
 
     with build_crew(verbose=args.verbose) as crew:
-        _present(crew, args)
+        if args.headless:
+            _run_headless(crew, verbose=args.verbose, dry_run=args.dry_run)
+        else:
+            _run_tui(crew, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

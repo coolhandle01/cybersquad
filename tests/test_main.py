@@ -2,11 +2,10 @@
 tests/test_main.py - covers ``main.main()``'s single run-scope dispatch.
 
 ``main()`` opens ``build_crew`` (the MCP scope lives there - see test_crew.py)
-and hands the crew to ``_present``, which forwards it - with the dry-run flag -
-to one of two surfaces: the headless CLI or the Textual TUI. Each surface holds
-its own dry-run mode. The crew is already built by the time a surface sees it,
-so these tests stub the leaf calls and assert the routing and the run-metrics
-handling.
+and, inside that block, forwards the crew - with the dry-run flag - to one of two
+surfaces: the headless CLI or the Textual TUI. Each surface holds its own dry-run
+mode. The crew is already built by the time a surface sees it, so these tests
+stub the leaf calls and assert the routing and the run-metrics handling.
 """
 
 from __future__ import annotations
@@ -24,34 +23,6 @@ pytestmark = pytest.mark.unit
 
 def _args(*, dry_run: bool, headless: bool, verbose: bool = False) -> Namespace:
     return Namespace(verbose=verbose, dry_run=dry_run, headless=headless)
-
-
-class TestPresent:
-    """``_present`` forwards the crew to one surface, carrying the dry-run flag."""
-
-    def test_headless_routes_to_headless_with_dry_run_flag(self, monkeypatch) -> None:
-        import main
-
-        run = MagicMock()
-        monkeypatch.setattr(main, "_run_headless", run)
-        monkeypatch.setattr(main, "_run_tui", MagicMock())
-
-        crew = MagicMock(name="crew")
-        main._present(crew, _args(dry_run=True, headless=True, verbose=True))
-
-        run.assert_called_once_with(crew, verbose=True, dry_run=True)
-
-    def test_tui_routes_to_run_tui_with_dry_run_flag(self, monkeypatch) -> None:
-        import main
-
-        run_tui = MagicMock()
-        monkeypatch.setattr(main, "_run_tui", run_tui)
-        monkeypatch.setattr(main, "_run_headless", MagicMock())
-
-        crew = MagicMock(name="crew")
-        main._present(crew, _args(dry_run=True, headless=False))
-
-        run_tui.assert_called_once_with(crew, dry_run=True)
 
 
 def _stub_headless_metrics(monkeypatch) -> dict[str, MagicMock]:
@@ -268,13 +239,14 @@ class TestRunTui:
 
 
 class TestMain:
-    def test_builds_crew_then_presents(self, monkeypatch) -> None:
-        """main() opens build_crew with the parsed flags and hands the yielded
-        crew to _present - one run-scope, one exit."""
+    """main() opens build_crew with the parsed flags and, inside that block,
+    dispatches the crew to the headless or TUI surface - one run-scope, one exit.
+    """
+
+    def _wire(self, monkeypatch, args, captured: dict[str, object]) -> MagicMock:
         import crew as crew_mod
         import main
 
-        captured: dict[str, object] = {}
         fake_crew = MagicMock(name="crew")
 
         @contextmanager
@@ -282,17 +254,39 @@ class TestMain:
             captured["verbose"] = verbose
             yield fake_crew
 
-        present = MagicMock()
-        args = _args(dry_run=False, headless=True, verbose=True)
         monkeypatch.setattr(main, "parse_args", lambda: args)
         monkeypatch.setattr(main, "check_env", lambda: None)
         monkeypatch.setattr(crew_mod, "build_crew", fake_build_crew)
-        monkeypatch.setattr(main, "_present", present)
+        return fake_crew
+
+    def test_headless_dispatches_to_run_headless(self, monkeypatch) -> None:
+        import main
+
+        captured: dict[str, object] = {}
+        args = _args(dry_run=True, headless=True, verbose=True)
+        fake_crew = self._wire(monkeypatch, args, captured)
+        run = MagicMock()
+        monkeypatch.setattr(main, "_run_headless", run)
+        monkeypatch.setattr(main, "_run_tui", MagicMock())
 
         main.main()
 
         assert captured == {"verbose": True}
-        present.assert_called_once_with(fake_crew, args)
+        run.assert_called_once_with(fake_crew, verbose=True, dry_run=True)
+
+    def test_default_dispatches_to_run_tui(self, monkeypatch) -> None:
+        import main
+
+        captured: dict[str, object] = {}
+        args = _args(dry_run=False, headless=False)
+        fake_crew = self._wire(monkeypatch, args, captured)
+        run_tui = MagicMock()
+        monkeypatch.setattr(main, "_run_tui", run_tui)
+        monkeypatch.setattr(main, "_run_headless", MagicMock())
+
+        main.main()
+
+        run_tui.assert_called_once_with(fake_crew, dry_run=False)
 
 
 class TestParseArgs:
