@@ -29,13 +29,21 @@ class TestEstimateCost:
         cost = estimate_cost("claude-sonnet-4-20250514", 1_000_000, 1_000_000)
         assert cost == pytest.approx(18.00)
 
-    def test_opus_pricing(self) -> None:
+    def test_legacy_opus_pricing(self) -> None:
+        # Opus 4 (base, deprecated): $15 in + $75 out per 1M.
         cost = estimate_cost("claude-opus-4-20250514", 1_000_000, 1_000_000)
         assert cost == pytest.approx(90.00)
 
+    def test_current_opus_pricing_does_not_collide_with_legacy(self) -> None:
+        # Opus 4.5+ is $5 in + $25 out; the longest-prefix match must beat the
+        # shorter legacy "claude-opus-4" key rather than billing $90.
+        cost = estimate_cost("claude-opus-4-5", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(30.00)
+
     def test_haiku_pricing(self) -> None:
+        # Haiku 4.5: $1 in + $5 out per 1M (not the legacy 3.5 rate).
         cost = estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(4.80)
+        assert cost == pytest.approx(6.00)
 
     def test_zero_tokens(self) -> None:
         assert estimate_cost("claude-sonnet-4-20250514", 0, 0) == 0.0

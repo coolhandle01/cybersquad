@@ -1,9 +1,10 @@
 """
 tools/metrics.py - Token-usage accounting and cost estimation.
 
-Anthropic pricing is expressed per 1 M tokens; the table below reflects
-rates as of 2026-04. Update the table when pricing changes - do not
-hardcode rates elsewhere.
+Anthropic publishes no pricing API (the Models API returns capabilities, not
+rates), so per-1M-token rates live in the hand-maintained ``_PRICING`` table
+below and nowhere else. The cost figure is therefore an *estimate* against a
+dated snapshot - keep the "Last updated" stamp current when rates change.
 """
 
 from __future__ import annotations
@@ -17,11 +18,25 @@ from models import RunMetrics
 
 logger = logging.getLogger(__name__)
 
-# (input_usd_per_1m, output_usd_per_1m)
+# (input_usd_per_1m, output_usd_per_1m), keyed by model-name prefix.
+# The LONGEST matching prefix wins (see estimate_cost), so legacy Opus 4 and
+# current Opus 4.5+ resolve to their own rates instead of colliding.
+#
+# Last updated: 2026-06-06
+# Source: https://platform.claude.com/docs/en/about-claude/pricing
 _PRICING: dict[str, tuple[float, float]] = {
+    # Opus 4.5 and later.
+    "claude-opus-4-5": (5.00, 25.00),
+    "claude-opus-4-6": (5.00, 25.00),
+    "claude-opus-4-7": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    # Legacy Opus 4 / 4.1 (deprecated).
     "claude-opus-4": (15.00, 75.00),
+    # Sonnet 4 / 4.5 / 4.6 share a rate.
     "claude-sonnet-4": (3.00, 15.00),
-    "claude-haiku-4": (0.80, 4.00),
+    # Haiku 4.5, then legacy Haiku 3.5.
+    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-haiku-3-5": (0.80, 4.00),
 }
 
 
@@ -36,13 +51,23 @@ def parse_llm(llm: str) -> tuple[str, str]:
 
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """Return estimated USD cost for the given token counts and model."""
+    """Return estimated USD cost for the given token counts and model.
+
+    Resolves the rate by longest-matching ``_PRICING`` prefix, so a specific
+    key (``claude-opus-4-5``) wins over a shorter legacy one (``claude-opus-4``)
+    when both match. Unknown models warn and cost $0.00.
+    """
     _, model_key = parse_llm(model)
-    for prefix, (in_price, out_price) in _PRICING.items():
-        if model_key.startswith(prefix):
-            return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
-    logger.warning("No pricing entry for model %r - cost will show as $0.00", model)
-    return 0.0
+    match = max(
+        (prefix for prefix in _PRICING if model_key.startswith(prefix)),
+        key=len,
+        default=None,
+    )
+    if match is None:
+        logger.warning("No pricing entry for model %r - cost will show as $0.00", model)
+        return 0.0
+    in_price, out_price = _PRICING[match]
+    return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
 
 
 def build_run_metrics(
