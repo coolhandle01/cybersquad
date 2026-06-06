@@ -76,21 +76,44 @@ def _stub_headless_metrics(monkeypatch) -> dict[str, MagicMock]:
     return mocks
 
 
-class TestRunHeadless:
-    def test_dry_run_prints_pipeline_and_skips_kickoff(self, monkeypatch) -> None:
+class TestDryRunSummary:
+    """``dry_run_summary`` renders the crew layout as rich tables, exercising the
+    tools / no-tools and human-review branches."""
+
+    def test_renders_agents_and_tasks(self, capsys) -> None:
         import main
 
-        crew = MagicMock()
+        tool = MagicMock()
+        tool.name = "run_recon"
+        with_tools = MagicMock(role="osint_analyst", tools=[tool])
+        without_tools = MagicMock(role="programme_manager", tools=[])
+
         named = MagicMock(human_input=True)
         named.name = "Reconnaissance"
         named.agent.role = "osint_analyst"
         unnamed = MagicMock(human_input=False)
         unnamed.name = None
         unnamed.agent.role = "programme_manager"
-        crew.tasks = [named, unnamed]
+
+        crew = MagicMock(agents=[with_tools, without_tools], tasks=[named, unnamed])
+        main.dry_run_summary(crew)
+
+        out = capsys.readouterr().out
+        assert "DRY RUN" in out
+        assert out.strip()
+
+
+class TestRunHeadless:
+    def test_dry_run_calls_summary_and_skips_kickoff(self, monkeypatch) -> None:
+        import main
+
+        summary = MagicMock()
+        monkeypatch.setattr(main, "dry_run_summary", summary)
+        crew = MagicMock()
 
         main._run_headless(crew, verbose=False, dry_run=True)
 
+        summary.assert_called_once_with(crew)
         crew.kickoff.assert_not_called()
 
     def test_kickoff_without_usage_skips_metrics(self, monkeypatch) -> None:
@@ -184,21 +207,21 @@ class TestRunTui:
         assert callable(captured["get_token_cost"])
         app.run.assert_called_once()
 
-    def test_dry_run_skips_run_id_and_uses_plain_name(self, monkeypatch) -> None:
+    def test_dry_run_still_binds_run_id_and_passes_flag(self, monkeypatch) -> None:
         import main
         import runtime
 
-        bound: list[str] = []
-        monkeypatch.setattr(runtime, "bind_run_id", lambda rid: bound.append(rid))
+        monkeypatch.setattr(runtime, "run_id", "")
+        monkeypatch.setattr(runtime, "bind_run_id", lambda rid: setattr(runtime, "run_id", rid))
 
         captured: dict[str, object] = {}
         self._patch_tui(monkeypatch, captured)
 
         main._run_tui(MagicMock(name="crew"), dry_run=True)
 
-        # No run to identify: no run id bound, plain title, dry_run flag through.
-        assert bound == []
-        assert captured["pipeline_name"] == "Bug Bounty"
+        # A run id is cheap and unique, so a dry run binds it like any other.
+        assert runtime.run_id
+        assert captured["pipeline_name"] == f"Bug Bounty #{runtime.run_id}"
         assert captured["dry_run"] is True
 
     def test_callbacks_persist_metrics_and_estimate_cost(self, monkeypatch) -> None:

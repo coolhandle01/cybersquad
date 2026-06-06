@@ -29,6 +29,7 @@ from uuid import uuid4
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
+from rich.table import Table
 
 try:
     from dotenv import load_dotenv
@@ -69,6 +70,33 @@ def check_env() -> None:
         sys.exit(1)
 
 
+def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Render the crew layout as rich tables without executing (the dry-run view)."""
+    console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
+    console.print()
+
+    agents_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    agents_table.add_column("Agent", style="cyan")
+    agents_table.add_column("Tools", style="dim")
+    for agent in crew.agents:
+        tools = ", ".join(t.name for t in agent.tools) if agent.tools else "(none)"
+        agents_table.add_row(agent.role, tools)
+    console.print(Panel(agents_table, title="Agents"))
+
+    console.print()
+
+    tasks_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    tasks_table.add_column("#", style="dim", width=3)
+    tasks_table.add_column("Task", style="cyan")
+    tasks_table.add_column("Agent")
+    tasks_table.add_column("Human review")
+    for i, task in enumerate(crew.tasks, start=1):
+        review_cell = "[yellow]> pauses for feedback[/yellow]" if task.human_input else ""
+        tasks_table.add_row(str(i), task.name or task.agent.role, task.agent.role, review_cell)
+    console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))
+    console.print()
+
+
 def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
     """Hand the built crew to the chosen surface, carrying the dry-run flag.
 
@@ -94,13 +122,15 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
     Textual; the cybersquad-specific bits - binding the run id, persisting run
     metrics, estimating USD cost - are passed in as callbacks, and the run id
     surfaces only as the human-readable ``pipeline_name`` title. On a dry run
-    nothing kicks off, so the callbacks never fire and no run id is bound.
+    nothing kicks off, so the callbacks never fire; the run id is still bound
+    (it's cheap and unique, not worth special-casing).
     """
     import runtime
     from config import config
     from tools.metrics import build_run_metrics, estimate_cost, save_metrics
     from tools.tui import CybersquadTUI
 
+    runtime.bind_run_id(_new_run_id())
     # Seeded so a freakishly fast run can't race on_start; on_start overwrites
     # it right before kickoff for an accurate duration.
     state: dict[str, datetime] = {"started_at": datetime.now(UTC)}
@@ -124,16 +154,10 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
     def get_token_cost(input_tokens: int, output_tokens: int) -> float:
         return estimate_cost(config.llm.model, input_tokens, output_tokens)
 
-    if dry_run:
-        pipeline_name = "Bug Bounty"
-    else:
-        runtime.bind_run_id(_new_run_id())
-        pipeline_name = f"Bug Bounty #{runtime.run_id}"
-
     CybersquadTUI(
         crew=crew,
         record_prefix="cybersquad",
-        pipeline_name=pipeline_name,
+        pipeline_name=f"Bug Bounty #{runtime.run_id}",
         dry_run=dry_run,
         on_start=on_start,
         on_complete=on_complete,
@@ -148,11 +172,7 @@ def _run_headless(crew: Any, *, verbose: bool, dry_run: bool) -> None:  # noqa: 
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
 
     if dry_run:
-        console.rule("[bold cyan]Bounty Squad - dry run (pipeline not executed)[/bold cyan]")
-        for i, task in enumerate(crew.tasks, start=1):
-            heading = task.name or task.agent.role
-            gate = "  [yellow](human review)[/yellow]" if task.human_input else ""
-            console.print(f"{i}. [cyan]{heading}[/cyan] - {task.agent.role}{gate}")
+        dry_run_summary(crew)
         return
 
     runtime.bind_run_id(_new_run_id())
