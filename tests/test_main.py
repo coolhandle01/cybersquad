@@ -63,7 +63,7 @@ class TestPresent:
         crew = MagicMock(name="crew")
         main._present(crew, _args(dry_run=False, headless=False, verbose=True))
 
-        run_tui.assert_called_once_with(crew, verbose=True)
+        run_tui.assert_called_once_with(crew)
 
 
 class TestRenderDryRun:
@@ -94,7 +94,12 @@ class TestRenderDryRun:
         crew = MagicMock(name="crew")
         main._render_dry_run(crew, headless=False)
 
-        tui_cls.assert_called_once_with(crew=crew, record_prefix="cybersquad", dry_run=True)
+        tui_cls.assert_called_once_with(
+            crew=crew,
+            record_prefix="cybersquad",
+            pipeline_name="Bug Bounty (dry run)",
+            dry_run=True,
+        )
         app.run.assert_called_once()
 
 
@@ -197,14 +202,15 @@ class TestRunTui:
         app = self._patch_tui(monkeypatch, captured)
 
         crew = MagicMock(name="crew")
-        main._run_tui(crew, verbose=True)
+        main._run_tui(crew)
 
-        # A run id was generated, bound, and handed to the TUI for display.
+        # A run id was generated and bound; it surfaces only inside the
+        # human-readable pipeline_name title, never as a run_id the TUI knows.
         assert runtime.run_id
-        assert captured["run_id"] == runtime.run_id
+        assert captured["pipeline_name"] == f"Bug Bounty #{runtime.run_id}"
+        assert "run_id" not in captured
         assert captured["crew"] is crew
         assert captured["record_prefix"] == "cybersquad"
-        assert captured["verbose"] is True
         assert callable(captured["on_start"])
         assert callable(captured["on_complete"])
         assert callable(captured["get_token_cost"])
@@ -227,7 +233,7 @@ class TestRunTui:
 
         captured: dict[str, object] = {}
         self._patch_tui(monkeypatch, captured)
-        main._run_tui(MagicMock(name="crew"), verbose=False)
+        main._run_tui(MagicMock(name="crew"))
 
         on_start = cast(Callable[[], None], captured["on_start"])
         on_complete = cast(Callable[[object], None], captured["on_complete"])

@@ -101,19 +101,15 @@ class TestTaskLayout:
 
 class TestFormatMetricsBlock:
     def test_renders_thousands_separator_and_fixed_decimals(self) -> None:
-        block = format_metrics_block(
-            total_tokens=12345, estimated_cost_usd=0.0418, run_id="20260520-001122-abc123"
-        )
+        block = format_metrics_block(total_tokens=12345, estimated_cost_usd=0.0418)
         assert " Tokens:  12,345" in block
         assert " Cost:    $0.0418" in block
-        assert " Run:     20260520-001122-abc123" in block
         assert " Status:  done" in block
+        assert "Run:" not in block
 
     def test_status_override_renders_custom_status(self) -> None:
         # The dry-run sidebar renders the block zeroed with a "dry run" status.
-        block = format_metrics_block(
-            total_tokens=0, estimated_cost_usd=0.0, run_id="-", status="dry run"
-        )
+        block = format_metrics_block(total_tokens=0, estimated_cost_usd=0.0, status="dry run")
         assert " Tokens:  0" in block
         assert " Cost:    $0.0000" in block
         assert " Status:  dry run" in block

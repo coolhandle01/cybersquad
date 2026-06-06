@@ -21,9 +21,10 @@ up into ``runtime`` / ``config`` / ``tools.metrics``:
 The class owns a default theme (``CSS_PATH`` below); a derived class ships its
 own look by setting its own ``CSS_PATH``.
 
-The sidebar reads each task's display name (``Task.name``) and agent role
-straight off ``crew.tasks``, so the caller only wires the crew - no separate
-task map.
+The sidebar title is the host-supplied ``pipeline_name``; ``record_prefix`` is
+used only to route log records to the agent vs pipeline pane. The sidebar reads
+each task's display name (``Task.name``) and agent role straight off
+``crew.tasks``, so the caller only wires the crew - no separate task map.
 """
 
 from __future__ import annotations
@@ -62,9 +63,8 @@ class CybersquadTUI(App):
         self,
         crew: Crew,
         record_prefix: str = "pipeline",
-        verbose: bool = False,
+        pipeline_name: str = "",
         dry_run: bool = False,
-        run_id: str = "",
         on_start: Callable[[], None] | None = None,
         on_complete: Callable[[object], None] | None = None,
         get_token_cost: Callable[[int, int], float] | None = None,
@@ -72,9 +72,8 @@ class CybersquadTUI(App):
         super().__init__()
         self._crew = crew
         self._record_prefix = record_prefix
-        self._verbose = verbose
+        self._pipeline_name = pipeline_name
         self._dry_run = dry_run
-        self._run_id = run_id
         self._on_start = on_start
         self._on_complete = on_complete
         self._get_token_cost = get_token_cost
@@ -84,7 +83,7 @@ class CybersquadTUI(App):
     def compose(self) -> ComposeResult:
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield Label(self._record_prefix, id="sidebar-title")
+                yield Label(self._pipeline_name, id="sidebar-title")
 
                 for heading, role in task_layout(self._crew.tasks):
                     yield Label(heading, classes="phase-heading")
@@ -117,9 +116,7 @@ class CybersquadTUI(App):
             # preview rather than a blank panel - no run happened, so the
             # figures are zero and the status says so.
             self.query_one("#metrics", Static).update(
-                format_metrics_block(
-                    total_tokens=0, estimated_cost_usd=0.0, run_id="-", status="dry run"
-                )
+                format_metrics_block(total_tokens=0, estimated_cost_usd=0.0, status="dry run")
             )
         else:
             self._start_run()
@@ -208,7 +205,6 @@ class CybersquadTUI(App):
                 format_metrics_block(
                     total_tokens=getattr(usage, "total_tokens", input_tokens + output_tokens),
                     estimated_cost_usd=cost,
-                    run_id=self._run_id,
                 )
             )
         except NoMatches:

@@ -115,7 +115,7 @@ def _present(crew: Any, args: argparse.Namespace) -> None:  # noqa: ANN401 - alr
     elif args.headless:
         _run_headless(crew, verbose=args.verbose)
     else:
-        _run_tui(crew, verbose=args.verbose)
+        _run_tui(crew)
 
 
 def _new_run_id() -> str:
@@ -123,13 +123,14 @@ def _new_run_id() -> str:
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
 
 
-def _run_tui(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
+def _run_tui(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
     """Run the crew in the Textual TUI, injecting cybersquad's run lifecycle.
 
     The TUI package knows only CrewAI + Textual; the cybersquad-specific bits -
     binding the run id, persisting run metrics, estimating USD cost - are passed
-    in as callbacks. Token usage for the live display is read off CrewAI inside
-    the TUI itself.
+    in as callbacks, and the run id surfaces only as the human-readable
+    ``pipeline_name`` title. Token usage for the live display is read off CrewAI
+    inside the TUI itself.
     """
     import runtime
     from config import config
@@ -163,8 +164,7 @@ def _run_tui(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-w
     CybersquadTUI(
         crew=crew,
         record_prefix="cybersquad",
-        run_id=runtime.run_id,
-        verbose=verbose,
+        pipeline_name=f"Bug Bounty #{runtime.run_id}",
         on_start=on_start,
         on_complete=on_complete,
         get_token_cost=get_token_cost,
@@ -184,7 +184,12 @@ def _render_dry_run(crew: Any, *, headless: bool) -> None:  # noqa: ANN401 - dec
     else:
         from tools.tui import CybersquadTUI
 
-        CybersquadTUI(crew=crew, record_prefix="cybersquad", dry_run=True).run()
+        CybersquadTUI(
+            crew=crew,
+            record_prefix="cybersquad",
+            pipeline_name="Bug Bounty (dry run)",
+            dry_run=True,
+        ).run()
 
 
 def _run_headless(crew: Any, *, verbose: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; see dry_run_summary
