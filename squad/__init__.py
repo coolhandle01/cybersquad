@@ -130,7 +130,6 @@ class SquadMember:
 
     dir: Path
     tools: list[SquadTool] = field(default_factory=list)
-    task: str = ""
     # tool-name -> explicit Pydantic args_schema class. Populated alongside
     # ``tools`` so each member's typed-tool contract lives next to the
     # registry it describes; the closed-world cross-agent contract test in

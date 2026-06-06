@@ -9,6 +9,7 @@ functions so every conditional path can be exercised by ordinary unit tests.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -18,7 +19,7 @@ from tools.tui._helpers import (
     format_metrics_block,
     format_step_message,
     route_log_record,
-    task_phase_layout,
+    task_layout,
     truncate,
 )
 
@@ -59,36 +60,44 @@ class TestRouteLogRecord:
         assert route_log_record("anything", "") == "agent"
 
 
-class TestTaskPhaseLayout:
-    def test_empty_input_yields_empty_layout(self) -> None:
-        assert task_phase_layout([], {"x": "y"}) == []
+def _task(name: str | None, role: str | None) -> SimpleNamespace:
+    """Stand-in for a crewai.Task: only ``.name`` and ``.agent.role`` are read
+    by ``task_layout``. ``role=None`` models a task with no assigned agent."""
+    agent = SimpleNamespace(role=role) if role is not None else None
+    return SimpleNamespace(name=name, agent=agent)
 
-    def test_single_task_emits_phase_heading(self) -> None:
-        assert task_phase_layout(["Recon"], {"Recon": "Reconnaissance"}) == [
-            ("Reconnaissance", "Recon")
+
+class TestTaskLayout:
+    def test_empty_input_yields_empty_layout(self) -> None:
+        assert task_layout([]) == []
+
+    def test_uses_task_name_as_heading_and_role_as_row(self) -> None:
+        assert task_layout([_task("Reconnaissance", "osint_analyst")]) == [
+            ("Reconnaissance", "osint_analyst")
         ]
 
-    def test_two_tasks_same_phase_dedups_heading(self) -> None:
-        layout = task_phase_layout(
-            ["Sweep", "Probe"],
-            {"Sweep": "Reconnaissance", "Probe": "Reconnaissance"},
-        )
-        assert layout == [("Reconnaissance", "Sweep"), (None, "Probe")]
-
-    def test_two_tasks_different_phases_emit_both_headings(self) -> None:
-        layout = task_phase_layout(
-            ["Recon", "Triage"],
-            {"Recon": "Reconnaissance", "Triage": "Vulnerability Research"},
+    def test_one_agent_two_tasks_keep_distinct_headings(self) -> None:
+        # The VR runs research then triage: same role, distinct per-task names.
+        layout = task_layout(
+            [
+                _task("Vulnerability Research", "vulnerability_researcher"),
+                _task("Findings Triage", "vulnerability_researcher"),
+            ]
         )
         assert layout == [
-            ("Reconnaissance", "Recon"),
-            ("Vulnerability Research", "Triage"),
+            ("Vulnerability Research", "vulnerability_researcher"),
+            ("Findings Triage", "vulnerability_researcher"),
         ]
 
-    def test_missing_task_in_map_falls_back_to_task_name(self) -> None:
-        # No entry in task_map -> uses the task name itself as the phase label.
-        layout = task_phase_layout(["Recon"], {})
-        assert layout == [("Recon", "Recon")]
+    def test_missing_name_falls_back_to_role(self) -> None:
+        # A task with no name (None) uses the agent role as the heading.
+        assert task_layout([_task(None, "programme_manager")]) == [
+            ("programme_manager", "programme_manager")
+        ]
+
+    def test_task_without_agent_is_skipped(self) -> None:
+        layout = task_layout([_task("Orphan", None), _task("Recon", "osint_analyst")])
+        assert layout == [("Recon", "osint_analyst")]
 
 
 class TestFormatMetricsBlock:
@@ -136,11 +145,12 @@ class TestCybersquadTUIWrapper:
     """Cover tui.py's CybersquadTUI - the cybersquad-specific binding of the
     generic CrewAIPipelineTUI. The Textual App itself needs textual.pilot to
     exercise meaningfully; here we only verify that the wrapper passes
-    build_crew() output, crew_tasks() output, record_prefix='cybersquad',
-    and the verbose/dry_run flags through to the base class init.
+    build_crew() output, record_prefix='cybersquad', and the verbose/dry_run
+    flags through to the base class init. The sidebar reads task names and
+    roles off the crew, so there is no task map to forward.
     """
 
-    def test_wires_crew_task_map_prefix_and_flags(self) -> None:
+    def test_wires_crew_prefix_and_flags(self) -> None:
         from unittest.mock import MagicMock
 
         captured: dict[str, object] = {}
@@ -149,11 +159,9 @@ class TestCybersquadTUIWrapper:
             captured.update(kw)
 
         fake_crew = MagicMock(tasks=[])
-        fake_task_map = {"some_role": "Some Phase"}
 
         with (
             patch("crew.build_crew", return_value=fake_crew) as mb,
-            patch("crew.crew_tasks", return_value=fake_task_map) as mt,
             patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init),
         ):
             from tui import CybersquadTUI
@@ -161,9 +169,8 @@ class TestCybersquadTUIWrapper:
             CybersquadTUI(verbose=True, dry_run=False)
 
         mb.assert_called_once_with(verbose=True, mcp_tools=None)
-        mt.assert_called_once_with()
         assert captured["crew"] is fake_crew
-        assert captured["task_map"] is fake_task_map
+        assert "task_map" not in captured
         assert captured["record_prefix"] == "cybersquad"
         assert captured["verbose"] is True
         assert captured["dry_run"] is False
@@ -181,7 +188,6 @@ class TestCybersquadTUIWrapper:
 
         with (
             patch("crew.build_crew", return_value=fake_crew) as mb,
-            patch("crew.crew_tasks", return_value={}),
             patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init),
         ):
             from tui import CybersquadTUI

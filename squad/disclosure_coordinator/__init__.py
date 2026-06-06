@@ -27,7 +27,6 @@ MEMBER = SquadMember(
         read_run_filelist_tool,
         read_run_file_tool,
     ],
-    task="Disclosure",
     schemas={
         "Submit Report": _SubmitReportArgs,
         "Check H1 Duplicate": _CheckDuplicateArgs,

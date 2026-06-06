@@ -153,7 +153,6 @@ from squad.tools.workspace_tools import (
 
 MEMBER = SquadMember(
     dir=Path(__file__).parent,
-    task="Penetration Testing",
     tools=[
         # @pentest_tool probes
         nuclei_scan_tool,

@@ -15,10 +15,13 @@ Typical usage in a host application::
             crew = build_my_crew(verbose=verbose)
             super().__init__(
                 crew=crew,
-                task_map=my_crew_tasks(),
                 record_prefix="myapp",
                 verbose=verbose,
             )
+
+The sidebar reads each task's display name (``Task.name``) and agent role
+straight off ``crew.tasks``, so a host app needs only to wire the crew - no
+separate task map.
 """
 
 from __future__ import annotations
@@ -39,7 +42,7 @@ from tools.tui._helpers import (
     format_metrics_block,
     format_step_message,
     route_log_record,
-    task_phase_layout,
+    task_layout,
     truncate,
 )
 
@@ -53,19 +56,16 @@ class CrewAIPipelineTUI(App):
     def __init__(
         self,
         crew: Crew,
-        task_map: dict[str, str],
         record_prefix: str = "pipeline",
         verbose: bool = False,
         dry_run: bool = False,
     ) -> None:
         super().__init__()
         self._crew = crew
-        self._task_map = task_map
         self._record_prefix = record_prefix
         self._verbose = verbose
         self._dry_run = dry_run
         self._task_widgets: list[tuple[Label, Label]] = []
-        self._task_names = [t.agent.role for t in self._crew.tasks if t.agent is not None]
         self._crew.step_callback = self._make_step_callback()
 
     def compose(self) -> ComposeResult:
@@ -73,10 +73,9 @@ class CrewAIPipelineTUI(App):
             with Vertical(id="sidebar"):
                 yield Label(self._record_prefix, id="sidebar-title")
 
-                for phase, name in task_phase_layout(self._task_names, self._task_map):
-                    if phase is not None:
-                        yield Label(phase, classes="phase-heading")
-                    name_lbl = Label(name, classes="task-name")
+                for heading, role in task_layout(self._crew.tasks):
+                    yield Label(heading, classes="phase-heading")
+                    name_lbl = Label(role, classes="task-name")
                     status_lbl = Label("Waiting", classes="task-status")
                     self._task_widgets.append((name_lbl, status_lbl))
                     yield name_lbl

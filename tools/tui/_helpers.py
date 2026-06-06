@@ -30,28 +30,26 @@ def route_log_record(record_name: str, prefix: str) -> str:
     return "agent" if record_name.startswith(prefix) else "crew"
 
 
-def task_phase_layout(
-    task_names: list[str], task_map: dict[str, str]
-) -> list[tuple[str | None, str]]:
-    """Build the sidebar layout entries for a sequential pipeline.
+def task_layout(tasks: list) -> list[tuple[str, str]]:
+    """Build the sidebar entries for a sequential pipeline.
 
-    For each task name in order, return a ``(phase_heading, task_name)`` pair.
-    ``phase_heading`` is the phase label the first time that phase is seen,
-    and ``None`` for any subsequent task that shares the same phase (so the
-    caller emits the heading once per phase, not once per task).
+    For each task that has an assigned agent, return a ``(heading, role)``
+    pair in pipeline order. ``heading`` is the task's display name -
+    ``Task.name``, stamped from the member's ``name.md`` - falling back to the
+    agent role when a task carries no name; ``role`` is the agent role shown on
+    the task's status row. Because the heading is per-task rather than
+    per-agent, an agent that runs more than one task (the Vulnerability
+    Researcher runs research then triage) gets a distinct heading for each.
 
-    Tasks with no entry in ``task_map`` fall back to using their own name as
-    the phase label - i.e. they always emit a heading.
+    Tasks with no agent are skipped, so a partially-wired crew never raises.
     """
-    layout: list[tuple[str | None, str]] = []
-    seen: set[str] = set()
-    for name in task_names:
-        phase = task_map.get(name, name)
-        if phase in seen:
-            layout.append((None, name))
-        else:
-            seen.add(phase)
-            layout.append((phase, name))
+    layout: list[tuple[str, str]] = []
+    for task in tasks:
+        agent = getattr(task, "agent", None)
+        if agent is None:
+            continue
+        role = agent.role
+        layout.append((task.name or role, role))
     return layout
 
 
