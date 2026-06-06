@@ -207,9 +207,13 @@ These exist for reasons that are not obvious from the code alone. Touching any o
 - **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
 - **`default_factory=lambda` in `config.py`** preserves `monkeypatch.setenv` semantics in tests. Do not "simplify" to direct env reads at class-definition time.
 
+## Branches
+
+If you push a branch, please open a pull request for it.
+
 ## Pull requests
 
-Pushing a branch and opening its PR are one action, not two. A pushed branch with no PR is invisible to review, to CI's per-PR gates (the `diff-cover` ratchet only runs on `pull_request` events), and to the maintainer's mental model - so open the PR the moment you push, and subscribe to it so review comments and CI events reach you. Most contributors are auto-subscribed by GitHub; some integrations - AI sessions included - need an explicit subscribe step. The only branch you push without opening a PR is one the maintainer has explicitly told you to leave alone.
+If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. Most contributors are auto-subscribed by GitHub; some integrations require an explicit subscribe step.
 
 ## Where to find more
 
