@@ -216,7 +216,12 @@ def build_task(
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
-    Reads description and expected_output from ``<member.dir>/<task_name>/``.
+    Reads name, description, and expected_output from
+    ``<member.dir>/<task_name>/``. ``task_name`` is the directory slug (a good
+    filename); ``name.md`` carries the human-readable display name stamped onto
+    ``Task.name`` (e.g. ``recon`` -> "Reconnaissance"), so a task self-describes
+    when something walks ``crew.tasks`` - the VR's two tasks (research, triage)
+    stay distinct rather than both collapsing to the agent role.
 
     ``guardrail`` is an optional CrewAI *function* guardrail
     (``(TaskOutput) -> (bool, Any)``) that validates the task output and, on
@@ -227,6 +232,7 @@ def build_task(
     ``cybersquad-task`` skill's guardrails section and ``squad/guardrails.py``.
     """
     return Task(
+        name=member.read(task_name, "name"),
         description=member.read(task_name, "description"),
         expected_output=member.read(task_name, "expected_output"),
         agent=agent,
