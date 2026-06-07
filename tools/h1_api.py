@@ -103,6 +103,16 @@ class H1Client:
         resp.raise_for_status()
         return cast(dict, resp.json())
 
+    def _next_path(self, data: dict) -> str | None:
+        """Relative path for the next page, or None.
+
+        H1's JSON:API links.next is an *absolute* URL
+        (https://api.hackerone.com/v1/hackers/programs?page[number]=2...);
+        strip our base off so _get's concatenation doesn't double it and 404.
+        """
+        nxt = data.get("links", {}).get("next")
+        return nxt.removeprefix(self._base) if nxt else None
+
     def _post(self, path: str, payload: dict) -> dict:
         url = f"{self._base}{path}"
         resp = self._session.post(url, json=payload, timeout=30)
@@ -125,7 +135,7 @@ class H1Client:
         while path and len(results) < config.h1.max_programmes:
             data = self._get(path, params)
             results.extend(data.get("data", []))
-            path = data.get("links", {}).get("next", None)
+            path = self._next_path(data)
             params = {}
 
         return results[: config.h1.max_programmes]
@@ -220,7 +230,7 @@ class H1Client:
                 )
                 if len(previews) >= cap:
                     break
-            path = data.get("links", {}).get("next")
+            path = self._next_path(data)
             # Pagination links from H1 already encode page params; subsequent
             # calls should not redundantly carry the initial filter dict.
             params = {}
