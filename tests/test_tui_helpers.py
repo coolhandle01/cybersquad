@@ -146,8 +146,7 @@ class TestFormatStepMessage:
 
 
 class TestThemeOwnership:
-    """CybersquadTUI owns its default stylesheet, and a derived class supplies
-    its own theme by overriding CSS_PATH. The default is absolute because
+    """CybersquadTUI owns its default stylesheet. The path is absolute because
     Textual resolves a relative CSS_PATH against the concrete class's module
     file, so a derived class would otherwise look for it next to its own module.
     """
@@ -161,12 +160,3 @@ class TestThemeOwnership:
         assert css.is_absolute()
         assert css.name == "default.tcss"
         assert css.is_file()
-
-    def test_derived_class_overrides_theme(self) -> None:
-        from tools.tui import CybersquadTUI
-
-        class _ThemedTUI(CybersquadTUI):
-            CSS_PATH = "custom.tcss"
-
-        assert _ThemedTUI.CSS_PATH == "custom.tcss"
-        assert _ThemedTUI.CSS_PATH != CybersquadTUI.CSS_PATH

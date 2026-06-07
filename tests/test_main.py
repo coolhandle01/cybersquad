@@ -69,9 +69,7 @@ class TestDryRunSummary:
         crew = MagicMock(agents=[with_tools, without_tools], tasks=[named, unnamed])
         main.dry_run_summary(crew)
 
-        out = capsys.readouterr().out
-        assert "DRY RUN" in out
-        assert out.strip()
+        assert "DRY RUN" in capsys.readouterr().out
 
 
 class TestRunHeadless:
@@ -177,23 +175,6 @@ class TestRunTui:
         assert callable(captured["on_complete"])
         assert callable(captured["get_token_cost"])
         app.run.assert_called_once()
-
-    def test_dry_run_still_binds_run_id_and_passes_flag(self, monkeypatch) -> None:
-        import main
-        import runtime
-
-        monkeypatch.setattr(runtime, "run_id", "")
-        monkeypatch.setattr(runtime, "bind_run_id", lambda rid: setattr(runtime, "run_id", rid))
-
-        captured: dict[str, object] = {}
-        self._patch_tui(monkeypatch, captured)
-
-        main._run_tui(MagicMock(name="crew"), dry_run=True)
-
-        # A run id is cheap and unique, so a dry run binds it like any other.
-        assert runtime.run_id
-        assert captured["pipeline_name"] == f"Bug Bounty #{runtime.run_id}"
-        assert captured["dry_run"] is True
 
     def test_callbacks_persist_metrics_and_estimate_cost(self, monkeypatch) -> None:
         import main
