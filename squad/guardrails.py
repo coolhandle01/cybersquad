@@ -16,8 +16,13 @@ agent's raw response. A malformed or missing ``programme.json`` is caught here,
 at the boundary, instead of derailing recon downstream.
 """
 
-from __future__ import annotations
-
+# NB: no `from __future__ import annotations` here. CrewAI's Task guardrail
+# validator (crewai/task.py) inspects `inspect.signature(fn).return_annotation`
+# with get_origin/get_args and does NOT resolve string annotations - under
+# PEP 563 the annotation would arrive as the string "tuple[bool, str]",
+# get_origin() would return None, and the task would reject the guardrail with
+# "If return type is annotated, it must be Tuple[bool, Any]". Keeping the
+# annotation a live type object is load-bearing.
 from crewai import TaskOutput
 from pydantic import ValidationError
 

@@ -179,7 +179,10 @@ def build_agent(
     adapter and live outside the ``SquadTool`` Protocol surface by
     design.
     """
-    skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
+    # CrewAI's `skills` field rejects an explicitly-empty list (min_length=1)
+    # but accepts None (its default) - so members without a specialist
+    # skills/ dir pass None rather than [], leaving the field at its default.
+    skills: list[Path] | None = [member.skills_dir] if member.skills_dir.is_dir() else None
     # Static, contract-tested tools first; provisioned-MCP tools spliced
     # on the end. The order is observable in the LLM-visible tool menu -
     # the agent's canonical typed surface opens the menu, MCP-sourced
@@ -212,7 +215,7 @@ def build_task(
     human_input: bool = False,
     *,
     guardrail: Callable[..., tuple[bool, Any]] | None = None,
-    max_retries: int | None = None,
+    max_retries: int = 0,
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
@@ -239,7 +242,7 @@ def build_task(
         context=context or [],
         human_input=human_input,
         guardrail=guardrail,
-        max_retries=max_retries,
+        guardrail_max_retries=max_retries,
     )
 
 
