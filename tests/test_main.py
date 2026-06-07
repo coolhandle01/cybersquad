@@ -36,6 +36,10 @@ def _stub_headless_metrics(monkeypatch) -> dict[str, MagicMock]:
     import tools.metrics as metrics_mod
 
     monkeypatch.setattr(runtime, "bind_run_id", lambda _run_id: None)
+    # _run_headless resolves runtime.run_dir() for the metrics location; the run
+    # is mocked so nothing binds programme_handle - stub run_dir so it does not
+    # raise. save_metrics is mocked too, so its argument is never used for I/O.
+    monkeypatch.setattr(runtime, "run_dir", lambda: MagicMock(name="run_dir"))
     mocks = {
         "build": MagicMock(return_value=MagicMock(name="metrics")),
         "print": MagicMock(),
@@ -183,6 +187,10 @@ class TestRunTui:
 
         monkeypatch.setattr(runtime, "run_id", "rid-xyz")
         monkeypatch.setattr(runtime, "bind_run_id", lambda _rid: None)
+        # on_complete resolves runtime.run_dir() for the metrics location; the
+        # run is mocked so nothing binds programme_handle - stub it so it does
+        # not raise (save_metrics is mocked, so the argument is never used).
+        monkeypatch.setattr(runtime, "run_dir", lambda: MagicMock(name="run_dir"))
         monkeypatch.setattr(config.llm, "model", "anthropic/claude-sonnet-4-6")
 
         build = MagicMock(return_value=MagicMock())

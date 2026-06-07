@@ -118,9 +118,14 @@ def print_metrics(metrics: RunMetrics) -> None:
     print("-" * 50 + "\n")
 
 
-def save_metrics(metrics: RunMetrics, reports_dir: str) -> Path:
-    """Write metrics JSON to <reports_dir>/<run_id>/metrics.json."""
-    out = Path(reports_dir) / metrics.run_id / "metrics.json"
+def save_metrics(metrics: RunMetrics, run_dir: Path) -> Path:
+    """Write metrics JSON to <run_dir>/metrics.json.
+
+    The metrics describe one pipeline run, so they live in that run's own
+    directory alongside the artefacts they describe (programme.json, recon.json,
+    ...), not in a separate reports/<run_id>/ folder split off from the run.
+    """
+    out = run_dir / "metrics.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(metrics.model_dump(mode="json"), indent=2),

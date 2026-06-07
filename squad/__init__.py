@@ -215,7 +215,7 @@ def build_task(
     human_input: bool = False,
     *,
     guardrail: Callable[..., tuple[bool, Any]] | None = None,
-    max_retries: int | None = None,
+    max_retries: int = 0,
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
@@ -242,7 +242,7 @@ def build_task(
         context=context or [],
         human_input=human_input,
         guardrail=guardrail,
-        max_retries=max_retries,
+        guardrail_max_retries=max_retries,
     )
 
 

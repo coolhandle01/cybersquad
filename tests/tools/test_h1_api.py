@@ -17,6 +17,7 @@ import requests
 
 from models import Severity
 from models.h1 import ScopeType, SubmissionStatus
+from tests.fixtures import h1 as h1f
 
 pytestmark = pytest.mark.unit
 
@@ -36,44 +37,41 @@ def h1_client(monkeypatch):
 # parse_programme
 class TestParseProgramme:
     def _raw_programme(self):
-        return {
-            "attributes": {
-                "handle": "acme",
-                "name": "Acme Corp",
-                "policy": "We allow automated scanning with care.",
-                "bounty_table": {
-                    "data": [
-                        {"attributes": {"label": "high", "maximum_amount": 2000}},
-                        {"attributes": {"label": "critical", "maximum_amount": 5000}},
-                    ]
-                },
-            }
-        }
+        # parse_programme takes the unwrapped resource object (detail["data"]).
+        return h1f.programme_resource(
+            "acme", name="Acme Corp", policy="We allow automated scanning with care."
+        )
 
     def _raw_scope(self, eligible=True):
-        return {
-            "data": [
-                {
-                    "attributes": {
-                        "asset_identifier": "*.acme.com",
-                        "asset_type": "WILDCARD",
-                        "eligible_for_bounty": True,
-                        "eligible_for_submission": eligible,
-                        "instruction": None,
-                    }
-                }
+        return h1f.structured_scopes(
+            [
+                h1f.structured_scope(
+                    "*.acme.com",
+                    "WILDCARD",
+                    eligible_for_submission=eligible,
+                    instruction=None,
+                    max_severity=None,
+                )
             ]
-        }
+        )
 
     def test_parses_handle_and_name(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
         assert prog.handle == "acme"
         assert prog.name == "Acme Corp"
 
-    def test_parses_bounty_table(self, h1_client):
+    def test_hacker_api_has_no_bounty_or_stats_data(self, h1_client):
+        # The hacker API detail endpoint exposes no bounty amounts and no payout
+        # or response-time stats, so parse leaves these at model defaults rather
+        # than fabricating them from attributes that never arrive. Regression net
+        # for the vapourware that had the PM scoring on always-empty fields.
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
-        assert prog.bounty_table[Severity.HIGH] == 2000
-        assert prog.bounty_table[Severity.CRITICAL] == 5000
+        assert prog.bounty_table == {}
+        assert prog.response_efficiency_pct is None
+        assert prog.avg_time_to_bounty_days is None
+        assert prog.avg_time_to_first_response_days is None
+        assert prog.total_bounties_paid_usd is None
+        assert prog.last_updated_at is None
 
     def test_policy_text_preserved(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
@@ -102,7 +100,9 @@ class TestParseProgramme:
         assert prog.offers_bounties is False
 
     def test_offers_bounties_defaults_true_when_missing(self, h1_client):
-        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        raw = self._raw_programme()
+        raw["attributes"].pop("offers_bounties", None)
+        prog = h1_client.parse_programme(raw, self._raw_scope())
         assert prog.offers_bounties is True
 
     def test_accepts_new_reports_false_when_closed(self, h1_client):
@@ -118,7 +118,9 @@ class TestParseProgramme:
         assert prog.accepts_new_reports is True
 
     def test_accepts_new_reports_defaults_true_when_missing(self, h1_client):
-        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        raw = self._raw_programme()
+        raw["attributes"].pop("submission_state", None)
+        prog = h1_client.parse_programme(raw, self._raw_scope())
         assert prog.accepts_new_reports is True
 
     def test_state_extracted_verbatim(self, h1_client):
@@ -133,35 +135,10 @@ class TestParseProgramme:
         assert prog.state == "private_mode"
 
     def test_state_none_when_missing(self, h1_client):
-        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        raw = self._raw_programme()
+        raw["attributes"].pop("state", None)
+        prog = h1_client.parse_programme(raw, self._raw_scope())
         assert prog.state is None
-
-    def test_parses_response_efficiency_pct(self, h1_client):
-        raw = self._raw_programme()
-        raw["attributes"]["response_efficiency_percentage"] = 87.5
-        prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.response_efficiency_pct == 87.5
-
-    def test_parses_avg_time_to_bounty_days(self, h1_client):
-        raw = self._raw_programme()
-        # 2880 minutes = 2 days exactly
-        raw["attributes"]["average_time_to_bounty_in_minutes"] = 2880
-        prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.avg_time_to_bounty_days == 2.0
-
-    def test_avg_time_to_bounty_days_none_when_missing(self, h1_client):
-        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
-        assert prog.avg_time_to_bounty_days is None
-
-    def test_parses_total_bounties_paid_usd(self, h1_client):
-        raw = self._raw_programme()
-        raw["attributes"]["total_bounties_paid_in_cents"] = 1_500_000
-        prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.total_bounties_paid_usd == 15_000
-
-    def test_total_bounties_paid_usd_none_when_missing(self, h1_client):
-        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
-        assert prog.total_bounties_paid_usd is None
 
     def test_parses_scope_item_max_severity(self, h1_client):
         scope = {
@@ -303,17 +280,54 @@ class TestListProgrammes:
         assert result == {"data": []}
         assert "/hackers/programs/acme/structured_scopes" in mock_get.call_args[0][0]
 
-    def test_get_programme_detail_uses_include_params(self, h1_client):
+    def test_get_structured_scope_paginates(self, h1_client):
+        # The sub-resource is paginated; every page must be aggregated, not just
+        # page one (else a large programme's scope is silently truncated).
+        nxt = f"{h1_client._base}/hackers/programs/acme/structured_scopes?page[number]=2"
+        page1 = {
+            "data": [{"type": "structured-scope", "attributes": {"asset_identifier": "a"}}],
+            "links": {"next": nxt},
+        }
+        page2 = {
+            "data": [{"type": "structured-scope", "attributes": {"asset_identifier": "b"}}],
+            "links": {},
+        }
+        responses = [MagicMock(), MagicMock()]
+        responses[0].json.return_value = page1
+        responses[1].json.return_value = page2
+        for r in responses:
+            r.raise_for_status = MagicMock()
+
+        with patch.object(h1_client._session, "get", side_effect=responses) as mock_get:
+            result = h1_client.get_structured_scope("acme")
+
+        assert [i["attributes"]["asset_identifier"] for i in result["data"]] == ["a", "b"]
+        assert mock_get.call_count == 2
+
+    def test_get_scope_exclusions_hits_endpoint(self, h1_client):
         mock_response = MagicMock()
-        mock_response.json.return_value = {"data": {}, "included": []}
+        mock_response.json.return_value = {"data": []}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
+            result = h1_client.get_scope_exclusions("acme")
+
+        assert result == {"data": []}
+        assert "/hackers/programs/acme/scope_exclusions" in mock_get.call_args[0][0]
+
+    def test_get_programme_detail_is_plain_get_no_include(self, h1_client):
+        # Plain GET: the hacker API does NOT inline structured_scopes on detail
+        # (those come from /structured_scopes) and exposes no bounty/stats data
+        # here at all. An unsupported `include` only risks a 400 mid-run.
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": {}}
         mock_response.raise_for_status = MagicMock()
 
         with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
             h1_client.get_programme_detail("acme")
 
         assert "/hackers/programs/acme" in mock_get.call_args[0][0]
-        params = mock_get.call_args[1]["params"]
-        assert params == {"include": "bounty_table,structured_scopes"}
+        assert mock_get.call_args[1]["params"] is None
 
 
 class TestBrowseProgrammes:
@@ -390,34 +404,34 @@ class TestBrowseProgrammes:
         assert [p.handle for p in previews] == ["p0", "p1", "p2"]
         assert m.call_count == 1
 
-    def test_filter_kwargs_become_filter_bracket_params(self, h1_client):
-        list_payload = self._list_resp([])
-        with patch.object(h1_client, "_get", return_value=list_payload) as m:
-            h1_client.browse_programmes(
-                offers_bounties=True,
-                bookmarked=False,
-                submission_state="open",
-                asset_type="URL",
-                sort="-launched_at",
-            )
-        params = m.call_args[0][1]
-        # H1 filter params follow JSON:API bracket notation.
-        assert params["filter[offers_bounties]"] == "true"
-        assert params["filter[bookmarked]"] == "false"
-        assert params["filter[submission_state]"] == "open"
-        assert params["filter[asset_type]"] == "URL"
-        assert params["sort"] == "-launched_at"
+    def test_filters_client_side_on_preview_fields(self, h1_client):
+        # H1 does not filter server-side, so browse_programmes drops the
+        # non-matching previews itself.
+        list_payload = self._list_resp(
+            [
+                ("acme", {"handle": "acme", "offers_bounties": True, "submission_state": "open"}),
+                ("vdp", {"handle": "vdp", "offers_bounties": False, "submission_state": "open"}),
+                (
+                    "paused",
+                    {"handle": "paused", "offers_bounties": True, "submission_state": "paused"},
+                ),
+            ]
+        )
+        with patch.object(h1_client, "_get", return_value=list_payload):
+            previews = h1_client.browse_programmes(offers_bounties=True, submission_state="open")
+        # Only acme matches BOTH filters: vdp fails offers_bounties, paused fails state.
+        assert [p.handle for p in previews] == ["acme"]
 
-    def test_omits_filter_param_when_arg_is_none(self, h1_client):
-        list_payload = self._list_resp([])
-        with patch.object(h1_client, "_get", return_value=list_payload) as m:
-            h1_client.browse_programmes(offers_bounties=True)
-        params = m.call_args[0][1]
-        assert "filter[offers_bounties]" in params
-        assert "filter[bookmarked]" not in params
-        assert "filter[asset_type]" not in params
-        assert "filter[submission_state]" not in params
-        assert "sort" not in params
+    def test_no_filters_returns_every_preview(self, h1_client):
+        list_payload = self._list_resp(
+            [
+                ("acme", {"handle": "acme", "offers_bounties": True}),
+                ("vdp", {"handle": "vdp", "offers_bounties": False}),
+            ]
+        )
+        with patch.object(h1_client, "_get", return_value=list_payload):
+            previews = h1_client.browse_programmes()
+        assert [p.handle for p in previews] == ["acme", "vdp"]
 
     def test_skips_records_with_missing_handle(self, h1_client):
         # H1 list shapes that have no handle attribute and no id field are
@@ -435,112 +449,117 @@ class TestBrowseProgrammes:
 
 
 class TestHydrateProgramme:
-    """hydrate_programme fetches one full Programme from the detail endpoint."""
+    """hydrate_programme makes three calls against the real hacker API contract:
+    the detail endpoint for access/policy attributes, the dedicated
+    /structured_scopes sub-resource for scope, and /scope_exclusions for the
+    explicit prohibition set. The hacker API does NOT inline scopes on detail
+    (docs: api.hackerone.com/hacker-resources) nor expose any bounty/stats data -
+    faking either was the bug that let the old suite pass while every hydrated
+    programme came back scope-less and value-less."""
 
-    def _detail_resp(self, handle, state: str | None = "public_mode"):
-        attributes = {
-            "handle": handle,
-            "name": handle.upper(),
-            "policy": "Automated scanning permitted.",
-            "bounty_table": {
-                "data": [{"attributes": {"label": "critical", "maximum_amount": 5000}}]
-            },
-        }
-        if state is not None:
-            attributes["state"] = state
-        return {
-            "data": {"attributes": attributes},
-            "included": [
-                {
-                    "type": "structured-scope",
-                    "attributes": {
-                        "asset_identifier": f"*.{handle}.com",
-                        "asset_type": "WILDCARD",
-                        "eligible_for_bounty": True,
-                        "eligible_for_submission": True,
-                    },
-                }
-            ],
-        }
+    def _detail_resp(self, handle, state="public_mode"):
+        return h1f.programme_detail(
+            handle, name=handle.upper(), policy="Automated scanning permitted.", state=state
+        )
+
+    def _scope_resp(self, handle):
+        return h1f.structured_scopes([h1f.structured_scope(f"*.{handle}.com", "WILDCARD")])
+
+    def _excl_resp(self, category="Denial of Service", details="No DoS/DDoS testing."):
+        return h1f.scope_exclusions([h1f.scope_exclusion(category, details)])
 
     def test_returns_typed_programme(self, h1_client):
-        with patch.object(h1_client, "_get", return_value=self._detail_resp("acme")):
+        with patch.object(
+            h1_client,
+            "_get",
+            side_effect=[self._detail_resp("acme"), self._scope_resp("acme"), {"data": []}],
+        ):
             prog = h1_client.hydrate_programme("acme")
         assert prog.handle == "acme"
         assert prog.name == "ACME"
-        assert prog.bounty_table[Severity.CRITICAL] == 5000
+        # No bounty data on the hacker API - the table is empty, not fabricated.
+        assert prog.bounty_table == {}
 
     def test_hydrate_carries_state_through(self, h1_client):
         with patch.object(
-            h1_client, "_get", return_value=self._detail_resp("acme", state="private_mode")
+            h1_client,
+            "_get",
+            side_effect=[
+                self._detail_resp("acme", state="private_mode"),
+                self._scope_resp("acme"),
+                {"data": []},
+            ],
         ):
             prog = h1_client.hydrate_programme("acme")
         assert prog.state == "private_mode"
 
-    def test_uses_detail_endpoint_with_include(self, h1_client):
-        with patch.object(h1_client, "_get", return_value=self._detail_resp("acme")) as m:
+    def test_fetches_detail_then_scopes_then_exclusions(self, h1_client):
+        with patch.object(
+            h1_client,
+            "_get",
+            side_effect=[self._detail_resp("acme"), self._scope_resp("acme"), self._excl_resp()],
+        ) as m:
             h1_client.hydrate_programme("acme")
-        path = m.call_args[0][0]
-        if "params" in m.call_args[1]:
-            params = m.call_args[1]["params"]
-        elif len(m.call_args[0]) > 1:
-            params = m.call_args[0][1]
-        else:
-            params = {}
-        assert "/hackers/programs/acme" in path
-        assert params.get("include") == "bounty_table,structured_scopes"
+        assert m.call_count == 3
+        detail_path = m.call_args_list[0][0][0]
+        detail_params = m.call_args_list[0][1].get("params", {})
+        scope_path = m.call_args_list[1][0][0]
+        excl_path = m.call_args_list[2][0][0]
+        assert detail_path == "/hackers/programs/acme"
+        assert detail_params == {}
+        assert scope_path == "/hackers/programs/acme/structured_scopes"
+        assert excl_path == "/hackers/programs/acme/scope_exclusions"
 
-    def test_includes_structured_scope_from_detail(self, h1_client):
-        with patch.object(h1_client, "_get", return_value=self._detail_resp("acme")):
+    def test_includes_structured_scope_from_scope_endpoint(self, h1_client):
+        with patch.object(
+            h1_client,
+            "_get",
+            side_effect=[self._detail_resp("acme"), self._scope_resp("acme"), {"data": []}],
+        ):
             prog = h1_client.hydrate_programme("acme")
         assert prog.in_scope[0].asset_identifier == "*.acme.com"
         assert prog.in_scope[0].asset_type == ScopeType.WILDCARD
 
+    def test_folds_scope_exclusions_into_out_of_scope(self, h1_client):
+        # An explicit /scope_exclusions entry must surface as an out-of-scope
+        # item so the PenTester sees the prohibition - not only the
+        # structured_scopes entries flagged ineligible.
+        with patch.object(
+            h1_client,
+            "_get",
+            side_effect=[
+                self._detail_resp("acme"),
+                self._scope_resp("acme"),
+                self._excl_resp(category="Social engineering", details="No phishing staff."),
+            ],
+        ):
+            prog = h1_client.hydrate_programme("acme")
+        excluded = [s for s in prog.out_of_scope if s.asset_identifier == "Social engineering"]
+        assert excluded, "scope_exclusions entry did not reach out_of_scope"
+        assert excluded[0].eligible_for_bounty is False
+        assert excluded[0].instruction == "No phishing staff."
 
-class TestGetProgrammeStats:
-    def test_returns_parsed_fields(self, h1_client):
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "data": {
-                "attributes": {
-                    "response_efficiency_percentage": 95,
-                    "average_time_to_first_programme_response_in_minutes": 120,
-                    "average_time_to_bounty_in_minutes": 14400,
-                    "average_time_to_resolution_in_minutes": 43200,
-                    "total_bounties_paid_in_cents": 500000,
-                    "state": "public_mode",
-                }
-            }
-        }
+    def test_hydrate_survives_scope_exclusions_error(self, h1_client):
+        # scope_exclusions is supplementary: an error fetching it must not block
+        # selecting the programme. Hydrate proceeds with the structured scope.
+        def _side_effect(path, params=None):
+            if path.endswith("/scope_exclusions"):
+                raise requests.HTTPError(response=MagicMock(status_code=404))
+            if path.endswith("/structured_scopes"):
+                return self._scope_resp("acme")
+            return self._detail_resp("acme")
 
-        with patch.object(h1_client._session, "get", return_value=mock_response):
-            stats = h1_client.get_programme_stats("acme")
+        with patch.object(h1_client, "_get", side_effect=_side_effect):
+            prog = h1_client.hydrate_programme("acme")
+        assert prog.handle == "acme"
+        assert prog.in_scope[0].asset_identifier == "*.acme.com"
 
-        assert stats["handle"] == "acme"
-        assert stats["response_efficiency_pct"] == 95
-        assert stats["avg_time_to_bounty_minutes"] == 14400
-        assert stats["total_bounties_paid_cents"] == 500000
-
-    def test_accepting_reports_true_when_public_mode(self, h1_client):
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {"data": {"attributes": {"state": "public_mode"}}}
-
-        with patch.object(h1_client._session, "get", return_value=mock_response):
-            stats = h1_client.get_programme_stats("acme")
-
-        assert stats["accepting_reports"] is True
-
-    def test_accepting_reports_false_when_not_public_mode(self, h1_client):
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {"data": {"attributes": {"state": "private_mode"}}}
-
-        with patch.object(h1_client._session, "get", return_value=mock_response):
-            stats = h1_client.get_programme_stats("acme")
-
-        assert stats["accepting_reports"] is False
+    def test_raises_when_detail_has_no_programme(self, h1_client):
+        # Empty/malformed detail must fail loud, not fabricate an "unknown"
+        # programme the PM then caches and "selects".
+        with patch.object(h1_client, "_get", side_effect=[{"data": {}}]):
+            with pytest.raises(ValueError, match="no usable programme detail"):
+                h1_client.hydrate_programme("ghost")
 
 
 class TestListReports:

@@ -8,33 +8,26 @@ handle, and ``Save Selected Programme`` binds the choice for every
 downstream agent.
 """
 
-import shutil
-
 from pydantic import BaseModel, Field
 
 import runtime
-from models.h1 import Programme, ProgrammePreview, ScopeType, SubmissionState
+from models.h1 import Programme, ProgrammePreview, SubmissionState
 from squad import cyber_tool
 from tools.h1_api import h1
+
+# Programmes hydrated during this run, keyed by handle. The PM hydrates several
+# candidates to score them, then saves exactly one. Holding the hydrated objects
+# in memory keeps that hydrate->save handoff inside the agent WITHOUT writing a
+# programme.json per candidate: the single selection save_programme_tool writes
+# to the run directory is then the only programme.json on disk - the
+# one-typed-artefact-per-stage contract the README documents, and the pre-#115
+# behaviour (one programme.json when the PM is done, not one per hydrated handle).
+_hydrated_this_run: dict[str, Programme] = {}
 
 
 class _BrowseProgrammesArgs(BaseModel):
     """Explicit args_schema for the Browse HackerOne Programmes tool."""
 
-    asset_type: ScopeType | None = Field(
-        default=None,
-        description=(
-            "H1 ``filter[asset_type]`` value, typed as the codebase's"
-            " ``ScopeType`` StrEnum (lowercase Python-side: ``ScopeType."
-            " WILDCARD`` has value ``'wildcard'``). The wrapper uppercases"
-            " on the wire to match H1's filter format. Common picks:"
-            " ``WILDCARD`` for broad surface coverage, ``URL`` for a"
-            " single application target, ``IP_ADDRESS`` / ``CIDR`` for"
-            " network-tier targets. Omit (None) to accept any asset type"
-            " - the H1 default. A wrong value here pulls the wrong"
-            " shortlist."
-        ),
-    )
     bookmarked: bool | None = Field(
         default=None,
         description=(
@@ -55,29 +48,17 @@ class _BrowseProgrammesArgs(BaseModel):
     submission_state: SubmissionState | None = Field(
         default=None,
         description=(
-            "H1 ``filter[submission_state]`` value, typed as the"
-            " ``SubmissionState`` StrEnum. ``OPEN`` excludes paused and"
-            " disabled programmes; almost always pass ``OPEN`` -"
-            " submitting against a paused or disabled programme wastes"
-            " the submission. Omit (None) to accept any state."
-        ),
-    )
-    sort: str | None = Field(
-        default=None,
-        description=(
-            "H1 JSON:API sort key. Prefix with '-' for descending."
-            " Common values: '-launched_at' (newest first),"
-            " 'launched_at' (oldest first), '-resolved_report_count' (most"
-            " active triage)."
+            "A ``SubmissionState`` StrEnum naming the report window:"
+            " ``OPEN`` for programmes accepting reports, paused/disabled"
+            " for those that are not. Omit (None) to leave it unset."
         ),
     )
     limit: int | None = Field(
         default=None,
         description=(
-            "Cap on total previews returned across pages. Omit (None) to use"
-            " the configured default (``config.h1.max_programmes``)."
-            " This is a server-side pagination ceiling, not a per-request"
-            " page size."
+            "Cap on how many previews you get back across all pages. Omit"
+            " (None) to use the configured default. This bounds the total"
+            " returned to you; it is not a per-request page size."
         ),
     )
 
@@ -87,13 +68,10 @@ class _BrowseProgrammesArgs(BaseModel):
 # to be a named parameter so the LLM can discover and pass it. Collapsing
 # into a single dict argument would force the agent to guess valid filter
 # keys.
-# pylint: disable=R0913,R0917
 def browse_programmes_tool(
-    asset_type: ScopeType | None = None,
     bookmarked: bool | None = None,
     offers_bounties: bool | None = None,
     submission_state: SubmissionState | None = None,
-    sort: str | None = None,
     limit: int | None = None,
 ) -> list[ProgrammePreview]:
     """
@@ -106,31 +84,21 @@ def browse_programmes_tool(
     state, and bookmarked - enough to narrow on access mode and bounty
     posture before pulling policy_text and scope.
 
-    Filter kwargs map to H1 filter[*] query params on /hackers/programs and
-    are sent to the server; the H1 default applies when a kwarg is omitted.
-      - asset_type: a ScopeType (e.g. ScopeType.WILDCARD)
-      - bookmarked: True for programmes you have bookmarked
-      - offers_bounties: True to exclude VDPs
-      - submission_state: SubmissionState.OPEN to exclude paused/disabled
-      - sort: e.g. "-launched_at" for newest first
-      - limit: cap on total previews (default config.h1.max_programmes)
+    The filters (bookmarked, offers_bounties, submission_state) narrow the
+    catalog. H1 does not filter its list server-side, so they are applied here
+    against each preview: a programme that does not match every filter you set
+    is dropped before you see it. offers_bounties=True drops VDPs;
+    submission_state=OPEN drops paused/disabled programmes. limit caps how many
+    previews come back.
 
-    Returns a list of ProgrammePreview. Hydrate shortlisted handles with
-    hydrate_programme_tool.
+    Returns a list of ProgrammePreview. Hydrate only the strongest shortlisted
+    handles with hydrate_programme_tool.
     """
-    # H1's filter API expects uppercase asset_type values (URL, WILDCARD,
-    # ...); ScopeType is the parsed Python-side shape with lowercase
-    # values. Normalise here so the agent passes the same enum it sees on
-    # parsed Programme objects, and the wire form stays H1's expected
-    # uppercase.
-    asset_type_wire = asset_type.value.upper() if asset_type is not None else None
     return list(
         h1.browse_programmes(
-            asset_type=asset_type_wire,
             bookmarked=bookmarked,
             offers_bounties=offers_bounties,
             submission_state=submission_state.value if submission_state is not None else None,
-            sort=sort,
             limit=limit,
         )
     )
@@ -155,17 +123,19 @@ class _HydrateProgrammeArgs(BaseModel):
 @cyber_tool("Hydrate HackerOne Programme", args_schema=_HydrateProgrammeArgs)
 def hydrate_programme_tool(handle: str) -> Programme:
     """
-    Fetch full programme detail for one handle - bounty_table, structured
-    scope, policy text, response/payout stats. One HTTP call.
+    Fetch full programme detail for one handle - access/policy attributes,
+    structured scope (in and out), explicit scope exclusions, and policy text.
+    Three HTTP calls (programme detail, structured scopes, scope exclusions).
+    Judge a programme's value from its scope, policy, and access signals.
 
     Expensive relative to browse_programmes_tool, so reserve for candidates
-    the browse step has already shortlisted. The hydrated programme is
-    cached so save_programme_tool can copy it into the run directory.
+    the browse step has already shortlisted. The hydrated programme is held in
+    memory (not written to disk) so save_programme_tool can persist the one you
+    finally select - hydrating ten candidates must not leave ten programme.json
+    files behind; the run gets exactly one, written by save.
     """
     prog = h1.hydrate_programme(handle)
-    cache_path = runtime.programme_cache_path(prog.handle)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(prog.model_dump_json(), encoding="utf-8")
+    _hydrated_this_run[prog.handle] = prog
     return prog
 
 
@@ -175,11 +145,10 @@ class _SaveProgrammeArgs(BaseModel):
     handle: str = Field(
         description=(
             "Exact HackerOne programme handle as it appears in the URL"
-            " (lowercase, no slashes, no spaces). Must match a handle that"
-            " was already hydrated this run - the cached ``programme.json``"
-            " is keyed by handle and a mismatch means downstream agents see"
-            " an empty run directory and reason against a programme that"
-            " was never selected."
+            " (lowercase, no slashes, no spaces). Must match a handle you"
+            " already hydrated this run - save persists the in-memory hydrated"
+            " programme, so a handle that was never hydrated has nothing to"
+            " write and is rejected."
         ),
     )
 
@@ -188,14 +157,26 @@ class _SaveProgrammeArgs(BaseModel):
 def save_programme_tool(handle: str) -> str:
     """
     Record the selected programme for downstream agents. Binds
-    runtime.programme_handle, creates the run directory, and copies the
-    cached programme.json into it. Returns the absolute path to the run
-    directory.
+    runtime.programme_handle, creates the run directory, and writes the single
+    selected programme.json into it. Returns the absolute path to the run
+    directory. This is the only programme.json that reaches disk - one per run,
+    not one per hydrated candidate.
     """
+    prog = _hydrated_this_run.get(handle)
+    if prog is None:
+        # Fail loud instead of silently creating an empty run directory. A
+        # handle not in the hydrated set means hydrate_programme_tool was never
+        # run (or failed) for it, so there is nothing to persist - and a save
+        # that returns success while writing no programme.json is exactly what
+        # lets the select task "finish" with no artefact, only to fail the
+        # downstream guardrail. Surfacing it here lets the agent re-hydrate.
+        raise ValueError(
+            f"No hydrated programme for handle {handle!r}; run "
+            f"'Hydrate HackerOne Programme' for this exact handle first. "
+            f"Saving without a hydrated programme would write no programme.json."
+        )
     runtime.bind_programme(handle)
     run_dir = runtime.run_dir()
     run_dir.mkdir(parents=True, exist_ok=True)
-    cache = runtime.programme_cache_path(handle)
-    if cache.exists():
-        shutil.copy(cache, run_dir / "programme.json")
+    (run_dir / "programme.json").write_text(prog.model_dump_json(), encoding="utf-8")
     return str(run_dir)

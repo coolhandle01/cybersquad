@@ -136,7 +136,7 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
             input_tokens=getattr(usage, "prompt_tokens", 0),
             output_tokens=getattr(usage, "completion_tokens", 0),
         )
-        save_metrics(metrics, config.reports_dir)
+        save_metrics(metrics, runtime.run_dir())
 
     def get_token_cost(input_tokens: int, output_tokens: int) -> float:
         return estimate_cost(config.llm.model, input_tokens, output_tokens)
@@ -195,7 +195,7 @@ def _run_headless(crew: Any, *, verbose: bool, dry_run: bool) -> None:  # noqa: 
                 output_tokens=getattr(usage, "completion_tokens", 0),
             )
             print_metrics(metrics)
-            save_metrics(metrics, config.reports_dir)
+            save_metrics(metrics, runtime.run_dir())
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(0)

@@ -42,7 +42,7 @@ class _FakeTask:
         context: list | None = None,
         human_input: bool = False,
         guardrail: object = None,
-        max_retries: int | None = None,
+        guardrail_max_retries: int | None = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -51,7 +51,7 @@ class _FakeTask:
         self.context = context or []
         self.human_input = human_input
         self.guardrail = guardrail
-        self.max_retries = max_retries
+        self.guardrail_max_retries = guardrail_max_retries
 
 
 class TestSquadMemberRead:
@@ -141,7 +141,7 @@ class TestBuildTasks:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         select, *_rest = build_tasks(self._agents())
         assert select.guardrail is validate_select_output
-        assert select.max_retries == 2
+        assert select.guardrail_max_retries == 0
 
     def test_only_select_task_is_guarded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)

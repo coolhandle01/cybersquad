@@ -9,9 +9,10 @@ The catalog tools:
     policy_text, no scope, no bounty table - just enough signal to
     decide whether a programme is worth a closer look.
   - hydrate_programme_tool - one programme, fully hydrated. Expensive
-    relative to browse. Returns bounty_table, structured scope, policy
-    text, response/payout stats. Call this for the candidates you have
-    already decided to score.
+    relative to browse. Returns the full structured scope (in and out,
+    including explicit exclusions), the policy text, and the access
+    attributes. Call this for the candidates you have already decided to
+    score.
   - save_programme_tool - records your final pick. Call exactly once.
 
 Step 0 - Access authorisation (operative invariant, applies to every
@@ -43,30 +44,28 @@ Step 1 - Survey:
     curation, not to add to it.
 
   Step 1b - Catalog browse (fall-back when bookmarks did not satisfy):
-    Call browse_programmes_tool. Pass the H1 server-side filters that
-    obviously apply to the squad's goal - offers_bounties=True excludes
-    VDPs at the source. Sort by "-launched_at" or "-total_bounties_paid"
-    if you want a particular tilt. limit defaults to the H1 catalog cap;
-    raise it if you want to look wider, lower it if a tight filter
-    already narrows the field.
+    Call browse_programmes_tool. You may pass filter hints
+    (offers_bounties, submission_state, ...), but do not assume they
+    narrow anything - H1 does not reliably filter the list, so the field
+    you get back may be the whole catalog regardless.
 
-    Read the previews. The handle, name, offers_bounties, submission_state,
-    and state fields are enough to drop programmes whose access mode or
-    bounty posture is wrong. You can also call browse_programmes_tool
-    again with different filters if your first survey was too narrow.
+    The narrowing that counts is yours: read the previews and drop
+    programmes whose access mode or bounty posture is wrong on what the
+    preview carries - handle, name, offers_bounties, submission_state,
+    state, bookmarked. Shortlist tightly before paying to hydrate.
 
 Step 2 - Shortlist and hydrate:
-  From the previews, pick a shortlist of candidates worth scoring. A
-  shortlist of 3-8 is reasonable; smaller if filters were tight, larger
-  if you want a competitive field. For each shortlisted handle, call
-  hydrate_programme_tool. Do not hydrate the whole catalog - that is
-  exactly the antipattern this two-tool split exists to prevent.
+  From the previews, pick the few candidates most worth scoring.
+  Hydration is the expensive step - it pulls one programme's full policy
+  and scope - so shortlist hard on the cheap previews and hydrate only
+  the 1-3 strongest. For each, call hydrate_programme_tool. Do not
+  hydrate the whole catalog; browsing first exists precisely so you do
+  not have to.
 
 Step 3 - Hard filters (discard immediately on hydrated programmes, do
 not score):
-  - offers_bounties is false (VDP - no payment; should already be
-    filtered by browse, but check the hydrated programme as well in
-    case the server-side filter behaved unexpectedly)
+  - offers_bounties is false (VDP - no payment; browse should already
+    have dropped it client-side, but re-check on the hydrated programme)
   - accepts_new_reports is false (closed programme)
   - triage_active is false (programme is not actively triaging; a
     report will sit untouched)
@@ -81,13 +80,14 @@ Step 4 - Policy review:
 
 Step 5 - Score remaining candidates:
   Activate the programme-selection-scoring skill. It carries the
-  four-factor weighted rubric, the cap adjustment for per-asset
-  max_severity, and the tiebreak rules.
+  three-factor weighted rubric built on scope value, scope fit, and
+  method permissiveness - the real signals the hacker API returns - plus
+  the tiebreak rules. There are no bounty or speed figures to score on.
 
 Select the single highest-scoring programme that passed all filters.
 Call save_programme_tool with the chosen handle to record the selection
 and create the run directory the downstream agents will write into.
 Document your access authorisation, browse + hydrate workflow (which
 filters you ran, how many programmes you previewed, which handles you
-hydrated and why), policy reading, and scoring in selection_rationale -
+hydrated and why), policy reading, and scoring in your written brief -
 the access reasoning must be stated explicitly, not left implicit.

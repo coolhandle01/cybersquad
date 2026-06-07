@@ -90,7 +90,10 @@ class TestSaveMetrics:
     def test_writes_valid_json(self, tmp_path: Path) -> None:
         started = datetime.now(UTC) - timedelta(seconds=5)
         m = build_run_metrics("test-run", started, "claude-sonnet-4-20250514", 100, 50)
-        out = save_metrics(m, str(tmp_path))
+        out = save_metrics(m, tmp_path)
+        # metrics.json lands directly in the run dir it is handed - alongside
+        # programme.json - not in a nested reports/<run_id>/ folder.
+        assert out == tmp_path / "metrics.json"
         assert out.exists()
         data = json.loads(out.read_text())
         assert data["run_id"] == "test-run"
@@ -99,7 +102,7 @@ class TestSaveMetrics:
     def test_creates_parent_dirs(self, tmp_path: Path) -> None:
         started = datetime.now(UTC) - timedelta(seconds=1)
         m = build_run_metrics("nested-run", started, "claude-haiku-4-5-20251001", 0, 0)
-        out = save_metrics(m, str(tmp_path / "new" / "dir"))
+        out = save_metrics(m, tmp_path / "new" / "dir")
         assert out.exists()
 
 

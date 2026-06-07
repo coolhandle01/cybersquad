@@ -39,6 +39,37 @@ import os
 os.environ.setdefault("H1_API_USERNAME", "ci-user")
 os.environ.setdefault("H1_API_TOKEN", "ci-token")
 os.environ.setdefault("CYBERSQUAD_CONTACT_EMAIL", "ci@example.invalid")
+os.environ.setdefault("REPORTS_DIR", "./test-results")
+
+# Neutralise the operator's scan-tuning dials so the suite is hermetic. The
+# tests assert the NORMAL (unconfigured) defaults and mock the recon tools
+# directly; if a local .env or shell exports SCAN_MODE=stealth (or an
+# individual dial), config.py's ScanConfig.__post_init__ would flip
+# tls_enabled / traceroute_enabled off and sqlmap_level to 1, breaking the
+# default-asserting tests while CI (clean env) stays green. Clear them here,
+# before config.py's module-level singleton loads, so the suite always sees
+# the same baseline CI runs with. test_scan_mode.py sets the mode explicitly
+# where it needs a non-default posture.
+for _scan_env in (
+    "SCAN_MODE",
+    "SCAN_DELAY",
+    "NUCLEI_RATE_LIMIT",
+    "DIRFUZZ_RATE_LIMIT",
+    "DIRFUZZ_THREADS",
+    "SQLMAP_LEVEL",
+    "SQLMAP_RISK",
+    "HTTPX_RATE_LIMIT",
+    "HTTPX_RETRIES",
+    "HTTPX_THREADS",
+    "DNSX_RATE_LIMIT",
+    "DNSX_THREADS",
+    "SUBFINDER_RATE_LIMIT",
+    "SUBFINDER_THREADS",
+    "SUBFINDER_ACTIVE",
+    "TRACEROUTE_ENABLED",
+    "TLS_ENABLED",
+):
+    os.environ.pop(_scan_env, None)
 
 import pytest
 
