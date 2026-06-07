@@ -8,8 +8,17 @@ version = "0.1.0"
 description = "Autonomous bug bounty pipeline powered by CrewAI"
 requires-python = ">=3.12"
 dependencies = [
-    "crewai[anthropic]>=1.14.0",
-    "crewai-tools>=0.15.0",
+    # Pinned to 1.14.4 (not >=): 1.14.5 "deprecated CrewAgentExecutor, default
+    # Crew agents to AgentExecutor" (the experimental executor), which does not
+    # satisfy the human-input provider's ExecutorContext protocol - so
+    # human_input=True tasks crash with "'AgentExecutor' object has no attribute
+    # 'ask_for_human_input'". 1.14.6 (latest) still carries the regression.
+    # 1.14.4 is the last release where human_input works. Revisit when upstream
+    # fixes the experimental executor's human-in-the-loop path.
+    "crewai[anthropic]==1.14.4",
+    # Lockstep with crewai: crewai-tools X.Y.Z depends on crewai==X.Y.Z, so
+    # this must track the crewai pin above (1.14.4) exactly.
+    "crewai-tools==1.14.4",
     "mcp>=1.0.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
@@ -65,7 +74,7 @@ mcp = [
     # MCP is constructed - a non-TTY environment (CI, web session, daemon)
     # then crashes the host. Pull the extra explicitly so the dependency is
     # declared, not inferred from "we installed crewai-tools and hoped".
-    "crewai-tools[mcp]>=1.14.5",
+    "crewai-tools[mcp]==1.14.4",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
     "mcp-server-time==2026.6.4",

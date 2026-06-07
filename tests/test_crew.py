@@ -35,7 +35,7 @@ def _wire_build_crew_mocks(monkeypatch, captured: dict[str, tuple]) -> None:
 
     monkeypatch.setattr(crew, "build_agent", fake_build_agent)
     monkeypatch.setattr(crew, "_build_llm", lambda: MagicMock())
-    monkeypatch.setattr(crew, "_build_long_term_memory", lambda: None)
+    monkeypatch.setattr(crew, "_build_long_term_memory", lambda: False)
     monkeypatch.setattr(crew, "build_tasks", lambda _agents_by_slug: [])
     monkeypatch.setattr(crew, "Crew", MagicMock())
 

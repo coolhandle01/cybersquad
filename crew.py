@@ -58,14 +58,17 @@ def _build_llm() -> LLM:
     )
 
 
-def _build_long_term_memory() -> Memory | None:
+def _build_long_term_memory() -> Memory | bool:
     """Construct CrewAI long-term memory when enabled in config.
 
-    Returns the Memory instance to pass to ``Crew(memory=...)``, or None
-    when long-term memory is disabled (the default).
+    Returns the Memory instance to pass to ``Crew(memory=...)``, or ``False``
+    when long-term memory is disabled (the default). ``False`` - not ``None`` -
+    is CrewAI's own disabled value: ``Crew.memory`` defaults to ``False`` and
+    its telemetry records the setting as a span attribute, which rejects
+    ``None`` ("Invalid type NoneType for attribute 'crew_memory'").
     """
     if not config.memory.long_term_enabled:
-        return None
+        return False
     storage_path = Path(config.memory.storage_path)
     storage_path.parent.mkdir(parents=True, exist_ok=True)
     return Memory(storage="lancedb", root_scope="/long_term")
@@ -131,7 +134,7 @@ def _assemble_crew(
     # against it, so widen on construction.
     agents: list[BaseAgent] = list(agents_by_slug.values())
     tasks: list[Task] = build_tasks(agents_by_slug)
-    memory: Memory | None = _build_long_term_memory()
+    memory: Memory | bool = _build_long_term_memory()
 
     return Crew(
         agents=agents,
