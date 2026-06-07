@@ -133,6 +133,18 @@ class TestResolveOutputLogFile:
         assert crew._resolve_output_log_file() is None
 
 
+class TestBuildLongTermMemory:
+    """``_build_long_term_memory`` returns CrewAI's disabled value ``False``
+    (not ``None`` - ``Crew.memory`` defaults to ``False`` and its telemetry
+    rejects ``None``) when long-term memory is off."""
+
+    def test_returns_false_when_disabled(self, monkeypatch) -> None:
+        import crew
+
+        monkeypatch.setattr(crew.config.memory, "long_term_enabled", False)
+        assert crew._build_long_term_memory() is False
+
+
 class TestBuildCrew:
     """``build_crew`` is the single seam that opens the provisioned-MCP scope and
     yields a ready crew (assembled by ``_assemble_crew``). Pins the
