@@ -34,7 +34,7 @@ def build_tasks(agents: dict[str, Agent]) -> list[Task]:
         agents["programme_manager"],
         human_input=hi,
         guardrail=validate_select_output,
-        max_retries=0,
+        max_retries=2,
     )
 
     recon = build_task(
@@ -81,5 +81,4 @@ def build_tasks(agents: dict[str, Agent]) -> list[Task]:
         human_input=hi,
     )
 
-    #return [select, recon, research, pentest, triage, write, submit]
-    return [select] #, recon, research, pentest, triage, write, submit]
+    return [select, recon, research, pentest, triage, write, submit]
