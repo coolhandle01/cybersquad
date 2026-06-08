@@ -31,11 +31,13 @@ top-level conftest (this one), not at nested ones.
 
 from __future__ import annotations
 
+import os
+
+import pytest
+
 # Seed the env vars that config.py reads at import time so test runs that
 # do not export them on the command line still load the config singleton
 # cleanly. These are placeholders only; production runs supply real values.
-import os
-
 os.environ.setdefault("H1_API_USERNAME", "ci-user")
 os.environ.setdefault("H1_API_TOKEN", "ci-token")
 os.environ.setdefault("CYBERSQUAD_CONTACT_EMAIL", "ci@example.invalid")
@@ -70,8 +72,6 @@ for _scan_env in (
     "TLS_ENABLED",
 ):
     os.environ.pop(_scan_env, None)
-
-import pytest
 
 pytest_plugins = [
     "tests.fixtures.domains",

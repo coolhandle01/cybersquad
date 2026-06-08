@@ -141,7 +141,7 @@ class TestBuildTasks:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         select, *_rest = build_tasks(self._agents())
         assert select.guardrail is validate_select_output
-        assert select.guardrail_max_retries == 0
+        assert select.guardrail_max_retries == 2
 
     def test_only_select_task_is_guarded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
