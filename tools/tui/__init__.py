@@ -18,6 +18,10 @@ up into ``runtime`` / ``config`` / ``tools.metrics``:
 - ``get_token_cost(input_tokens, output_tokens)`` - returns the USD estimate to
   display; cost is not a CrewAI metric, so the host supplies it
 
+Human review (``Task(human_input=True)``) is handled by routing CrewAI's
+feedback prompt to the input box instead of a blocking terminal ``input()`` -
+see ``_make_tui_human_input_provider`` and ``_await_feedback``.
+
 The class owns a default theme (``CSS_PATH`` below); a derived class ships its
 own look by setting its own ``CSS_PATH``.
 
@@ -30,8 +34,10 @@ each task's display name (``Task.name``) and agent role straight off
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from crewai import Crew
 from textual import work
@@ -47,6 +53,9 @@ from tools.tui._helpers import (
     task_layout,
     truncate,
 )
+
+if TYPE_CHECKING:
+    from crewai.core.providers.human_input import SyncHumanInputProvider
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +87,10 @@ class CybersquadTUI(App):
         self._on_complete = on_complete
         self._get_token_cost = get_token_cost
         self._task_widgets: list[tuple[Label, Label]] = []
+        # Human-review bridge: the worker thread parks on this event while the
+        # operator types feedback into the input box on the UI thread.
+        self._feedback_event: threading.Event | None = None
+        self._feedback_value: str = ""
         self._crew.step_callback = self._make_step_callback()
 
     def compose(self) -> ComposeResult:
@@ -100,7 +113,7 @@ class CybersquadTUI(App):
                     yield Label("Agent Output", classes="pane-title")
                     yield RichLog(id="agent-log", highlight=True, markup=True, wrap=True)
                     yield Input(
-                        placeholder="Human review input (not yet implemented)",
+                        placeholder="Human review (idle)",
                         disabled=True,
                         id="human-input",
                     )
@@ -123,6 +136,8 @@ class CybersquadTUI(App):
 
     @work(thread=True)
     def _start_run(self) -> None:
+        from crewai.core.providers.human_input import reset_provider, set_provider
+
         if self._on_start is not None:
             self._on_start()
 
@@ -132,12 +147,18 @@ class CybersquadTUI(App):
 
         self.call_from_thread(self._set_task_running, 0)
 
+        # Route CrewAI's human_input feedback prompt to the input box instead of
+        # a blocking terminal input(). Set in this (worker) thread so kickoff's
+        # get_provider() - same thread - picks it up; reset when the run ends.
+        token = set_provider(_make_tui_human_input_provider(self))
         try:
             result = self._crew.kickoff()
             self.call_from_thread(self._on_done, result)
         except Exception as exc:
             self.call_from_thread(self._write_agent, f"[bold red]Pipeline error: {exc}[/bold red]")
             self.call_from_thread(self._write_crew, f"[bold red]Pipeline error: {exc}[/bold red]")
+        finally:
+            reset_provider(token)
 
     def _make_task_callback(
         self, idx: int, orig: Callable[..., None] | None
@@ -221,6 +242,60 @@ class CybersquadTUI(App):
             self.query_one("#crew-log", RichLog).write(msg)
         except NoMatches:
             logger.debug("crew-log widget not mounted, dropping message")
+
+    # ── human review ──────────────────────────────────────────────────
+
+    def _await_feedback(self) -> str:
+        """Worker-thread side of the human-review gate.
+
+        Opens the input box on the UI thread, parks until the operator submits,
+        then returns what they typed. Empty (just Enter) means "accept", per
+        CrewAI's feedback loop.
+        """
+        self._feedback_event = threading.Event()
+        self._feedback_value = ""
+        self.call_from_thread(self._open_feedback_gate)
+        self._feedback_event.wait()
+        return self._feedback_value
+
+    def _open_feedback_gate(self) -> None:
+        self._write_agent(
+            "[bold yellow]Human review requested - reply below (Enter to accept).[/bold yellow]"
+        )
+        inp = self.query_one("#human-input", Input)
+        inp.placeholder = "Your feedback - Enter to accept, or type changes"
+        inp.disabled = False
+        inp.focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "human-input" or self._feedback_event is None:
+            return
+        self._feedback_value = event.value
+        event.input.value = ""
+        event.input.disabled = True
+        event.input.placeholder = "Human review (idle)"
+        self._feedback_event.set()
+
+
+def _make_tui_human_input_provider(app: CybersquadTUI) -> SyncHumanInputProvider:
+    """Build a CrewAI human-input provider that routes the feedback prompt to
+    the TUI input box instead of a blocking terminal ``input()``.
+
+    Isolated here, with a deferred import, because it leans on crewai's
+    semi-internal provider API (``crewai.core.providers.human_input``). That is
+    the sanctioned injection point but may move between versions - this is the
+    one place to fix if it does. ``result`` is accepted (newer crewai passes the
+    answer under review) but unused: the step-callback already streams that
+    answer into the agent-log pane before the gate opens.
+    """
+    from crewai.core.providers.human_input import SyncHumanInputProvider
+
+    class _TUIHumanInputProvider(SyncHumanInputProvider):
+        @staticmethod
+        def _prompt_input(crew: Crew | None = None, result: str = "") -> str:
+            return app._await_feedback()
+
+    return _TUIHumanInputProvider()
 
 
 class _TUILogHandler(logging.Handler):

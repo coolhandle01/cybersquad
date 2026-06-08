@@ -160,3 +160,24 @@ class TestThemeOwnership:
         assert css.is_absolute()
         assert css.name == "default.tcss"
         assert css.is_file()
+
+
+class TestHumanInputProvider:
+    """The TUI's human-input provider routes CrewAI's feedback prompt to the
+    app's input-box bridge (``_await_feedback``) instead of a terminal
+    ``input()``. The threading/widget bridge itself needs a textual.pilot
+    harness; this pins the routing seam, which is the load-bearing contract.
+    """
+
+    def test_prompt_input_delegates_to_app_bridge(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tools.tui import _make_tui_human_input_provider
+
+        app = MagicMock()
+        app._await_feedback.return_value = "tighten the title"
+        provider = _make_tui_human_input_provider(app)
+
+        # crewai 1.14.4 calls _prompt_input(crew); newer releases pass result.
+        assert provider._prompt_input(crew=None) == "tighten the title"
+        app._await_feedback.assert_called_once_with()
