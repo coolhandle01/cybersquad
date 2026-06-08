@@ -243,7 +243,7 @@ class CybersquadTUI(App):
         except NoMatches:
             logger.debug("crew-log widget not mounted, dropping message")
 
-    # ── human review ──────────────────────────────────────────────────
+    # -- human review --
 
     def _await_feedback(self) -> str:
         """Worker-thread side of the human-review gate.
