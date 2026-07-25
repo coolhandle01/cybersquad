@@ -80,11 +80,7 @@ dev = [
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
     # Linting & formatting
-    # Pinned to a minor range: ruff gates CI, and an unbounded floor means a
-    # release can change what CI enforces with nobody touching the code. 0.16
-    # did exactly that - it began formatting Python inside markdown fences, and
-    # main went red on the next unrelated push. Patch releases still land.
-    "ruff>=0.16,<0.17",
+    "ruff>=0.16",
     "mypy>=1.10",
     "pylint>=4.0",
     "types-requests>=2.32",
@@ -152,8 +148,8 @@ line-length = 100
 # inside fenced code blocks, which reaches the SKILL.md files and docs/. Those
 # snippets are hand-wrapped to stay compact: a skill is loaded into an agent's
 # context, so expanding a three-line call to one argument per line costs budget
-# and buys the reader nothing. Excluded here rather than left to the version
-# pin, so the decision is explicit and survives the next deliberate bump.
+# and buys the reader nothing. ruff floats unpinned here, so this exclusion is
+# the only thing holding that scope back - do not drop it to silence a diff.
 extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
