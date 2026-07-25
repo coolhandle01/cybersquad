@@ -68,7 +68,7 @@ mcp = [
     "crewai-tools[mcp]>=1.14.5",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
-    "mcp-server-time==2026.6.4",
+    "mcp-server-time==2026.7.10",
 ]
 dev = [
     # Testing
@@ -80,7 +80,7 @@ dev = [
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
     # Linting & formatting
-    "ruff>=0.4",
+    "ruff>=0.16",
     "mypy>=1.10",
     "pylint>=4.0",
     "types-requests>=2.32",
@@ -144,6 +144,13 @@ exclude_lines = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# Markdown is out of scope for the formatter. Since 0.16 ruff formats Python
+# inside fenced code blocks, which reaches the SKILL.md files and docs/. Those
+# snippets are hand-wrapped to stay compact: a skill is loaded into an agent's
+# context, so expanding a three-line call to one argument per line costs budget
+# and buys the reader nothing. ruff floats unpinned here, so this exclusion is
+# the only thing holding that scope back - do not drop it to silence a diff.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = [
