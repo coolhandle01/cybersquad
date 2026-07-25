@@ -43,6 +43,13 @@ dependencies = [
     # and carries MITRE's canonical name/description - no hand-vendored CWE
     # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
     "cwe2>=3.0",
+    # Read side for the OWASP Amass asset database. Amass v5 moved its results
+    # into SQLite and stopped populating the text output, so the usual
+    # ``-o subs.txt`` handoff yields an empty file; oamx is the consumer.
+    # Read-only by construction (opens the database ``mode=ro``) and cannot
+    # start a scan or send traffic, which is what makes the OSINT Analyst's
+    # Read Amass * tools safe to expose. Zero runtime dependencies of its own.
+    "oamx>=0.1.0",
 ]
 
 [project.optional-dependencies]

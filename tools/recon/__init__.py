@@ -11,6 +11,12 @@ from urllib.parse import urlparse
 
 from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
+from tools.recon.amass import (
+    AmassUnavailableError,
+    amass_addresses,
+    amass_netblocks,
+    amass_subdomains,
+)
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
 from tools.recon.dns_assets import dns_assets_from_dnsx
@@ -78,7 +84,11 @@ _ACTIVE_RECON_TYPES: frozenset[ScopeType] = frozenset(
 __all__ = [
     "_ACTIVE_RECON_TYPES",
     "_CODE_HOSTS",
+    "AmassUnavailableError",
     "TakeoverCandidate",
+    "amass_addresses",
+    "amass_netblocks",
+    "amass_subdomains",
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
