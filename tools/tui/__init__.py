@@ -284,7 +284,7 @@ def _make_tui_human_input_provider(app: CybersquadTUI) -> SyncHumanInputProvider
     Isolated here, with a deferred import, because it leans on crewai's
     semi-internal provider API (``crewai.core.providers.human_input``). That is
     the sanctioned injection point but may move between versions - this is the
-    one place to fix if it does. ``result`` is accepted (newer crewai passes the
+    one place to fix if it does. ``output_to_review`` is accepted (crewai passes the
     answer under review) but unused: the step-callback already streams that
     answer into the agent-log pane before the gate opens.
     """
@@ -292,7 +292,7 @@ def _make_tui_human_input_provider(app: CybersquadTUI) -> SyncHumanInputProvider
 
     class _TUIHumanInputProvider(SyncHumanInputProvider):
         @staticmethod
-        def _prompt_input(crew: Crew | None = None, result: str = "") -> str:
+        def _prompt_input(crew: Crew | None = None, output_to_review: str | None = None) -> str:
             return app._await_feedback()
 
     return _TUIHumanInputProvider()

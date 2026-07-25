@@ -178,6 +178,13 @@ class TestHumanInputProvider:
         app._await_feedback.return_value = "tighten the title"
         provider = _make_tui_human_input_provider(app)
 
-        # crewai 1.14.4 calls _prompt_input(crew); newer releases pass result.
+        # crewai calls _prompt_input(crew) and, since 1.15.x, also passes the
+        # answer under review as output_to_review. Both shapes must reach the
+        # bridge unchanged; the review text is ignored (the step-callback
+        # already streamed it into the agent-log pane).
         assert provider._prompt_input(crew=None) == "tighten the title"
-        app._await_feedback.assert_called_once_with()
+        assert (
+            provider._prompt_input(crew=None, output_to_review="The sky is blue.")
+            == "tighten the title"
+        )
+        assert app._await_feedback.call_count == 2

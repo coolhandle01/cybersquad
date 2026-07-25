@@ -8,17 +8,30 @@ version = "0.1.0"
 description = "Autonomous bug bounty pipeline powered by CrewAI"
 requires-python = ">=3.12"
 dependencies = [
-    # Pinned to 1.14.4 (not >=): 1.14.5 "deprecated CrewAgentExecutor, default
-    # Crew agents to AgentExecutor" (the experimental executor), which does not
-    # satisfy the human-input provider's ExecutorContext protocol - so
-    # human_input=True tasks crash with "'AgentExecutor' object has no attribute
-    # 'ask_for_human_input'". 1.14.6 (latest) still carries the regression.
-    # 1.14.4 is the last release where human_input works. Revisit when upstream
-    # fixes the experimental executor's human-in-the-loop path.
-    "crewai[anthropic]==1.14.4",
-    # Lockstep with crewai: crewai-tools X.Y.Z depends on crewai==X.Y.Z, so
-    # this must track the crewai pin above (1.14.4) exactly.
-    "crewai-tools==1.14.4",
+    # Pinned to a fork of crewai 1.15.6 carrying an unmerged human-input fix
+    # (coolhandle01/crewai, upstream PR crewAIInc/crewAI#6705). Two separate
+    # bugs gate human_input=True, which the TUI depends on:
+    #   1. A 1.14.5 executor regression crashed human_input with "'AgentExecutor'
+    #      object has no attribute 'ask_for_human_input'" - the reason this pin
+    #      used to sit at ==1.14.4. Fixed upstream in 1.15.x (the compat property
+    #      is back), so the pin can finally move off 1.14.
+    #   2. The feedback prompt says to review "the Final Result above", but the
+    #      result is only rendered when verbose=True - so under the TUI, with
+    #      verbose off, the human is asked to review output that was never
+    #      printed. Still unfixed upstream; the fork adds a Result-for-Review
+    #      panel so the referenced output is always shown.
+    # Pinned by commit SHA (not branch) so the dependency cannot drift, and to
+    # the lib/crewai subdirectory because crewai is a monorepo now. Quarantined
+    # to this branch: main runs plain PyPI crewai (see #220). Move back to a PyPI
+    # pin once #6705 lands upstream. NOTE: switching an existing venv onto this
+    # branch needs `pip install --force-reinstall` of crewai (or a fresh venv) -
+    # the fork also reports 1.15.6, so pip treats an already-installed PyPI
+    # 1.15.6 as satisfying the pin and skips the git build. A clean checkout (CI)
+    # is unaffected.
+    "crewai[anthropic] @ git+https://github.com/coolhandle01/crewai@c2fcbbeb4dd8ad9c21c7884fec3dbd4985cc71b4#subdirectory=lib/crewai",
+    # crewai-tools is untouched by the fork, so it stays on PyPI. It hard-pins
+    # crewai==1.15.6, which the fork build satisfies (it reports 1.15.6).
+    "crewai-tools==1.15.6",
     "mcp>=1.0.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
@@ -74,7 +87,7 @@ mcp = [
     # MCP is constructed - a non-TTY environment (CI, web session, daemon)
     # then crashes the host. Pull the extra explicitly so the dependency is
     # declared, not inferred from "we installed crewai-tools and hoped".
-    "crewai-tools[mcp]==1.14.4",
+    "crewai-tools[mcp]==1.15.6",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
     "mcp-server-time==2026.7.10",
