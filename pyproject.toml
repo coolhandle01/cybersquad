@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Autonomous bug bounty pipeline powered by CrewAI"
 requires-python = ">=3.12"
 dependencies = [
-    "crewai[anthropic]>=1.14.0",
-    "crewai-tools>=0.15.0",
+    "crewai[anthropic]>=1.15.6",
+    "crewai-tools>=1.15.6",
     "mcp>=1.0.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
@@ -65,7 +65,7 @@ mcp = [
     # MCP is constructed - a non-TTY environment (CI, web session, daemon)
     # then crashes the host. Pull the extra explicitly so the dependency is
     # declared, not inferred from "we installed crewai-tools and hoped".
-    "crewai-tools[mcp]>=1.14.5",
+    "crewai-tools[mcp]>=1.15.6",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
     "mcp-server-time==2026.7.10",
