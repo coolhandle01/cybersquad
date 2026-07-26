@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from tools.tui import CybersquadTUI
 
 import pytest
 from crewai.agents.parser import AgentAction, AgentFinish
@@ -269,7 +273,9 @@ class TestUiDispatch:
             call_from_thread=lambda fn, msg: calls.append(("bounced", msg)),
         )
 
-        CybersquadTUI._ui_dispatch(stub, lambda m: calls.append(("direct", m)), "hi")
+        CybersquadTUI._ui_dispatch(
+            cast("CybersquadTUI", stub), lambda m: calls.append(("direct", m)), "hi"
+        )
 
         assert calls == [("direct", "hi")]
 
@@ -282,6 +288,8 @@ class TestUiDispatch:
             call_from_thread=lambda fn, msg: calls.append(("bounced", msg)),
         )
 
-        CybersquadTUI._ui_dispatch(stub, lambda m: calls.append(("direct", m)), "hi")
+        CybersquadTUI._ui_dispatch(
+            cast("CybersquadTUI", stub), lambda m: calls.append(("direct", m)), "hi"
+        )
 
         assert calls == [("bounced", "hi")]
