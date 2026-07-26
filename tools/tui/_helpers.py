@@ -30,6 +30,22 @@ def route_log_record(record_name: str, prefix: str) -> str:
     return "agent" if record_name.startswith(prefix) else "crew"
 
 
+def dispatch_on_ui_thread(current_thread_id: int, ui_thread_id: int | None) -> bool:
+    """Decide whether a UI update must be called directly rather than via
+    ``call_from_thread``.
+
+    Textual's ``call_from_thread`` hard-refuses when invoked from the app's own
+    thread, so a log record emitted *during* a UI-thread callback (the
+    human-review gate opens the input box, which can itself log) must call the
+    widget method directly instead of bouncing back through the worker bridge.
+
+    Returns ``True`` when the caller is already on the UI thread. ``ui_thread_id``
+    is ``None`` until the app has mounted and captured its thread id; before then
+    no code runs on the UI thread, so the answer is ``False``.
+    """
+    return ui_thread_id is not None and current_thread_id == ui_thread_id
+
+
 def task_layout(tasks: list) -> list[tuple[str, str]]:
     """Build the sidebar entries for a sequential pipeline.
 

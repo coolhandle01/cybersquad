@@ -9,12 +9,14 @@ functions so every conditional path can be exercised by ordinary unit tests.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 import pytest
 from crewai.agents.parser import AgentAction, AgentFinish
 
 from tools.tui._helpers import (
+    dispatch_on_ui_thread,
     format_metrics_block,
     format_step_message,
     route_log_record,
@@ -57,6 +59,24 @@ class TestRouteLogRecord:
     def test_empty_prefix_routes_everything_to_agent(self) -> None:
         # Every string starts with "" so the prefix-empty case lands on agent.
         assert route_log_record("anything", "") == "agent"
+
+
+class TestDispatchOnUiThread:
+    """Guards the human-review-gate crash: a log record emitted while already
+    on the UI thread must dispatch directly, because Textual's
+    ``call_from_thread`` refuses same-thread calls."""
+
+    def test_same_thread_dispatches_directly(self) -> None:
+        # Caller thread == the app's captured UI thread -> call fn directly.
+        assert dispatch_on_ui_thread(42, 42) is True
+
+    def test_worker_thread_uses_call_from_thread(self) -> None:
+        # Caller thread != UI thread (a worker) -> bounce via call_from_thread.
+        assert dispatch_on_ui_thread(7, 42) is False
+
+    def test_unmounted_app_uses_call_from_thread(self) -> None:
+        # Before on_mount captures the id there is no UI-thread code running.
+        assert dispatch_on_ui_thread(42, None) is False
 
 
 def _task(name: str | None, role: str | None) -> SimpleNamespace:
@@ -188,3 +208,80 @@ class TestHumanInputProvider:
             == "tighten the title"
         )
         assert app._await_feedback.call_count == 2
+
+
+class TestLogHandlerDispatch:
+    """The log handler must hand every record to the app's thread-aware
+    ``_ui_dispatch`` - never call ``call_from_thread`` directly - so a record
+    emitted on the UI thread (the human-review gate) does not crash the run.
+    """
+
+    def test_agent_record_dispatched_via_ui_dispatch(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tools.tui import _TUILogHandler
+
+        app = MagicMock()
+        app._record_prefix = "cybersquad"
+        handler = _TUILogHandler(app)
+        record = logging.LogRecord(
+            "cybersquad.osint_analyst", logging.INFO, __file__, 1, "hi", None, None
+        )
+
+        handler.emit(record)
+
+        app._ui_dispatch.assert_called_once_with(app._write_agent, "hi")
+        app.call_from_thread.assert_not_called()
+
+    def test_crew_record_routed_to_crew_pane(self) -> None:
+        from unittest.mock import MagicMock
+
+        from tools.tui import _TUILogHandler
+
+        app = MagicMock()
+        app._record_prefix = "cybersquad"
+        handler = _TUILogHandler(app)
+        record = logging.LogRecord(
+            "urllib3.connectionpool", logging.INFO, __file__, 1, "noise", None, None
+        )
+
+        handler.emit(record)
+
+        app._ui_dispatch.assert_called_once_with(app._write_crew, "noise")
+        app.call_from_thread.assert_not_called()
+
+
+class TestUiDispatch:
+    """``_ui_dispatch`` picks the hand-off for the current thread: a caller on
+    the UI thread calls the widget method directly (``call_from_thread`` would
+    crash there), a worker-thread caller bounces through ``call_from_thread``.
+    Exercised against a light stand-in so no Textual event loop is needed.
+    """
+
+    def test_direct_call_when_on_ui_thread(self) -> None:
+        import threading
+
+        from tools.tui import CybersquadTUI
+
+        calls: list[tuple[str, str]] = []
+        stub = SimpleNamespace(
+            _ui_thread_id=threading.get_ident(),
+            call_from_thread=lambda fn, msg: calls.append(("bounced", msg)),
+        )
+
+        CybersquadTUI._ui_dispatch(stub, lambda m: calls.append(("direct", m)), "hi")
+
+        assert calls == [("direct", "hi")]
+
+    def test_bounces_through_call_from_thread_when_off_ui_thread(self) -> None:
+        from tools.tui import CybersquadTUI
+
+        calls: list[tuple[str, str]] = []
+        stub = SimpleNamespace(
+            _ui_thread_id=-1,  # never matches a real thread id
+            call_from_thread=lambda fn, msg: calls.append(("bounced", msg)),
+        )
+
+        CybersquadTUI._ui_dispatch(stub, lambda m: calls.append(("direct", m)), "hi")
+
+        assert calls == [("bounced", "hi")]

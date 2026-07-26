@@ -47,6 +47,7 @@ from textual.css.query import NoMatches
 from textual.widgets import Input, Label, RichLog, Static
 
 from tools.tui._helpers import (
+    dispatch_on_ui_thread,
     format_metrics_block,
     format_step_message,
     route_log_record,
@@ -91,6 +92,10 @@ class CybersquadTUI(App):
         # operator types feedback into the input box on the UI thread.
         self._feedback_event: threading.Event | None = None
         self._feedback_value: str = ""
+        # Captured in on_mount (which runs on the UI thread). Lets log records
+        # emitted during a UI-thread callback dispatch directly instead of
+        # bouncing through call_from_thread, which refuses same-thread calls.
+        self._ui_thread_id: int | None = None
         self._crew.step_callback = self._make_step_callback()
 
     def compose(self) -> ComposeResult:
@@ -122,6 +127,7 @@ class CybersquadTUI(App):
                     yield RichLog(id="crew-log", highlight=True, markup=True)
 
     def on_mount(self) -> None:
+        self._ui_thread_id = threading.get_ident()
         logging.getLogger().addHandler(_TUILogHandler(self))
         if self._dry_run:
             self._write_crew("[yellow]Dry run mode: pipeline not started.[/yellow]")
@@ -243,6 +249,19 @@ class CybersquadTUI(App):
         except NoMatches:
             logger.debug("crew-log widget not mounted, dropping message")
 
+    def _ui_dispatch(self, fn: Callable[[str], None], msg: str) -> None:
+        """Run a UI update, from either the worker thread or the UI thread.
+
+        Worker-thread updates go through ``call_from_thread``; a caller already
+        on the UI thread (a log record emitted inside a UI callback) calls
+        ``fn`` directly, because ``call_from_thread`` raises when invoked from
+        the app thread.
+        """
+        if dispatch_on_ui_thread(threading.get_ident(), self._ui_thread_id):
+            fn(msg)
+        else:
+            self.call_from_thread(fn, msg)
+
     # -- human review --
 
     def _await_feedback(self) -> str:
@@ -306,7 +325,12 @@ class _TUILogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         msg = self.format(record)
         target = route_log_record(record.name, self._app._record_prefix)
+        # A record can be emitted from the worker thread (during kickoff) or
+        # from the UI thread (a widget callback that logs) - _ui_dispatch picks
+        # the right hand-off for the current thread. The human-review gate is
+        # the UI-thread case: opening the input box logs, and a naive
+        # call_from_thread there would crash the run.
         if target == "agent":
-            self._app.call_from_thread(self._app._write_agent, msg)
+            self._app._ui_dispatch(self._app._write_agent, msg)
         else:
-            self._app.call_from_thread(self._app._write_crew, msg)
+            self._app._ui_dispatch(self._app._write_crew, msg)
