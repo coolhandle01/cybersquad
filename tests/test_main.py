@@ -308,7 +308,10 @@ class TestWarnIfTelemetryEnabled:
             monkeypatch.delenv(var, raising=False)
         with caplog.at_level(logging.WARNING, logger="main"):
             main.warn_if_telemetry_enabled()
-        assert "telemetry.crewai.com" in caplog.text
+        # Assert on a distinctive phrase, not the bare domain: a domain literal
+        # in an `in` check trips CodeQL's incomplete-url-substring-sanitization
+        # rule (a false positive on a log assertion, but easy to sidestep).
+        assert "CrewAI telemetry is enabled" in caplog.text
 
     @pytest.mark.parametrize("var", _OPT_OUTS)
     def test_silent_when_opt_out_set(self, monkeypatch, caplog, var) -> None:
@@ -319,4 +322,4 @@ class TestWarnIfTelemetryEnabled:
         monkeypatch.setenv(var, "true")
         with caplog.at_level(logging.WARNING, logger="main"):
             main.warn_if_telemetry_enabled()
-        assert "telemetry.crewai.com" not in caplog.text
+        assert "CrewAI telemetry is enabled" not in caplog.text
