@@ -70,6 +70,23 @@ def check_env() -> None:
         sys.exit(1)
 
 
+def warn_if_telemetry_enabled() -> None:
+    """Warn when CrewAI telemetry is left on.
+
+    CrewAI phones home to telemetry.crewai.com; when that host is unreachable its
+    exporter threads hang the process for up to 300s on exit, and either way run
+    metadata leaves the box. Mirrors CrewAI's own opt-out check so the warning
+    matches what actually disables it (see .env.example).
+    """
+    opt_outs = ("OTEL_SDK_DISABLED", "CREWAI_DISABLE_TELEMETRY", "CREWAI_DISABLE_TRACKING")
+    if not any(os.getenv(v, "").lower() == "true" for v in opt_outs):
+        logger.warning(
+            "CrewAI telemetry is enabled: it phones home to telemetry.crewai.com "
+            "and can hang shutdown up to 300s if that host is unreachable. Set "
+            "OTEL_SDK_DISABLED=true (see .env.example) to disable it."
+        )
+
+
 def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
     """Render the crew layout as rich tables without executing (the dry-run view)."""
     console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
@@ -207,6 +224,7 @@ def _run_headless(crew: Any, *, verbose: bool, dry_run: bool) -> None:  # noqa: 
 def main() -> None:
     args = parse_args()
     check_env()
+    warn_if_telemetry_enabled()
 
     # Deferred until after check_env so a run missing required credentials
     # fails with check_env's clear message rather than an import-time error

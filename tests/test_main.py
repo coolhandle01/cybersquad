@@ -10,6 +10,7 @@ stub the leaf calls and assert the routing and the run-metrics handling.
 
 from __future__ import annotations
 
+import logging
 from argparse import Namespace
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -290,3 +291,32 @@ class TestParseArgs:
 
         monkeypatch.setattr("sys.argv", ["main.py", "--headless"])
         assert main.parse_args().headless is True
+
+
+class TestWarnIfTelemetryEnabled:
+    """The startup telemetry warning fires only when CrewAI telemetry is left
+    on - i.e. none of CrewAI's opt-out env vars disable it. Mirrors CrewAI's own
+    ``_is_telemetry_disabled`` check so the warning matches reality.
+    """
+
+    _OPT_OUTS = ("OTEL_SDK_DISABLED", "CREWAI_DISABLE_TELEMETRY", "CREWAI_DISABLE_TRACKING")
+
+    def test_warns_when_no_opt_out_set(self, monkeypatch, caplog) -> None:
+        import main
+
+        for var in self._OPT_OUTS:
+            monkeypatch.delenv(var, raising=False)
+        with caplog.at_level(logging.WARNING, logger="main"):
+            main.warn_if_telemetry_enabled()
+        assert "telemetry.crewai.com" in caplog.text
+
+    @pytest.mark.parametrize("var", _OPT_OUTS)
+    def test_silent_when_opt_out_set(self, monkeypatch, caplog, var) -> None:
+        import main
+
+        for other in self._OPT_OUTS:
+            monkeypatch.delenv(other, raising=False)
+        monkeypatch.setenv(var, "true")
+        with caplog.at_level(logging.WARNING, logger="main"):
+            main.warn_if_telemetry_enabled()
+        assert "telemetry.crewai.com" not in caplog.text
