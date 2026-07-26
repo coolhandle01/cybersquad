@@ -84,6 +84,15 @@ Screen {
 
 #human-input {
     margin: 0 1 1 1;
+    height: 5;
+    border: round $surface;
+}
+
+#human-input:focus {
+    border: round $accent;
+}
+
+#human-input:disabled {
     opacity: 0.4;
 }
 

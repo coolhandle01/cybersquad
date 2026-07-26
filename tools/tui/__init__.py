@@ -37,14 +37,17 @@ import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from crewai import Crew
+from rich.panel import Panel
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
-from textual.widgets import Input, Label, RichLog, Static
+from textual.message import Message
+from textual.widgets import Label, RichLog, Static, TextArea
 
 from tools.tui._helpers import (
     dispatch_on_ui_thread,
@@ -58,6 +61,32 @@ if TYPE_CHECKING:
     from crewai.core.providers.human_input import SyncHumanInputProvider
 
 logger = logging.getLogger(__name__)
+
+
+class FeedbackArea(TextArea):
+    """Multi-line human-review input for the feedback gate.
+
+    Enter inserts a newline; Ctrl+S submits. Decoupling submit from Enter is
+    the point: a single-line Input sent on Enter, so reaching for a new
+    paragraph fired the review by accident. An empty submit accepts the result
+    as-is, matching CrewAI's feedback loop (where empty feedback means accept).
+    Terminals cannot reliably distinguish Shift+Enter from Enter, so a distinct
+    submit key (Ctrl+S) is used rather than binding Shift+Enter.
+    """
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("ctrl+s", "submit", "Submit review", show=False)
+    ]
+
+    class Submitted(Message):
+        """Posted when the operator submits their feedback with Ctrl+S."""
+
+        def __init__(self, value: str) -> None:
+            self.value = value
+            super().__init__()
+
+    def action_submit(self) -> None:
+        self.post_message(self.Submitted(self.text))
 
 
 class CybersquadTUI(App):
@@ -116,10 +145,13 @@ class CybersquadTUI(App):
                 with Vertical(id="messages-pane"):
                     yield Label("Agent Output", classes="pane-title")
                     yield RichLog(id="agent-log", highlight=True, markup=True, wrap=True)
-                    yield Input(
-                        placeholder="Human review (idle)",
-                        disabled=True,
+                    yield FeedbackArea(
+                        "",
                         id="human-input",
+                        soft_wrap=True,
+                        show_line_numbers=False,
+                        disabled=True,
+                        placeholder="Human review (idle)",
                     )
                 with Vertical(id="logs-pane"):
                     yield Label("Pipeline Logs", id="logs-title", classes="pane-title")
@@ -279,21 +311,37 @@ class CybersquadTUI(App):
         return self._feedback_value
 
     def _open_feedback_gate(self) -> None:
-        self._write_agent(
-            "[bold yellow]Human review requested - reply below (Enter to accept).[/bold yellow]"
-        )
-        inp = self.query_one("#human-input", Input)
-        inp.placeholder = "Your feedback - Enter to accept, or type changes"
+        try:
+            log = self.query_one("#agent-log", RichLog)
+        except NoMatches:
+            logger.debug("agent-log widget not mounted, cannot open feedback gate")
+        else:
+            # A blank line sets the review prompt apart from the streamed output
+            # above it, then a bordered panel makes the gate unmissable.
+            log.write("")
+            log.write(
+                Panel(
+                    "Review the result above.\n\n"
+                    "Type your feedback, then press Ctrl+S to submit.\n"
+                    "Submit an empty box to accept the result as-is.",
+                    title="Human Review Requested",
+                    border_style="yellow",
+                    padding=(1, 2),
+                )
+            )
+        inp = self.query_one("#human-input", FeedbackArea)
+        inp.placeholder = "Your feedback - Ctrl+S to submit, empty to accept"
         inp.disabled = False
         inp.focus()
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id != "human-input" or self._feedback_event is None:
+    def on_feedback_area_submitted(self, event: FeedbackArea.Submitted) -> None:
+        if self._feedback_event is None:
             return
         self._feedback_value = event.value
-        event.input.value = ""
-        event.input.disabled = True
-        event.input.placeholder = "Human review (idle)"
+        inp = self.query_one("#human-input", FeedbackArea)
+        inp.text = ""
+        inp.disabled = True
+        inp.placeholder = "Human review (idle)"
         self._feedback_event.set()
 
 
