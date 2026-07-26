@@ -1,5 +1,5 @@
 """
-main.py — Bounty Squad pipeline entrypoint.
+main.py - Bounty Squad pipeline entrypoint.
 
 Usage:
     python main.py             # single run, settings from .env / env vars
@@ -22,7 +22,7 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -51,7 +51,7 @@ logger = logging.getLogger("bounty_squad")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Bounty Squad — autonomous bug bounty pipeline",
+        description="Bounty Squad - autonomous bug bounty pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -69,11 +69,9 @@ def check_env() -> None:
         sys.exit(1)
 
 
-def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
+def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrapped by the time the CLI sees it; tighter type buys nothing
     """Render the crew layout as rich tables without executing."""
-    from tasks import CHECKPOINT_INDICES
-
-    console.rule("[bold cyan]BOUNTY SQUAD — DRY RUN[/bold cyan]")
+    console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
     console.print()
 
     agents_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
@@ -90,15 +88,14 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     tasks_table.add_column("#", style="dim", width=3)
     tasks_table.add_column("Agent", style="cyan")
     tasks_table.add_column("Task")
-    tasks_table.add_column("Checkpoint")
+    tasks_table.add_column("Human review")
     for i, task in enumerate(crew.tasks):
-        checkpoint = CHECKPOINT_INDICES.get(i)
-        cp_cell = f"[yellow]▶ {checkpoint}[/yellow]" if checkpoint else ""
+        review_cell = "[yellow]> pauses for feedback[/yellow]" if task.human_input else ""
         tasks_table.add_row(
             str(i + 1),
             task.agent.role,
-            task.description[:72].strip() + "…",
-            cp_cell,
+            task.description[:72].strip() + "...",
+            review_cell,
         )
     console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))
     console.print()
@@ -109,30 +106,34 @@ def main() -> None:
     check_env()
 
     # Import crew after env check
+    import runtime
     from config import config
     from crew import build_crew
+    from mcp_servers import provisioned_mcp_tools
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
 
-    crew = build_crew(verbose=args.verbose)
-
+    # Dry-run bypasses MCP startup - the agent menu is shown from a no-MCP
+    # build so dry-run does not pull in uvx / subprocess deps.
     if args.dry_run:
-        dry_run_summary(crew)
+        dry_run_summary(build_crew(verbose=args.verbose))
         return
 
-    run_id = datetime.utcnow().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
-    started_at = datetime.utcnow()
+    runtime.bind_run_id(datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6])
+    started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")
     logger.info(
         "run=%s  model=%s  min_bounty=$%s  min_severity=%s",
-        run_id,
+        runtime.run_id,
         config.llm.model,
         config.h1.min_bounty_threshold,
         config.scan.min_severity,
     )
 
     try:
-        result = crew.kickoff()
+        with provisioned_mcp_tools() as mcp_tools:
+            crew = build_crew(verbose=args.verbose, mcp_tools=mcp_tools)
+            result = crew.kickoff()
 
         console.print()
         console.print(
@@ -144,10 +145,10 @@ def main() -> None:
             )
         )
 
-        try:
-            usage = result.token_usage  # type: ignore[union-attr]
+        usage = getattr(result, "token_usage", None)
+        if usage is not None:
             metrics = build_run_metrics(
-                run_id=run_id,
+                run_id=runtime.run_id,
                 started_at=started_at,
                 llm_model=config.llm.model,
                 input_tokens=getattr(usage, "prompt_tokens", 0),
@@ -155,8 +156,6 @@ def main() -> None:
             )
             print_metrics(metrics)
             save_metrics(metrics, config.reports_dir)
-        except AttributeError:
-            logger.debug("token_usage not available on this CrewOutput")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")

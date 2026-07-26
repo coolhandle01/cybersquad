@@ -1,0 +1,55 @@
+# CodeQL advanced setup. Replaces the repo's CodeQL *default* setup, which
+# auto-detected only the `actions` language and silently left the ~300 Python
+# source files unscanned. Listing the languages explicitly here makes the
+# coverage version-controlled and immune to that detection drift.
+#
+# Default setup must be turned off (Settings > Code security > Code scanning)
+# for this workflow's results to be processed - the two cannot run together.
+#
+# Actions are pinned to full commit SHAs per docs/ci.md; the codeql-action
+# pins match the upload-sarif pin already in ci.yml (same repo, same v3.29.4
+# tag) so Dependabot bumps them together. Python uses build-mode `none` - the
+# extractor reads source directly and needs no build step.
+name: CodeQL
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  schedule:
+    # Weekly catch-all so new CodeQL queries run against main even in quiet
+    # weeks. Off-the-hour minute per GitHub's scheduling guidance.
+    - cron: "27 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # required by github/codeql-action/analyze to upload results
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          category: "/language:${{ matrix.language }}"

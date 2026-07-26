@@ -1,5 +1,5 @@
 """
-tests/test_config.py — unit tests for config.py
+tests/test_config.py - unit tests for config.py
 """
 
 from __future__ import annotations
@@ -7,6 +7,29 @@ from __future__ import annotations
 import pytest
 
 pytestmark = pytest.mark.unit
+
+
+class TestMemoryConfig:
+    def test_long_term_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_MEMORY_LONG_TERM_ENABLED", raising=False)
+        from config import MemoryConfig
+
+        c = MemoryConfig()
+        assert c.long_term_enabled is False
+
+    def test_long_term_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_MEMORY_LONG_TERM_ENABLED", "true")
+        from config import MemoryConfig
+
+        c = MemoryConfig()
+        assert c.long_term_enabled is True
+
+    def test_storage_path_default_is_project_scoped(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_MEMORY_STORAGE", raising=False)
+        from config import MemoryConfig
+
+        c = MemoryConfig()
+        assert c.storage_path == ".cybersquad/memory"
 
 
 class TestH1Config:
@@ -56,6 +79,81 @@ class TestLLMConfig:
 
         c = LLMConfig()
         assert c.temperature == 0.7
+
+    def test_reasoning_enabled_default_on(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_REASONING_ENABLED", raising=False)
+        monkeypatch.delenv("CREWAI_REASONING_EFFORT", raising=False)
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_enabled is True
+        assert c.reasoning_effort == "medium"
+
+    def test_reasoning_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_ENABLED", "false")
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_enabled is False
+
+    def test_reasoning_effort_override(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "high")
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_effort == "high"
+
+    def test_reasoning_effort_rejects_unknown_value(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "extreme")
+        from config import LLMConfig
+
+        with pytest.raises(ValueError, match="CREWAI_REASONING_EFFORT must be one of"):
+            LLMConfig()
+
+
+class TestMCPConfig:
+    def test_time_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_TIME_ENABLED", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_enabled is False
+
+    def test_time_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_enabled is True
+
+    def test_time_timezone_defaults_to_utc(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_TIME_TIMEZONE", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_timezone == "UTC"
+
+    def test_time_timezone_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_TIMEZONE", "Europe/London")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_timezone == "Europe/London"
+
+    def test_connect_timeout_default_is_tighter_than_crewai(self, monkeypatch):
+        """Default 10s vs CrewAI's 30s - stdio should come up fast."""
+        monkeypatch.delenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.connect_timeout_s == 10
+
+    def test_connect_timeout_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", "45")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.connect_timeout_s == 45
 
 
 class TestScanConfig:
@@ -107,3 +205,17 @@ class TestAppConfig:
 
         c = AppConfig()
         assert c.verbose is False
+
+    def test_output_log_enabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_OUTPUT_LOG", raising=False)
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.output_log_enabled is True
+
+    def test_output_log_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_OUTPUT_LOG", "false")
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.output_log_enabled is False

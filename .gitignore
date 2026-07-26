@@ -14,17 +14,29 @@ build/
 .venv/
 venv/
 env/
+uv.lock
 
-# Reports output (contain vuln data — never commit)
+# Reports output (contain vuln data - never commit)
 reports/
 
 # Tool artefacts
 /tmp/sqlmap-output/
 
+# CI / test artefacts
+junit.xml
+htmlcov/
+coverage.xml
+
 # IDE
 .idea/
 *.swp
 *.swo
+
+# Claude Code personal overrides (committed: .claude/settings.json)
+.claude/settings.local.json
+
+# Claude Code agent worktrees
+.claude/worktrees/
 
 # OS
 .DS_Store

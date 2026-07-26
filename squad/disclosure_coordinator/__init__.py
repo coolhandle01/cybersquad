@@ -1,27 +1,48 @@
-"""Disclosure Coordinator — submits finalised reports to HackerOne."""
+"""Disclosure Coordinator - submits finalised reports to HackerOne.
 
-from __future__ import annotations
+The agent's tools live in the ``tools`` sub-package
+(``tools.submission``); this module imports each wrapper, assembles
+``MEMBER.tools``, and re-exports both the wrappers and their args_schema
+classes so existing consumers (tests, ``crew.py``, the contract tests in
+``tests/squad/disclosure_coordinator/test_args_schemas.py``) keep
+importing from ``squad.disclosure_coordinator`` directly.
+"""
 
-from typing import ClassVar
+from pathlib import Path
 
-from crewai.tools import tool
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad.disclosure_coordinator.tools.submission import (
+    _CheckDuplicateArgs,
+    _SubmitReportArgs,
+    check_duplicate_tool,
+    submit_report_tool,
+)
+from squad.tools.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 
-from squad import SquadMember
-from tools.h1_api import h1
-from tools.report_tools import save_report
+MEMBER = SquadMember(
+    dir=Path(__file__).parent,
+    tools=[
+        submit_report_tool,
+        check_duplicate_tool,
+        read_run_filelist_tool,
+        read_run_file_tool,
+    ],
+    schemas={
+        "Submit Report": _SubmitReportArgs,
+        "Check H1 Duplicate": _CheckDuplicateArgs,
+        # Shared workspace wrappers (re-exported via squad.tools.workspace_tools)
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+    },
+)
 
-
-@tool("Submit Report")
-def submit_report_tool(report_json: str) -> dict:
-    """Submit a serialised DisclosureReport to HackerOne."""
-    from models import DisclosureReport
-
-    report = DisclosureReport.model_validate_json(report_json)
-    save_report(report)
-    result = h1.submit_report(report)
-    return result.model_dump()
-
-
-class DisclosureCoordinator(SquadMember):
-    slug = "disclosure_coordinator"
-    tools: ClassVar[list] = [submit_report_tool]
+__all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
+    # Public API
+    "MEMBER",
+    # Wrappers
+    "submit_report_tool",
+    "check_duplicate_tool",
+    # args_schema classes (re-exported so test imports stay stable)
+    "_SubmitReportArgs",
+    "_CheckDuplicateArgs",
+]

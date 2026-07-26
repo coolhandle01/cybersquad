@@ -1,0 +1,13 @@
+# Local semgrep rules for cybersquad.
+# Add project-specific rules here as needed.
+rules:
+  - id: no-shell-true
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+    message: >-
+      subprocess called with shell=True - this enables shell injection. Pass a list
+      of arguments instead and let the OS handle quoting.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"

@@ -1,30 +1,159 @@
-"""OSINT Analyst — maps the in-scope attack surface."""
+"""OSINT Analyst - maps the in-scope attack surface.
 
-from __future__ import annotations
+The agent's tools split across sibling modules so each file owns one
+cohesive responsibility:
 
-from typing import ClassVar
+- ``discovery`` - sweep + slicers + passive expansion (cert
+  transparency, historical URLs, LLM endpoint detection) + active
+  hostname probes + takeover detection. The "what is the surface"
+  half. The two active-probe wrappers (``Discover Webpages``, ``Discover
+  Takeover Candidates``) take ``list[FQDN]``; ``@cyber_tool``
+  auto-detects the typed-target field and runs the programme scope
+  guard in the wrapper rather than inline in the body. The shared
+  ``current_programme`` reader lives in ``squad.tools.workspace_tools``.
+- ``curation`` - lookup (CWE / OWASP) + ``Annotate Host`` +
+  ``List Uncovered Hosts`` + ``Finalise Recon``. The "what do we record
+  about the surface" half.
 
-from crewai.tools import tool
+This module imports each wrapper, assembles ``MEMBER.tools``, and re-
+exports both the wrappers and their args_schema classes so existing
+consumers (tests, ``crew.py``, the contract tests in
+``tests/squad/osint_analyst/test_args_schemas.py``) keep importing from
+``squad.osint_analyst`` directly.
+"""
 
-from squad import SquadMember
-from tools.h1_api import h1
-from tools.recon_tools import run_recon
+from pathlib import Path
 
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad.osint_analyst.tools.curation import (
+    _AnnotateHostArgs,
+    _FinaliseReconArgs,
+    _ListUncoveredHostsArgs,
+    _OsintLookupCweArgs,
+    _OsintLookupOwaspArgs,
+    annotate_host_tool,
+    finalise_recon_tool,
+    list_uncovered_hosts_tool,
+    lookup_cwe_tool,
+    lookup_owasp_tool,
+)
+from squad.osint_analyst.tools.discovery import (
+    _DiscoverHistoricalUrlsArgs,
+    _DiscoverLlmEndpointsArgs,
+    _DiscoverSubdomainsArgs,
+    _DiscoverTakeoverCandidatesArgs,
+    _DiscoverWebpagesArgs,
+    _ListEndpointsArgs,
+    _ListOpenPortsArgs,
+    _ListSubdomainsArgs,
+    _RunInitialSweepArgs,
+    discover_historical_urls_tool,
+    discover_llm_endpoints_tool,
+    discover_subdomains_tool,
+    discover_takeover_candidates_tool,
+    discover_webpages_tool,
+    list_endpoints_tool,
+    list_open_ports_tool,
+    list_subdomains_tool,
+    run_initial_sweep_tool,
+)
+from squad.osint_analyst.tools.enrichment import (
+    _DiscoverHostServicesArgs,
+    _LookupIpAssetsArgs,
+    _LookupRdapAsnArgs,
+    discover_host_services_tool,
+    lookup_ip_assets_tool,
+    lookup_rdap_asn_tool,
+)
+from squad.tools.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 
-@tool("Run Recon")
-def recon_tool(programme_handle: str) -> dict:
-    """
-    Run full OSINT recon (subdomain enumeration, HTTP probing, port scanning)
-    against the in-scope assets of the given programme handle.
-    Returns a serialised ReconResult.
-    """
-    policy = h1.get_programme_policy(programme_handle)
-    scope = h1.get_structured_scope(programme_handle)
-    programme = h1.parse_programme(policy["data"], scope)
-    result = run_recon(programme)
-    return result.model_dump()
+MEMBER = SquadMember(
+    dir=Path(__file__).parent,
+    tools=[
+        run_initial_sweep_tool,
+        list_subdomains_tool,
+        list_endpoints_tool,
+        list_open_ports_tool,
+        discover_subdomains_tool,
+        discover_historical_urls_tool,
+        discover_llm_endpoints_tool,
+        discover_webpages_tool,
+        discover_takeover_candidates_tool,
+        # Post-sweep pivot / enrichment
+        lookup_ip_assets_tool,
+        lookup_rdap_asn_tool,
+        discover_host_services_tool,
+        lookup_cwe_tool,
+        lookup_owasp_tool,
+        annotate_host_tool,
+        list_uncovered_hosts_tool,
+        finalise_recon_tool,
+        # Shared workspace wrappers
+        read_run_filelist_tool,
+        read_run_file_tool,
+    ],
+    schemas={
+        "Run Initial Sweep": _RunInitialSweepArgs,
+        "List Subdomains": _ListSubdomainsArgs,
+        "List Endpoints": _ListEndpointsArgs,
+        "List Open Ports": _ListOpenPortsArgs,
+        "Discover Subdomains": _DiscoverSubdomainsArgs,
+        "Discover Historical URLs": _DiscoverHistoricalUrlsArgs,
+        "Discover LLM Endpoints": _DiscoverLlmEndpointsArgs,
+        "Discover Webpages": _DiscoverWebpagesArgs,
+        "Discover Takeover Candidates": _DiscoverTakeoverCandidatesArgs,
+        "Lookup IP Assets": _LookupIpAssetsArgs,
+        "Lookup RDAP for ASN": _LookupRdapAsnArgs,
+        "Discover Host Services": _DiscoverHostServicesArgs,
+        "Lookup CWE": _OsintLookupCweArgs,
+        "Lookup OWASP Guidance": _OsintLookupOwaspArgs,
+        "Annotate Host": _AnnotateHostArgs,
+        "List Uncovered Hosts": _ListUncoveredHostsArgs,
+        "Finalise Recon": _FinaliseReconArgs,
+        # Shared workspace wrappers (re-exported via squad.tools.workspace_tools)
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+    },
+)
 
-
-class OsintAnalyst(SquadMember):
-    slug = "osint_analyst"
-    tools: ClassVar[list] = [recon_tool]
+__all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
+    # Public API
+    "MEMBER",
+    # Wrappers - discovery
+    "discover_historical_urls_tool",
+    "discover_host_services_tool",
+    "discover_llm_endpoints_tool",
+    "discover_subdomains_tool",
+    "discover_takeover_candidates_tool",
+    "discover_webpages_tool",
+    "list_endpoints_tool",
+    "list_open_ports_tool",
+    "list_subdomains_tool",
+    "lookup_ip_assets_tool",
+    "lookup_rdap_asn_tool",
+    "run_initial_sweep_tool",
+    # Wrappers - curation
+    "annotate_host_tool",
+    "finalise_recon_tool",
+    "list_uncovered_hosts_tool",
+    "lookup_cwe_tool",
+    "lookup_owasp_tool",
+    # args_schema classes (re-exported so test imports stay stable)
+    "_AnnotateHostArgs",
+    "_DiscoverHistoricalUrlsArgs",
+    "_DiscoverHostServicesArgs",
+    "_DiscoverLlmEndpointsArgs",
+    "_DiscoverSubdomainsArgs",
+    "_DiscoverTakeoverCandidatesArgs",
+    "_DiscoverWebpagesArgs",
+    "_FinaliseReconArgs",
+    "_ListEndpointsArgs",
+    "_ListOpenPortsArgs",
+    "_ListSubdomainsArgs",
+    "_ListUncoveredHostsArgs",
+    "_LookupIpAssetsArgs",
+    "_LookupRdapAsnArgs",
+    "_OsintLookupCweArgs",
+    "_OsintLookupOwaspArgs",
+    "_RunInitialSweepArgs",
+]

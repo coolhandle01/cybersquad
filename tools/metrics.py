@@ -1,8 +1,8 @@
 """
-tools/metrics.py — Token-usage accounting and cost estimation.
+tools/metrics.py - Token-usage accounting and cost estimation.
 
 Anthropic pricing is expressed per 1 M tokens; the table below reflects
-rates as of 2026-04. Update the table when pricing changes — do not
+rates as of 2026-04. Update the table when pricing changes - do not
 hardcode rates elsewhere.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models import RunMetrics
@@ -25,12 +25,23 @@ _PRICING: dict[str, tuple[float, float]] = {
 }
 
 
+def parse_llm(llm: str) -> tuple[str, str]:
+    """Split a litellm-format model string into (provider, model).
+
+    "anthropic/claude-sonnet-4" -> ("anthropic", "claude-sonnet-4")
+    "claude-sonnet-4"           -> ("", "claude-sonnet-4")
+    """
+    provider, _, model = llm.rpartition("/")
+    return provider, model
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Return estimated USD cost for the given token counts and model."""
+    _, model_key = parse_llm(model)
     for prefix, (in_price, out_price) in _PRICING.items():
-        if model.startswith(prefix):
+        if model_key.startswith(prefix):
             return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
-    logger.warning("No pricing entry for model %r — cost will show as $0.00", model)
+    logger.warning("No pricing entry for model %r - cost will show as $0.00", model)
     return 0.0
 
 
@@ -45,7 +56,7 @@ def build_run_metrics(
     findings_verified: int = 0,
     submitted: bool = False,
 ) -> RunMetrics:
-    completed_at = datetime.utcnow()
+    completed_at = datetime.now(UTC)
     return RunMetrics(
         run_id=run_id,
         started_at=started_at,
@@ -65,11 +76,11 @@ def build_run_metrics(
 
 def print_metrics(metrics: RunMetrics) -> None:
     """Print a human-readable run summary to stdout."""
-    print("\n" + "━" * 50)
+    print("\n" + "-" * 50)
     print("  SQUAD METRICS")
-    print("━" * 50)
+    print("-" * 50)
     print(f"  Run ID       : {metrics.run_id}")
-    print(f"  Programme    : {metrics.programme_handle or '—'}")
+    print(f"  Programme    : {metrics.programme_handle or '-'}")
     print(f"  Duration     : {metrics.duration_seconds:.1f}s")
     print(f"  Model        : {metrics.llm_model}")
     print(f"  Input tokens : {metrics.input_tokens:,}")
@@ -79,7 +90,7 @@ def print_metrics(metrics: RunMetrics) -> None:
     print(f"  Raw findings : {metrics.findings_raw}")
     print(f"  Verified     : {metrics.findings_verified}")
     print(f"  Submitted    : {'yes' if metrics.submitted else 'no'}")
-    print("━" * 50 + "\n")
+    print("-" * 50 + "\n")
 
 
 def save_metrics(metrics: RunMetrics, reports_dir: str) -> Path:
