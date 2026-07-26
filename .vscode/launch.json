@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "main.py (verbose dry-run)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": ["--verbose", "--dry-run"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "VERBOSE": "true"
+            }
+        }
+    ]
+}

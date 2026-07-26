@@ -78,4 +78,4 @@ If a harness has placed you on a synthetic branch when a real PR branch exists f
 
 ## Commit messages
 
-Never include session URLs in commit messages. Links of the form `https://claude.ai/code/session_...` embed a reference to a private conversation and must not appear in commit history. Use a plain one- or two-sentence description instead.
+Never include session URLs in commit messages or pull request descriptions. Links of the form `https://claude.ai/code/session_...` embed a reference to a private conversation and must not appear in git history or a PR body. Use a plain one- or two-sentence description instead; the bare `https://claude.ai/code` link carries no session id and is fine.

@@ -215,6 +215,8 @@ If you push a branch, please open a pull request for it.
 
 If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. Most contributors are auto-subscribed by GitHub; some integrations require an explicit subscribe step.
 
+Never put session URLs (`https://claude.ai/code/session_...`) in a pull request description or a commit message. They link to a private AI-assistant conversation, and a public repository is a durable, indexed, mirrored record - a pasted session link leaks that conversation the day the repo, a fork, or an upstream breach exposes it. The plain `https://claude.ai/code` attribution link carries no session id and is fine. If a tool appends a session footer when the PR is opened, strip it from the description before moving on.
+
 ## Where to find more
 
 - `docs/architecture.md` - what the project does, key files
