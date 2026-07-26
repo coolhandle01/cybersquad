@@ -157,11 +157,13 @@ class TestFormatStepMessage:
         # result clipped to 300 chars inside [dim]...[/dim]
         assert msg.endswith("[dim]" + "y" * 300 + "[/dim]")
 
-    def test_agent_finish_returns_answer_prefixed_truncation(self) -> None:
+    def test_agent_finish_returns_answer_in_full(self) -> None:
+        # The answer is the operator's review target at a human_input gate, so
+        # it is rendered in full - not clipped like intermediate tool progress.
         finish = AgentFinish(thought="done", output="y" * 700, text="t")
         msg = format_step_message(finish)
         assert msg.startswith("[bold green]Answer:[/bold green] ")
-        assert msg.count("y") == 500
+        assert msg.count("y") == 700
 
     def test_other_step_type_returns_truncated_repr(self) -> None:
         msg = format_step_message("random output " + "z" * 500)

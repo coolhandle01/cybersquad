@@ -77,8 +77,11 @@ def format_step_message(step: object) -> str:
     """Format a CrewAI step (AgentAction / AgentFinish / other) as rich-text.
 
     AgentAction yields a Thought + tool-call line and an optional result block.
-    AgentFinish yields an Answer line. Anything else is rendered as its
-    truncated ``str()``. Trusts the crewai parser types - the caller's
+    AgentFinish yields an Answer line rendered in full - it is the operator's
+    review target at a human_input gate (and the final deliverable), so it must
+    be completely visible, matching headless mode's result panel. Only the
+    intermediate tool progress (inputs, tool results) stays capped. Anything
+    else is rendered as its truncated ``str()``. Trusts the crewai parser types - the caller's
     callback is responsible for swallowing any unexpected exceptions, since
     the step-callback contract is fire-and-forget telemetry.
     """
@@ -89,5 +92,5 @@ def format_step_message(step: object) -> str:
             msg += f"\n[dim]{truncate(step.result, 300)}[/dim]"
         return msg
     if isinstance(step, AgentFinish):
-        return f"[bold green]Answer:[/bold green] {truncate(str(step.output), 500)}"
+        return f"[bold green]Answer:[/bold green] {step.output}"
     return truncate(str(step), 300)

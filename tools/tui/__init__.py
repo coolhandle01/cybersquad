@@ -52,7 +52,6 @@ from tools.tui._helpers import (
     format_step_message,
     route_log_record,
     task_layout,
-    truncate,
 )
 
 if TYPE_CHECKING:
@@ -209,7 +208,9 @@ class CybersquadTUI(App):
     def _on_done(self, result: object) -> None:
         raw = getattr(result, "raw", str(result))
         self._write_agent("[bold green]Pipeline complete.[/bold green]")
-        self._write_agent(truncate(raw, 2000))
+        # Full result, not truncated: this is the final deliverable and the
+        # RichLog scrolls, so there is no reason to clip it. Matches headless.
+        self._write_agent(raw)
 
         # Hand the result to the host for persistence; a save failure must not
         # take the UI down, so swallow and surface it in the pipeline log.
