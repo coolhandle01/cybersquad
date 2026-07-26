@@ -51,6 +51,8 @@ cybersquad workflow reminders (injected at session start - read before your firs
 
 - Never force-push, git push --delete, or git branch -D a shared/PR branch without an explicit plain-words maintainer authorisation in the immediately preceding message. --force-with-lease is no exception. Vented frustration ("just force it then") is not authorisation.
 
+- Never put session URLs (https://claude.ai/code/session_...) in a commit message or a pull request description. A public repository is a durable, mirrored, indexed record, so a pasted session link leaks that private conversation the day the repo or an upstream is exposed. The plain https://claude.ai/code link carries no session id and is fine.
+
 $branch_note
 EOF
 
