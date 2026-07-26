@@ -182,7 +182,10 @@ def build_agent(
     adapter and live outside the ``SquadTool`` Protocol surface by
     design.
     """
-    skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
+    # CrewAI's `skills` field rejects an explicitly-empty list (min_length=1)
+    # but accepts None (its default) - so members without a specialist
+    # skills/ dir pass None rather than [], leaving the field at its default.
+    skills: list[Path] | None = [member.skills_dir] if member.skills_dir.is_dir() else None
     # Static, contract-tested tools first; provisioned-MCP tools spliced
     # on the end. The order is observable in the LLM-visible tool menu -
     # the agent's canonical typed surface opens the menu, MCP-sourced
@@ -215,11 +218,16 @@ def build_task(
     human_input: bool = False,
     *,
     guardrail: Callable[..., tuple[bool, Any]] | None = None,
-    max_retries: int | None = None,
+    max_retries: int = 0,
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
-    Reads description and expected_output from ``<member.dir>/<task_name>/``.
+    Reads name, description, and expected_output from
+    ``<member.dir>/<task_name>/``. ``task_name`` is the directory slug (a good
+    filename); ``name.md`` carries the human-readable display name stamped onto
+    ``Task.name`` (e.g. ``recon`` -> "Reconnaissance"), so a task self-describes
+    when something walks ``crew.tasks`` - the VR's two tasks (research, triage)
+    stay distinct rather than both collapsing to the agent role.
 
     ``guardrail`` is an optional CrewAI *function* guardrail
     (``(TaskOutput) -> (bool, Any)``) that validates the task output and, on
@@ -230,13 +238,14 @@ def build_task(
     ``cybersquad-task`` skill's guardrails section and ``squad/guardrails.py``.
     """
     return Task(
+        name=member.read(task_name, "name"),
         description=member.read(task_name, "description"),
         expected_output=member.read(task_name, "expected_output"),
         agent=agent,
         context=context or [],
         human_input=human_input,
         guardrail=guardrail,
-        max_retries=max_retries,
+        guardrail_max_retries=max_retries,
     )
 
 

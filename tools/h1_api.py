@@ -19,6 +19,7 @@ H1 hacker API docs: https://api.hackerone.com/hacker-resources/
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import UTC, datetime
 from typing import cast
 
@@ -85,23 +86,67 @@ class H1Client:
             config.h1.api_token,
         )
         self._base = config.h1.base_url
-        self._session = requests.Session()
-        self._session.auth = self._auth
-        self._session.headers.update(
-            {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "User-Agent": http.user_agent(),
-            }
-        )
+        # requests.Session is NOT thread-safe, and CrewAI dispatches tool calls
+        # (e.g. several hydrate_programme calls in one agent turn) on separate
+        # threads that all share this single module-level client. A shared
+        # Session lets concurrent requests corrupt each other's connection
+        # state - returning programme B's detail for a request made for
+        # programme A. Give each thread its own Session (built lazily, identical
+        # auth/headers) so calls never interleave on one connection pool.
+        self._local = threading.local()
 
     # Internal helpers
+
+    @property
+    def _session(self) -> requests.Session:
+        """Per-thread requests.Session - see __init__ for the thread-safety rationale."""
+        session: requests.Session | None = getattr(self._local, "session", None)
+        if session is None:
+            session = requests.Session()
+            session.auth = self._auth
+            session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": http.user_agent(),
+                }
+            )
+            self._local.session = session
+        return session
 
     def _get(self, path: str, params: dict | None = None) -> dict:
         url = f"{self._base}{path}"
         resp = self._session.get(url, params=params, timeout=30)
         resp.raise_for_status()
         return cast(dict, resp.json())
+
+    def _next_path(self, data: dict) -> str | None:
+        """Relative path for the next page, or None.
+
+        H1's JSON:API links.next is an *absolute* URL
+        (https://api.hackerone.com/v1/hackers/programs?page[number]=2...);
+        strip our base off so _get's concatenation doesn't double it and 404.
+        """
+        nxt = data.get("links", {}).get("next")
+        return nxt.removeprefix(self._base) if nxt else None
+
+    def _get_all(self, path: str, page_size: int = 100) -> list[dict]:
+        """Fetch and concatenate every page of a paginated JSON:API list.
+
+        Follows links.next from the first page to the last and joins each page's
+        ``data`` array. H1 paginates the structured_scopes and scope_exclusions
+        sub-resources, so reading only page one silently truncates a large
+        programme's scope - this aggregates the whole set.
+        """
+        items: list[dict] = []
+        params: dict | None = {"page[size]": page_size}
+        nxt: str | None = path
+        while nxt:
+            data = self._get(nxt, params)
+            items.extend(data.get("data", []))
+            nxt = self._next_path(data)
+            params = None
+        return items
 
     def _post(self, path: str, payload: dict) -> dict:
         url = f"{self._base}{path}"
@@ -120,12 +165,12 @@ class H1Client:
         """
         results: list[dict] = []
         params = {"page[size]": page_size}
-        path = "/hackers/programs"
+        path: str | None = "/hackers/programs"
 
         while path and len(results) < config.h1.max_programmes:
             data = self._get(path, params)
             results.extend(data.get("data", []))
-            path = data.get("links", {}).get("next", None)
+            path = self._next_path(data)
             params = {}
 
         return results[: config.h1.max_programmes]
@@ -134,29 +179,49 @@ class H1Client:
         """Fetch full policy detail for a given programme handle."""
         return self._get(f"/hackers/programs/{handle}")
 
-    def get_structured_scope(self, handle: str) -> dict:
-        """Fetch the structured scope (in/out) for a programme."""
-        return self._get(f"/hackers/programs/{handle}/structured_scopes")
+    def get_structured_scope(self, handle: str, page_size: int = 100) -> dict:
+        """Fetch the full structured scope (in/out) for a programme.
+
+        The /structured_scopes sub-resource is paginated (JSON:API links.next),
+        so a programme with more entries than one page is split across pages.
+        Aggregate every page so parse_programme sees the COMPLETE scope; reading
+        only page one silently truncates a large programme's in/out-of-scope set,
+        which the PenTester would then mistake for the whole attack surface.
+        """
+        return {"data": self._get_all(f"/hackers/programs/{handle}/structured_scopes", page_size)}
+
+    def get_scope_exclusions(self, handle: str, page_size: int = 100) -> dict:
+        """Fetch a programme's explicit scope exclusions (the do-not-touch set).
+
+        GET /hackers/programs/{handle}/scope_exclusions returns custom
+        out-of-scope entries - each a {category, details} pair naming an excluded
+        asset class or prohibited activity, distinct from the structured_scopes
+        items flagged not eligible_for_submission. Paginated like
+        structured_scopes. hydrate_programme folds these into
+        Programme.out_of_scope so the PenTester sees the full prohibition set.
+        """
+        return {"data": self._get_all(f"/hackers/programs/{handle}/scope_exclusions", page_size)}
 
     def get_programme_detail(self, handle: str) -> dict:
-        """Fetch programme detail with bounty_table and structured_scopes inline.
+        """Fetch programme detail attributes for one handle.
 
-        Halves the round-trips per programme compared to calling
-        get_programme_policy + get_structured_scope separately.
+        Plain GET /hackers/programs/{handle} - no `include`. The hacker API does
+        NOT expose bounty amounts or programme stats here: there is no
+        bounty_table, response-efficiency, time-to-bounty or total-paid field
+        (confirmed against the documented /hackers/* surface). The detail carries
+        the access/policy attributes plus a relationships reference for scope; the
+        full scope and exclusion sets live behind the dedicated
+        /structured_scopes and /scope_exclusions sub-resources, which
+        hydrate_programme fetches separately.
         """
-        return self._get(
-            f"/hackers/programs/{handle}",
-            params={"include": "bounty_table,structured_scopes"},
-        )
+        return self._get(f"/hackers/programs/{handle}")
 
     def browse_programmes(
         self,
         *,
-        asset_type: str | None = None,
         bookmarked: bool | None = None,
         offers_bounties: bool | None = None,
         submission_state: str | None = None,
-        sort: str | None = None,
         limit: int | None = None,
         page_size: int = 25,
     ) -> list[ProgrammePreview]:
@@ -166,38 +231,29 @@ class H1Client:
         The caller surveys the catalog, shortlists handles, then pays for
         hydration on just those candidates via hydrate_programme.
 
-        Filter kwargs map to H1's JSON:API filter[*] query params on
-        /hackers/programs. Each kwarg is omitted from the request entirely
-        when None, so the H1 default applies. Booleans are sent as lowercase
-        "true"/"false" - the wire form filter[*] params expect.
+        H1's list endpoint only paginates - it does NOT filter server-side - so
+        the filters (bookmarked, offers_bounties, submission_state) are applied
+        here, client-side, against each preview's own fields: a preview that does
+        not match every supplied filter is dropped before it is returned. Pages
+        are fetched until `limit` matching previews are collected or the catalog
+        is exhausted.
 
-        limit caps the total returned previews across pages; defaults to
-        config.h1.max_programmes. page_size is the per-request page size,
-        not the cap.
+        limit caps the total returned previews; defaults to
+        config.h1.max_programmes. page_size is the per-request page size.
         """
         cap = limit if limit is not None else config.h1.max_programmes
-
-        params: dict[str, object] = {"page[size]": page_size}
-        # FIXME: the exact H1 filter[*] keys for /hackers/programs are not
-        # exhaustively confirmed against a captured request - tracked in #43.
-        # The four below match attributes the list endpoint is known to
-        # expose; passing an unknown filter key would be silently ignored by
-        # H1, so the worst case is "filter did nothing".
-        _filter_kwargs = {
-            "asset_type": asset_type,
-            "bookmarked": bookmarked,
+        # H1 ignores filter[*] query params on this endpoint, so filtering is
+        # client-side: None means "no constraint"; otherwise the preview's own
+        # field must equal the requested value.
+        wanted: dict[str, object] = {
             "offers_bounties": offers_bounties,
             "submission_state": submission_state,
+            "bookmarked": bookmarked,
         }
-        for key, value in _filter_kwargs.items():
-            if value is None:
-                continue
-            params[f"filter[{key}]"] = str(value).lower() if isinstance(value, bool) else str(value)
-        if sort is not None:
-            params["sort"] = sort
 
         previews: list[ProgrammePreview] = []
         path: str | None = "/hackers/programs"
+        params: dict[str, object] = {"page[size]": page_size}
         while path and len(previews) < cap:
             data = self._get(path, params)
             for raw in data.get("data", []):
@@ -207,6 +263,10 @@ class H1Client:
                     # A preview with no handle cannot be hydrated downstream;
                     # the PM has no way to act on it. Drop it rather than
                     # surface a record the agent must defensively skip.
+                    continue
+                if any(
+                    want is not None and attrs.get(field) != want for field, want in wanted.items()
+                ):
                     continue
                 previews.append(
                     ProgrammePreview(
@@ -220,9 +280,7 @@ class H1Client:
                 )
                 if len(previews) >= cap:
                     break
-            path = data.get("links", {}).get("next")
-            # Pagination links from H1 already encode page params; subsequent
-            # calls should not redundantly carry the initial filter dict.
+            path = self._next_path(data)
             params = {}
 
         return previews
@@ -230,30 +288,66 @@ class H1Client:
     def hydrate_programme(self, handle: str) -> Programme:
         """Fetch full detail for one programme and return a typed Programme.
 
-        Pulls bounty_table + structured_scopes inline via the detail endpoint's
-        include parameter. One HTTP call. Use after browse_programmes to drill
+        Three calls per programme: the detail endpoint for access/policy
+        attributes, the structured_scopes sub-resource for in/out scope, and the
+        scope_exclusions sub-resource for explicit prohibitions (the hacker API
+        inlines none of these on detail). Use after browse_programmes to drill
         into a specific candidate the PM wants to score.
         """
         detail = self.get_programme_detail(handle)
-        detail_data = detail.get("data", {})
-        included = detail.get("included", [])
-        scope_data = {"data": [i for i in included if i.get("type") == "structured-scope"]}
-        return self.parse_programme(detail_data, scope_data)
+        # The detail endpoint wraps the programme in a JSON:API {"data": {...}}
+        # envelope - the same shape as the list endpoint, just a single object
+        # instead of an array. (The pre-#136 find_programmes hydrated via
+        # detail.get("data") on this same endpoint.) `or detail` is a defensive
+        # fallback so an unexpectedly unwrapped response degrades to the clear
+        # ValueError below instead of a KeyError here; it is not a claim that
+        # the API ever returns the object unwrapped.
+        detail_data = detail.get("data") or detail
+        if not detail_data.get("attributes"):
+            # No usable resource object - fail loud rather than letting
+            # parse_programme fabricate an "unknown" handle the PM then caches
+            # and "selects". H1 returns a 2xx with no attributes for a handle
+            # the account cannot access (a guessed/wrong handle), so surface
+            # what it actually returned: the agent then knows to pick a handle
+            # from browse_programmes rather than invent one, and the failure is
+            # debuggable from the message without a re-run.
+            raise ValueError(
+                f"H1 returned no usable programme detail for handle {handle!r} "
+                f"(GET /hackers/programs/{handle}; response keys={list(detail.keys())}, "
+                f"data={detail.get('data')!r}). Hydrate only handles that "
+                f"browse_programmes actually returned; do not invent handles."
+            )
+        # Scopes and exclusions come from dedicated sub-resources, not from
+        # detail's `included` (which the hacker API leaves empty). Both are
+        # paginated and aggregated; parse_programme folds the exclusions into
+        # out_of_scope.
+        scope_data = self.get_structured_scope(handle)
+        try:
+            exclusions = self.get_scope_exclusions(handle)
+        except requests.HTTPError as exc:
+            # Exclusions are supplementary do-not-touch detail, not gating: never
+            # let them block selecting a programme (the pipeline's first step).
+            # Log loudly and proceed with the structured-scope view alone.
+            logger.warning("scope_exclusions fetch failed for %s: %s", handle, exc)
+            exclusions = {"data": []}
+        return self.parse_programme(detail_data, scope_data, exclusions)
 
     # Data parsers
 
-    def parse_programme(self, raw: dict, scope_data: dict) -> Programme:
-        """Convert raw H1 API dicts into a typed Programme model."""
+    def parse_programme(
+        self, raw: dict, scope_data: dict, scope_exclusions: dict | None = None
+    ) -> Programme:
+        """Convert raw H1 API dicts into a typed Programme model.
+
+        ``scope_data`` is the aggregated /structured_scopes payload and
+        ``scope_exclusions`` the aggregated /scope_exclusions payload; the
+        latter's entries are merged into ``out_of_scope`` so the prohibition set
+        is complete. The hacker API exposes no bounty or stats data, so
+        ``bounty_table`` and the payout/response-time fields are left at their
+        model defaults - there is nothing to parse (see get_programme_detail).
+        """
         attrs = raw.get("attributes", {})
         handle = attrs.get("handle", raw.get("id", "unknown"))
-
-        bounty_table: dict[Severity, int] = {}
-        for offer in attrs.get("bounty_table", {}).get("data", []):
-            o_attrs = offer.get("attributes", {})
-            sev_str = o_attrs.get("label", "medium").lower()
-            amount = int(o_attrs.get("maximum_amount", 0) or 0)
-            sev = _H1_SEVERITY_MAP.get(sev_str, Severity.MEDIUM)
-            bounty_table[sev] = amount
 
         in_scope: list[ScopeItem] = []
         out_of_scope: list[ScopeItem] = []
@@ -274,51 +368,39 @@ class H1Client:
             else:
                 out_of_scope.append(scope_item)
 
-        policy_text: str = attrs.get("policy", "") or ""
+        # /scope_exclusions carries custom prohibitions ({category, details}) that
+        # are not structured_scopes entries - fold each into out_of_scope so the
+        # PenTester sees the full do-not-touch set. category names the excluded
+        # class/activity (it has no asset_identifier of its own); details is the
+        # human instruction; an exclusion is never bounty-eligible.
+        for excl in (scope_exclusions or {}).get("data", []):
+            e_attrs = excl.get("attributes", {})
+            out_of_scope.append(
+                ScopeItem(
+                    asset_identifier=e_attrs.get("category") or "",
+                    asset_type=ScopeType.OTHER,
+                    eligible_for_bounty=False,
+                    instruction=e_attrs.get("details"),
+                )
+            )
 
-        offers_bounties: bool = bool(attrs.get("offers_bounties", True))
         submission_state: str = attrs.get("submission_state", "open") or "open"
-        accepts_new_reports: bool = submission_state == "open"
-
-        response_efficiency_pct: float | None = attrs.get("response_efficiency_percentage")
-        avg_bounty_minutes: float | None = attrs.get("average_time_to_bounty_in_minutes")
-        avg_time_to_bounty_days: float | None = (
-            round(avg_bounty_minutes / (60 * 24), 1) if avg_bounty_minutes else None
-        )
-        avg_first_resp_minutes: float | None = attrs.get(
-            "average_time_to_first_programme_response_in_minutes"
-        )
-        avg_time_to_first_response_days: float | None = (
-            round(avg_first_resp_minutes / (60 * 24), 1) if avg_first_resp_minutes else None
-        )
-        total_cents: int | None = attrs.get("total_bounties_paid_in_cents")
-        total_bounties_paid_usd: int | None = total_cents // 100 if total_cents else None
-        triage_active: bool | None = attrs.get("triage_active")
-        state: str | None = attrs.get("state")
-        last_updated_str: str | None = attrs.get("updated_at")
-        last_updated_at: datetime | None = (
-            datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
-            if last_updated_str
-            else None
-        )
-
+        # bounty_table and the payout/response-time stats stay at their model
+        # defaults ({} / None): the hacker API does not return them (confirmed
+        # against the docs, the captured detail shape, and a real run), so faking
+        # them from absent attributes is exactly the vapourware to avoid.
         return Programme(
             handle=handle,
             name=attrs.get("name", handle),
             url=f"https://hackerone.com/{handle}",
-            bounty_table=bounty_table,
+            bounty_table={},
             in_scope=in_scope,
             out_of_scope=out_of_scope,
-            offers_bounties=offers_bounties,
-            accepts_new_reports=accepts_new_reports,
-            response_efficiency_pct=response_efficiency_pct,
-            avg_time_to_bounty_days=avg_time_to_bounty_days,
-            avg_time_to_first_response_days=avg_time_to_first_response_days,
-            total_bounties_paid_usd=total_bounties_paid_usd,
-            triage_active=triage_active,
-            last_updated_at=last_updated_at,
-            state=state,
-            policy_text=policy_text,
+            offers_bounties=bool(attrs.get("offers_bounties", True)),
+            accepts_new_reports=submission_state == "open",
+            triage_active=attrs.get("triage_active"),
+            state=attrs.get("state"),
+            policy_text=attrs.get("policy", "") or "",
         )
 
     # Report submission
@@ -367,22 +449,6 @@ class H1Client:
                 status=SubmissionStatus.PENDING,
                 error=str(exc),
             )
-
-    def get_programme_stats(self, handle: str) -> dict:
-        """Return response efficiency and payout stats for a programme."""
-        data = self._get(f"/hackers/programs/{handle}")
-        attrs = data.get("data", {}).get("attributes", {})
-        return {
-            "handle": handle,
-            "response_efficiency_pct": attrs.get("response_efficiency_percentage"),
-            "avg_time_to_first_response_minutes": attrs.get(
-                "average_time_to_first_programme_response_in_minutes"
-            ),
-            "avg_time_to_bounty_minutes": attrs.get("average_time_to_bounty_in_minutes"),
-            "avg_time_to_resolution_minutes": attrs.get("average_time_to_resolution_in_minutes"),
-            "total_bounties_paid_cents": attrs.get("total_bounties_paid_in_cents"),
-            "accepting_reports": attrs.get("state") == "public_mode",
-        }
 
     def list_reports(self, programme_handle: str, page_size: int = 25) -> list[dict]:
         """List recent reports for a programme - used for duplicate detection."""

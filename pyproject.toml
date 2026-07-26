@@ -43,6 +43,13 @@ dependencies = [
     # and carries MITRE's canonical name/description - no hand-vendored CWE
     # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
     "cwe2>=3.0",
+    # Read side for the OWASP Amass asset database. Amass v5 moved its results
+    # into SQLite and stopped populating the text output, so the usual
+    # ``-o subs.txt`` handoff yields an empty file; oamx is the consumer.
+    # Read-only by construction (opens the database ``mode=ro``) and cannot
+    # start a scan or send traffic, which is what makes the OSINT Analyst's
+    # Read Amass * tools safe to expose. Zero runtime dependencies of its own.
+    "oamx>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -68,7 +75,7 @@ mcp = [
     "crewai-tools[mcp]>=1.14.5",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
-    "mcp-server-time==2026.1.26",
+    "mcp-server-time==2026.7.10",
 ]
 dev = [
     # Testing
@@ -80,7 +87,7 @@ dev = [
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
     # Linting & formatting
-    "ruff>=0.4",
+    "ruff>=0.16",
     "mypy>=1.10",
     "pylint>=4.0",
     "types-requests>=2.32",
@@ -144,6 +151,13 @@ exclude_lines = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# Markdown is out of scope for the formatter. Since 0.16 ruff formats Python
+# inside fenced code blocks, which reaches the SKILL.md files and docs/. Those
+# snippets are hand-wrapped to stay compact: a skill is loaded into an agent's
+# context, so expanding a three-line call to one argument per line costs budget
+# and buys the reader nothing. ruff floats unpinned here, so this exclusion is
+# the only thing holding that scope back - do not drop it to silence a diff.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = [

@@ -1,0 +1,32 @@
+# Dependabot keeps dependency pins current. Two ecosystems:
+#   - pip: the Python deps declared in pyproject.toml (incl. the [dev] extras).
+#   - github-actions: the SHA-pinned actions in .github/workflows/.
+# Actions are pinned to full commit SHAs (see docs/ci.md); Dependabot bumps the
+# SHA and the trailing version comment together.
+# Commit-message prefixes match the Conventional Commit types in
+# docs/git-workflow.md (build = dependency changes, ci = CI config).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 15
+    commit-message:
+      prefix: "build"
+    groups:
+      python-production:
+        dependency-type: "production"
+      python-development:
+        dependency-type: "development"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

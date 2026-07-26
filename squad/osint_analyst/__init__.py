@@ -25,6 +25,14 @@ consumers (tests, ``crew.py``, the contract tests in
 from pathlib import Path
 
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad.osint_analyst.tools.amass import (
+    _AmassAddressesArgs,
+    _AmassNetblocksArgs,
+    _AmassSubdomainsArgs,
+    amass_addresses_tool,
+    amass_netblocks_tool,
+    amass_subdomains_tool,
+)
 from squad.osint_analyst.tools.curation import (
     _AnnotateHostArgs,
     _FinaliseReconArgs,
@@ -79,6 +87,10 @@ MEMBER = SquadMember(
         discover_llm_endpoints_tool,
         discover_webpages_tool,
         discover_takeover_candidates_tool,
+        # Read what a prior Amass run already collected. No traffic.
+        amass_subdomains_tool,
+        amass_addresses_tool,
+        amass_netblocks_tool,
         # Post-sweep pivot / enrichment
         lookup_ip_assets_tool,
         lookup_rdap_asn_tool,
@@ -102,6 +114,9 @@ MEMBER = SquadMember(
         "Discover LLM Endpoints": _DiscoverLlmEndpointsArgs,
         "Discover Webpages": _DiscoverWebpagesArgs,
         "Discover Takeover Candidates": _DiscoverTakeoverCandidatesArgs,
+        "Read Amass Subdomains": _AmassSubdomainsArgs,
+        "Read Amass Addresses": _AmassAddressesArgs,
+        "Read Amass Netblocks": _AmassNetblocksArgs,
         "Lookup IP Assets": _LookupIpAssetsArgs,
         "Lookup RDAP for ASN": _LookupRdapAsnArgs,
         "Discover Host Services": _DiscoverHostServicesArgs,
@@ -132,6 +147,10 @@ __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
     "lookup_ip_assets_tool",
     "lookup_rdap_asn_tool",
     "run_initial_sweep_tool",
+    # Wrappers - Amass asset database (read-only, no traffic)
+    "amass_addresses_tool",
+    "amass_netblocks_tool",
+    "amass_subdomains_tool",
     # Wrappers - curation
     "annotate_host_tool",
     "finalise_recon_tool",
@@ -139,6 +158,9 @@ __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
     "lookup_cwe_tool",
     "lookup_owasp_tool",
     # args_schema classes (re-exported so test imports stay stable)
+    "_AmassAddressesArgs",
+    "_AmassNetblocksArgs",
+    "_AmassSubdomainsArgs",
     "_AnnotateHostArgs",
     "_DiscoverHistoricalUrlsArgs",
     "_DiscoverHostServicesArgs",

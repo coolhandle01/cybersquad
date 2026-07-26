@@ -38,18 +38,20 @@ class _FakeTask:
         description: str,
         expected_output: str,
         agent: object,
+        name: str = "",
         context: list | None = None,
         human_input: bool = False,
         guardrail: object = None,
-        max_retries: int | None = None,
+        guardrail_max_retries: int | None = None,
     ) -> None:
+        self.name = name
         self.description = description
         self.expected_output = expected_output
         self.agent = agent
         self.context = context or []
         self.human_input = human_input
         self.guardrail = guardrail
-        self.max_retries = max_retries
+        self.guardrail_max_retries = guardrail_max_retries
 
 
 class TestSquadMemberRead:
@@ -105,6 +107,23 @@ class TestBuildTasks:
             assert task.description
             assert task.expected_output
 
+    def test_each_task_has_display_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Every task carries a human-readable ``name`` from its ``name.md``,
+        so a task self-describes when something walks ``crew.tasks``."""
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        tasks = build_tasks(self._agents())
+        for task in tasks:
+            assert task.name, "task is missing a display name"
+            assert "---" not in task.name
+
+    def test_vr_two_tasks_have_distinct_names(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The VR owns both research and triage; per-task ``name.md`` keeps them
+        distinct rather than collapsing to the shared agent role."""
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        _select, _recon, research, _pentest, triage, _write, _submit = build_tasks(self._agents())
+        assert research.name != triage.name
+        assert research.agent is triage.agent  # same agent, different tasks
+
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
@@ -122,7 +141,7 @@ class TestBuildTasks:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         select, *_rest = build_tasks(self._agents())
         assert select.guardrail is validate_select_output
-        assert select.max_retries == 2
+        assert select.guardrail_max_retries == 2
 
     def test_only_select_task_is_guarded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
