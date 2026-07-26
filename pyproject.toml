@@ -65,6 +65,13 @@ dependencies = [
     # and carries MITRE's canonical name/description - no hand-vendored CWE
     # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
     "cwe2>=3.0",
+    # Process-tree introspection for the TUI's break-glass quit (Ctrl+Q): a
+    # running kickoff() cannot be cancelled, so the panic key kills the run's
+    # child subprocesses (MCP servers, in-flight nmap/sqlmap/nuclei/testssl)
+    # before hard-exiting - otherwise they orphan and keep scanning the target.
+    # Cross-platform (avoids a Linux-only /proc hack); ships manylinux wheels so
+    # a glibc container base needs no compiler. BSD-3-Clause. See tools/tui.
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]

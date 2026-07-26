@@ -34,11 +34,13 @@ each task's display name (``Task.name``) and agent role straight off
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import psutil
 from crewai import Crew
 from rich.panel import Panel
 from textual import events, work
@@ -134,6 +136,10 @@ class CybersquadTUI(App):
         # emitted during a UI-thread callback dispatch directly instead of
         # bouncing through call_from_thread, which refuses same-thread calls.
         self._ui_thread_id: int | None = None
+        # True while kickoff() is in flight. Ctrl+Q consults it: a running
+        # kickoff cannot be cancelled, so quitting mid-run must break the glass
+        # (see action_quit) rather than hang on the worker join.
+        self._pipeline_running: bool = False
         self._crew.step_callback = self._make_step_callback()
 
     def compose(self) -> ComposeResult:
@@ -198,6 +204,7 @@ class CybersquadTUI(App):
         # a blocking terminal input(). Set in this (worker) thread so kickoff's
         # get_provider() - same thread - picks it up; reset when the run ends.
         token = set_provider(_make_tui_human_input_provider(self))
+        self._pipeline_running = True
         try:
             result = self._crew.kickoff()
             self.call_from_thread(self._on_done, result)
@@ -205,6 +212,7 @@ class CybersquadTUI(App):
             self.call_from_thread(self._write_agent, f"[bold red]Pipeline error: {exc}[/bold red]")
             self.call_from_thread(self._write_crew, f"[bold red]Pipeline error: {exc}[/bold red]")
         finally:
+            self._pipeline_running = False
             reset_provider(token)
 
     def _make_task_callback(
@@ -304,6 +312,66 @@ class CybersquadTUI(App):
             fn(msg)
         else:
             self.call_from_thread(fn, msg)
+
+    # -- teardown --
+
+    async def action_quit(self) -> None:
+        """Ctrl+Q. Graceful when idle, break-glass when a run is in flight.
+
+        A running ``kickoff()`` cannot be cancelled, so a normal quit would hang
+        asyncio's default-executor join on the abandoned worker thread (up to
+        300s) as the app tears down. When a run is in flight this is the panic
+        key: restore the terminal, kill the run's child processes (MCP servers,
+        in-flight tool subprocesses), and hard-exit so nothing wedges the exit or
+        keeps scanning the target. When nothing is running the graceful path is
+        safe - the worker has finished, so the host tears the MCP scope down and
+        saves metrics with no hang.
+        """
+        if not self._pipeline_running:
+            self.exit()
+            return
+        self._restore_terminal()
+        self._kill_run_children()
+        os._exit(0)
+
+    def _restore_terminal(self) -> None:
+        """Put the terminal back before a hard exit.
+
+        ``os._exit`` skips Textual's own driver teardown, which would otherwise
+        leave the terminal in raw / alt-screen mode - a different kind of mess.
+        """
+        driver = getattr(self, "_driver", None)
+        if driver is not None:
+            try:
+                driver.stop_application_mode()
+            except Exception as exc:  # best-effort during panic teardown
+                logger.debug("terminal restore failed during break-glass: %s", exc)
+
+    @staticmethod
+    def _kill_run_children() -> None:
+        """Terminate every descendant process on a break-glass quit.
+
+        The run's children are the MCP server subprocesses and any in-flight
+        tool subprocess (nmap, sqlmap, nuclei, testssl). Hard-exiting without
+        this would orphan them - scanners left running against the target. SIGTERM
+        first, then SIGKILL the stragglers. psutil scopes this to our own process
+        tree (and to the container's PID namespace when containerised).
+        """
+        try:
+            children = psutil.Process().children(recursive=True)
+        except psutil.Error:
+            return
+        for child in children:
+            try:
+                child.terminate()
+            except psutil.Error:
+                pass
+        _, alive = psutil.wait_procs(children, timeout=1.5)
+        for child in alive:
+            try:
+                child.kill()
+            except psutil.Error:
+                pass
 
     # -- human review --
 
