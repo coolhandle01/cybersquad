@@ -142,8 +142,12 @@ class TestSubdomains:
 
     def test_min_confidence_sheds_brute_force_guesses(self, amass_db: Path) -> None:
         high = amass_subdomains(["example.com"], AmassFilters(min_confidence=90), db=str(amass_db))
-        assert "www.example.com" in high
-        assert "dev.example.com" not in high, "brute-forcing asserts only 50"
+        # amass_subdomains returns list[FQDN]; compare on the string values so
+        # this reads as list-of-str membership - to a human and to CodeQL's URL
+        # sanitization heuristic - rather than an FQDN-identity or substring check.
+        names = [str(name) for name in high]
+        assert "www.example.com" in names
+        assert "dev.example.com" not in names, "brute-forcing asserts only 50"
 
     def test_no_domains_is_not_an_unscoped_read(self, amass_db: Path) -> None:
         # The wrapper short-circuits on an empty list; the kernel is called
