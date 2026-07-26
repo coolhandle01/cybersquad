@@ -37,13 +37,12 @@ import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from crewai import Crew
 from rich.panel import Panel
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
-from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.message import Message
@@ -66,27 +65,33 @@ logger = logging.getLogger(__name__)
 class FeedbackArea(TextArea):
     """Multi-line human-review input for the feedback gate.
 
-    Enter inserts a newline; Ctrl+S submits. Decoupling submit from Enter is
-    the point: a single-line Input sent on Enter, so reaching for a new
-    paragraph fired the review by accident. An empty submit accepts the result
-    as-is, matching CrewAI's feedback loop (where empty feedback means accept).
-    Terminals cannot reliably distinguish Shift+Enter from Enter, so a distinct
-    submit key (Ctrl+S) is used rather than binding Shift+Enter.
+    Enter submits, matching CrewAI's out-of-the-box feedback prompt; Shift+Enter
+    inserts a newline for multi-paragraph feedback. This inverts TextArea's
+    default (where Enter inserts the newline). An empty submit accepts the
+    result as-is, per CrewAI's feedback loop. Shift+Enter only reaches the app
+    on terminals whose keyboard protocol distinguishes it from Enter; where it
+    does not, Enter still submits, so the primary gesture always works.
     """
 
-    BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("ctrl+s", "submit", "Submit review", show=False)
-    ]
-
     class Submitted(Message):
-        """Posted when the operator submits their feedback with Ctrl+S."""
+        """Posted when the operator submits their feedback with Enter."""
 
         def __init__(self, value: str) -> None:
             self.value = value
             super().__init__()
 
-    def action_submit(self) -> None:
-        self.post_message(self.Submitted(self.text))
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self.text))
+            return
+        if event.key == "shift+enter":
+            event.stop()
+            event.prevent_default()
+            self.insert("\n")
+            return
+        await super()._on_key(event)
 
 
 class CybersquadTUI(App):
@@ -322,7 +327,8 @@ class CybersquadTUI(App):
             log.write(
                 Panel(
                     "Review the result above.\n\n"
-                    "Type your feedback, then press Ctrl+S to submit.\n"
+                    "Type your feedback, then press Enter to submit "
+                    "(Shift+Enter for a newline).\n"
                     "Submit an empty box to accept the result as-is.",
                     title="Human Review Requested",
                     border_style="yellow",
@@ -330,7 +336,7 @@ class CybersquadTUI(App):
                 )
             )
         inp = self.query_one("#human-input", FeedbackArea)
-        inp.placeholder = "Your feedback - Ctrl+S to submit, empty to accept"
+        inp.placeholder = "Enter submits - Shift+Enter for a newline - empty accepts"
         inp.disabled = False
         inp.focus()
 
