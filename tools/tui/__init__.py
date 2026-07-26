@@ -65,13 +65,18 @@ logger = logging.getLogger(__name__)
 class FeedbackArea(TextArea):
     """Multi-line human-review input for the feedback gate.
 
-    Enter submits, matching CrewAI's out-of-the-box feedback prompt; Shift+Enter
-    inserts a newline for multi-paragraph feedback. This inverts TextArea's
-    default (where Enter inserts the newline). An empty submit accepts the
-    result as-is, per CrewAI's feedback loop. Shift+Enter only reaches the app
-    on terminals whose keyboard protocol distinguishes it from Enter; where it
-    does not, Enter still submits, so the primary gesture always works.
+    Enter submits, matching CrewAI's out-of-the-box feedback prompt; Ctrl+J or
+    Shift+Enter inserts a newline for multi-paragraph feedback. This inverts
+    TextArea's default (where Enter inserts the newline). An empty submit
+    accepts the result as-is, per CrewAI's feedback loop.
+
+    Ctrl+J is the portable newline: it is a raw line-feed byte, so it reaches
+    the app on every terminal. Shift+Enter only arrives on terminals whose
+    keyboard protocol distinguishes it from Enter (not Windows Terminal / WSL,
+    for example); where it does not, Ctrl+J still works and Enter still submits.
     """
+
+    _NEWLINE_KEYS = frozenset({"ctrl+j", "shift+enter"})
 
     class Submitted(Message):
         """Posted when the operator submits their feedback with Enter."""
@@ -86,7 +91,7 @@ class FeedbackArea(TextArea):
             event.prevent_default()
             self.post_message(self.Submitted(self.text))
             return
-        if event.key == "shift+enter":
+        if event.key in self._NEWLINE_KEYS:
             event.stop()
             event.prevent_default()
             self.insert("\n")
@@ -328,7 +333,7 @@ class CybersquadTUI(App):
                 Panel(
                     "Review the result above.\n\n"
                     "Type your feedback, then press Enter to submit "
-                    "(Shift+Enter for a newline).\n"
+                    "(Ctrl+J for a newline).\n"
                     "Submit an empty box to accept the result as-is.",
                     title="Human Review Requested",
                     border_style="yellow",
@@ -336,7 +341,7 @@ class CybersquadTUI(App):
                 )
             )
         inp = self.query_one("#human-input", FeedbackArea)
-        inp.placeholder = "Enter submits - Shift+Enter for a newline - empty accepts"
+        inp.placeholder = "Enter submits - Ctrl+J for a newline - empty accepts"
         inp.disabled = False
         inp.focus()
 
