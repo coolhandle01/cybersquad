@@ -29,7 +29,11 @@ coverage.xml
 
 # IDE
 .idea/
-.vscode/
+# .vscode: share the project-level configs, ignore personal overrides
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json
 *.swp
 *.swo
 
