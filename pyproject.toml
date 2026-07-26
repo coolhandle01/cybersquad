@@ -65,13 +65,12 @@ dependencies = [
     # and carries MITRE's canonical name/description - no hand-vendored CWE
     # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
     "cwe2>=3.0",
-    # Process-tree introspection for the TUI's break-glass quit (Ctrl+Q): a
-    # running kickoff() cannot be cancelled, so the panic key kills the run's
-    # child subprocesses (MCP servers, in-flight nmap/sqlmap/nuclei/testssl)
-    # before hard-exiting - otherwise they orphan and keep scanning the target.
-    # Cross-platform (avoids a Linux-only /proc hack); ships manylinux wheels so
-    # a glibc container base needs no compiler. BSD-3-Clause. See tools/tui.
-    "psutil>=5.9",
+    # The Textual TUI now lives in the crewui library; tools/tui is a thin
+    # cybersquad wrapper over it (and psutil/textual come in transitively).
+    # Pinned by commit to crewui's break-glass branch while cybersquad is the
+    # integration harness validating that PR from a real run - this moves to a
+    # released pin once the break-glass + review-gate work lands in crewui.
+    "crewui @ git+https://github.com/coolhandle01/crewui@2f735617f343bce0abdcb03296c281cfeda913b3",
 ]
 
 [project.optional-dependencies]
@@ -156,10 +155,11 @@ bdd_features_base_dir = "tests/features"
 
 [tool.coverage.run]
 source = ["."]
-# tools/tui/__init__.py is the Textual App + widget + threading layer and
-# needs a textual.pilot harness to exercise; tracked as debt to remove this
-# omit once the harness lands. Pure helpers live in tools/tui/_helpers.py
-# (branch-cov 100%) and are tested directly.
+# tools/tui/__init__.py is now a thin wrapper over crewui's CrewAIPipelineTUI
+# (the generic TUI, its helpers, and their tests live in the crewui package).
+# The wrapper is a bare subclass with no logic of its own, so it is omitted
+# rather than pilot-harnessed here; test_tui.py still pins the subclass +
+# construction contract.
 omit = ["tests/*", ".venv/*", "tools/tui/__init__.py"]
 branch = true
 
