@@ -67,10 +67,13 @@ dependencies = [
     "cwe2>=3.0",
     # The Textual TUI now lives in the crewui library; tools/tui is a thin
     # cybersquad wrapper over it (and psutil/textual come in transitively).
-    # Pinned by commit to crewui's break-glass branch while cybersquad is the
-    # integration harness validating that PR from a real run - this moves to a
-    # released pin once the break-glass + review-gate work lands in crewui.
-    "crewui @ git+https://github.com/coolhandle01/crewui@2f735617f343bce0abdcb03296c281cfeda913b3",
+    # Was pinned by commit to crewui's break-glass branch while cybersquad was
+    # the integration harness validating it; that work is released, so this is a
+    # PyPI pin again. The ceiling is deliberate: crewui sets major_version_zero,
+    # so while it is 0.x a breaking change bumps the minor exactly as a feature
+    # does - the version alone cannot tell them apart, and every minor is a
+    # review event rather than an automatic upgrade.
+    "crewui>=0.2,<0.3",
 ]
 
 [project.optional-dependencies]
