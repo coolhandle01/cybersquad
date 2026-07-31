@@ -26,7 +26,7 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
-**A ruff autofix is a proposal, not a proof - re-run the whole stack after one.** `ruff check --fix` is safe, but `--fix --unsafe-fixes` will rewrite code into a form ruff *believes* is equivalent, and that belief is only about syntax. It cannot see runtime types. A real example that reached a green `ruff check`: `--unsafe-fixes` "simplified" `for name in resp.cookies.keys()` to `for name in resp.cookies` (SIM118), which is correct for a `dict` but wrong for the `RequestsCookieJar` there - iterating the jar yields `Cookie` objects, not name strings. `mypy` caught it (`"Cookie" has no attribute "lower"`) and, separately, the diff-coverage ratchet caught an untested branch a different unsafe fix had disturbed. Neither was visible to ruff. The other five tools in the stack are what verify ruff's rewrite; running them is not optional after an autofix.
+**A ruff autofix is a proposal to verify, not a result to trust.** `ruff check --fix` is safe. `--fix --unsafe-fixes` rewrites code into a form ruff judges equivalent on *syntax* alone - it cannot see runtime types, so an "equivalent" rewrite can silently change behaviour. That judgement is an assumption ruff cannot verify, and the rest of the stack is what verifies it: run all six after any autofix, and read a resulting mypy or coverage failure on autofixed code as engineering signal (see below), not an obstacle to route around.
 
 Advisory (not CI-gated): periodically run `vulture` to surface dead code that the import graph cannot see. Pydantic model fields trigger false positives at lower confidence, so 80% is the gospel floor:
 
