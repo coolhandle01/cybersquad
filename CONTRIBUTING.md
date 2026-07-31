@@ -26,6 +26,8 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
+**A ruff autofix is a proposal, not a proof - re-run the whole stack after one.** `ruff check --fix` is safe, but `--fix --unsafe-fixes` will rewrite code into a form ruff *believes* is equivalent, and that belief is only about syntax. It cannot see runtime types. A real example that reached a green `ruff check`: `--unsafe-fixes` "simplified" `for name in resp.cookies.keys()` to `for name in resp.cookies` (SIM118), which is correct for a `dict` but wrong for the `RequestsCookieJar` there - iterating the jar yields `Cookie` objects, not name strings. `mypy` caught it (`"Cookie" has no attribute "lower"`) and, separately, the diff-coverage ratchet caught an untested branch a different unsafe fix had disturbed. Neither was visible to ruff. The other five tools in the stack are what verify ruff's rewrite; running them is not optional after an autofix.
+
 Advisory (not CI-gated): periodically run `vulture` to surface dead code that the import graph cannot see. Pydantic model fields trigger false positives at lower confidence, so 80% is the gospel floor:
 
 ```bash
@@ -35,7 +37,7 @@ Advisory (not CI-gated): periodically run `vulture` to surface dead code that th
 
 Treat findings as candidates for removal, not removal mandates - check the import graph (re-exports, conditional consumers) before deleting.
 
-`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 90% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
+`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 96% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
 
 Never push a change you haven't actually executed. A passing `mypy` run after removing a `# type: ignore` means nothing if the file wasn't reachable.
 
@@ -55,7 +57,7 @@ This discipline is not negotiable for code that ships. Bug-fix PRs without a reg
 
 ### Branch coverage on your diff is 100% or you say why
 
-The 90% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
+The 96% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
 
 Line coverage at 100% does not mean tested. Branch coverage at 100% on your diff means the conditional has been thought about.
 
