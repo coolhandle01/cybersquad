@@ -204,7 +204,12 @@ disallow_untyped_defs = false
 
 [tool.pylint.main]
 recursive = true
-ignore = [".venv"]
+# .claude holds agent worktrees - full checkouts of this repo at other commits.
+# git ignores them; a recursive linter does not, and would score a stale second
+# copy of every module into the fail-under gate below. That breaks the CI parity
+# the "Before you commit" stack promises, since CI clones fresh and never has
+# them.
+ignore = [".venv", ".claude"]
 ignore-paths = ["tests/.*"]
 # Locks the current design-rule health (full-repo score ~9.91; the
 # agent-orchestration layer alone scores ~9.97) with a small epsilon
@@ -235,7 +240,9 @@ max-module-lines = 500
 
 [tool.bandit]
 targets = ["."]
-exclude_dirs = ["tests", ".venv"]
+# .claude for the same reason as pylint's ignore: agent worktrees are full
+# checkouts, and scanning them reports every finding twice.
+exclude_dirs = ["tests", ".venv", ".claude"]
 skips = [
     "B404",  # import subprocess - we use it intentionally for binary wrappers
     "B603",  # subprocess without shell=True - correct, we never use shell=True
