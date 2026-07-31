@@ -108,6 +108,8 @@ class TestProbeEndpoints:
         assert "admin.example.com" in call_kwargs["input"]
 
     def test_raises_if_binary_missing(self):
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(EnvironmentError, match="httpx"):
-                probe_endpoints(["example.com"])
+        with (
+            patch("shutil.which", return_value=None),
+            pytest.raises(EnvironmentError, match="httpx"),
+        ):
+            probe_endpoints(["example.com"])

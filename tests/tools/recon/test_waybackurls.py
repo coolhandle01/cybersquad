@@ -32,9 +32,11 @@ class TestHistoricalUrls:
         assert f"https://{target_apex}/another" in result
 
     def test_missing_binary_raises(self):
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(OSError, match="waybackurls"):
-                historical_urls("example.com")
+        with (
+            patch("shutil.which", return_value=None),
+            pytest.raises(OSError, match="waybackurls"),
+        ):
+            historical_urls("example.com")
 
     def test_empty_output_returns_empty_list(self):
         mock_proc = MagicMock()

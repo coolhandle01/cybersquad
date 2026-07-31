@@ -116,10 +116,10 @@ def _good_assessment(raw: RawFinding, target_apex: str, **overrides) -> TriageAs
         ),
     }
     base.update(overrides)
-    if "severity" in overrides or "severity_hint" in overrides:
-        # severity_decision must agree with the severity vs severity_hint relation
-        if base["severity"] != base["severity_hint"]:
-            base.setdefault("severity_decision", SeverityDecision.RAISE)
+    # severity_decision must agree with the severity vs severity_hint relation
+    severity_touched = "severity" in overrides or "severity_hint" in overrides
+    if severity_touched and base["severity"] != base["severity_hint"]:
+        base.setdefault("severity_decision", SeverityDecision.RAISE)
     return TriageAssessment(**base)
 
 
