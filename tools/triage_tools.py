@@ -338,14 +338,14 @@ def validate_assessment(
             )
         )
     short_indices = _count_steps_too_short(assessment.steps_to_reproduce)
-    for n in short_indices:
-        issues.append(
-            TriageValidationIssue(
-                section="steps_to_reproduce",
-                severity="error",
-                message=f"step {n} is too short to be reproducible",
-            )
+    issues.extend(
+        TriageValidationIssue(
+            section="steps_to_reproduce",
+            severity="error",
+            message=f"step {n} is too short to be reproducible",
         )
+        for n in short_indices
+    )
     for n, step in enumerate(assessment.steps_to_reproduce, 1):
         if step.strip().lower() == _STALE_STEP:
             issues.append(
@@ -620,9 +620,11 @@ def finalise_triage(
 
     if failures:
         lines = ["one or more assessments have unresolved errors:"]
-        for idx, errs in failures:
-            for err in errs:
-                lines.append(f"  - assessment {idx} / {err.section}: {err.message}")
+        lines.extend(
+            f"  - assessment {idx} / {err.section}: {err.message}"
+            for idx, errs in failures
+            for err in errs
+        )
         raise TriageFinalisationError("\n".join(lines))
 
     verified: list[VerifiedVulnerability] = []

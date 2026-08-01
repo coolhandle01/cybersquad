@@ -164,6 +164,9 @@ select = [
     "S",    # flake8-bandit (security - basic layer)
     "ANN",  # flake8-annotations (type hints)
     "RUF",  # ruff-specific (catches stale noqa, unsorted __all__, mutable defaults)
+    "SIM",  # flake8-simplify (collapsible with-statements, redundant ifs)
+    "PERF", # perflint (manual list comprehensions, dict-iterator footguns)
+    "RET",  # flake8-return (unnecessary else after return, etc.)
 ]
 ignore = [
     "S101",    # use of assert (fine in tests)

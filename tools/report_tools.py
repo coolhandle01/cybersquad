@@ -568,10 +568,10 @@ def load_drafts() -> list[ReportDraft]:
     dir_ = _drafts_dir()
     if not dir_.is_dir():
         return []
-    drafts: list[ReportDraft] = []
-    for path in sorted(dir_.glob("*.json")):
-        drafts.append(ReportDraft.model_validate_json(path.read_text(encoding="utf-8")))
-    return drafts
+    return [
+        ReportDraft.model_validate_json(path.read_text(encoding="utf-8"))
+        for path in sorted(dir_.glob("*.json"))
+    ]
 
 
 # Verified-finding lookup
@@ -619,9 +619,11 @@ def finalise_drafts(
 
     if failures:
         lines = ["one or more drafts have unresolved errors:"]
-        for idx, issues in failures:
-            for issue in issues:
-                lines.append(f"  - draft {idx} / {issue.section}: {issue.message}")
+        lines.extend(
+            f"  - draft {idx} / {issue.section}: {issue.message}"
+            for idx, issues in failures
+            for issue in issues
+        )
         raise FinalisationError("\n".join(lines))
 
     reports: list[DisclosureReport] = []
