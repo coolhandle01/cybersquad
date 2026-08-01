@@ -53,18 +53,18 @@ _HANDLE_TOOLS: frozenset[str] = frozenset(
 
 def _every_tool() -> list[tuple[str, SquadTool]]:
     """Flat list of (agent_slug, tool) pairs across every squad member."""
-    out: list[tuple[str, SquadTool]] = []
-    for member in (
-        PROGRAMME_MANAGER,
-        OSINT_ANALYST,
-        PENETRATION_TESTER,
-        VULNERABILITY_RESEARCHER,
-        TECHNICAL_AUTHOR,
-        DISCLOSURE_COORDINATOR,
-    ):
-        for tool_obj in member.tools:
-            out.append((member.slug, tool_obj))
-    return out
+    return [
+        (member.slug, tool_obj)
+        for member in (
+            PROGRAMME_MANAGER,
+            OSINT_ANALYST,
+            PENETRATION_TESTER,
+            VULNERABILITY_RESEARCHER,
+            TECHNICAL_AUTHOR,
+            DISCLOSURE_COORDINATOR,
+        )
+        for tool_obj in member.tools
+    ]
 
 
 def _unwrap_optional(annotation: object) -> object:

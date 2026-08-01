@@ -77,9 +77,8 @@ class TestDiscoverPaths:
 
     def test_missing_binary_raises_oserror(self, target_apex):
         endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(OSError, match="ffuf"):
-                discover_paths(endpoints)
+        with patch("shutil.which", return_value=None), pytest.raises(OSError, match="ffuf"):
+            discover_paths(endpoints)
 
     def test_ffuf_exception_is_swallowed(self, target_apex):
         endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
