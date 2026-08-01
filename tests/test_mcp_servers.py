@@ -141,9 +141,11 @@ class TestProvisionedMCPToolsTimeEnabled:
         fake_tool.name = "get_current_time"
         self._wire_fake_adapter(monkeypatch, mcp_servers, fake_tool)
 
-        with caplog.at_level("INFO", logger="mcp_servers._time"):
-            with mcp_servers.provisioned_mcp_tools():
-                pass
+        with (
+            caplog.at_level("INFO", logger="mcp_servers._time"),
+            mcp_servers.provisioned_mcp_tools(),
+        ):
+            pass
 
         messages = [r.message for r in caplog.records]
         assert any("starting" in m and "allowed_tools" in m for m in messages)
@@ -169,9 +171,11 @@ class TestProvisionedMCPToolsTimeEnabled:
         monkeypatch.setattr(mcp_servers, "mcp_adapter_stack_usable", lambda: True)
         monkeypatch.setattr(mcp_servers._time, "available", lambda: False)
 
-        with caplog.at_level("WARNING", logger="mcp_servers"):
-            with mcp_servers.provisioned_mcp_tools() as registry:
-                assert registry.crew_wide == ()
+        with (
+            caplog.at_level("WARNING", logger="mcp_servers"),
+            mcp_servers.provisioned_mcp_tools() as registry,
+        ):
+            assert registry.crew_wide == ()
 
         adapter_factory.assert_not_called()
         # Underscore form is the `missing` placeholder; matching that
@@ -195,9 +199,11 @@ class TestProvisionedMCPToolsTimeEnabled:
         monkeypatch.setattr(mcp_servers, "mcp_adapter_stack_usable", lambda: False)
         monkeypatch.setattr(mcp_servers._time, "available", lambda: False)
 
-        with caplog.at_level("WARNING", logger="mcp_servers"):
-            with mcp_servers.provisioned_mcp_tools() as registry:
-                assert registry.crew_wide == ()
+        with (
+            caplog.at_level("WARNING", logger="mcp_servers"),
+            mcp_servers.provisioned_mcp_tools() as registry,
+        ):
+            assert registry.crew_wide == ()
 
         adapter_factory.assert_not_called()
         assert any("but mcpadapt is not importable" in r.message for r in caplog.records)

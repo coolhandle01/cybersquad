@@ -152,16 +152,16 @@ def compose_ip_graph(
                 type=_ip_type(record.ip),
                 sources=[SourceProperty(source=_DNSX_SOURCE, confidence=_DNSX_CONFIDENCE)],
             )
-        for hostname in record.hostnames:
-            relations.append(
-                Relation(
-                    relation_type=RelationType.BASIC_DNS,
-                    label="ptr_record",
-                    from_key=record.ip,
-                    to_key=hostname,
-                    header=RRHeader(rr_type=_RR_TYPE_PTR, rr_class=_RR_CLASS_IN),
-                )
+        relations.extend(
+            Relation(
+                relation_type=RelationType.BASIC_DNS,
+                label="ptr_record",
+                from_key=record.ip,
+                to_key=hostname,
+                header=RRHeader(rr_type=_RR_TYPE_PTR, rr_class=_RR_CLASS_IN),
             )
+            for hostname in record.hostnames
+        )
 
     return IpGraph(
         list(addresses.values()),

@@ -115,9 +115,11 @@ class TestEnumerateSubdomainsParsing:
         assert result.count("api.example.com") == 1
 
     def test_raises_if_binary_missing(self):
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(EnvironmentError, match="subfinder"):
-                enumerate_subdomains("example.com")
+        with (
+            patch("shutil.which", return_value=None),
+            pytest.raises(EnvironmentError, match="subfinder"),
+        ):
+            enumerate_subdomains("example.com")
 
     def test_empty_output(self):
         with (

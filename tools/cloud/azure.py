@@ -90,23 +90,21 @@ def check_azure_sas_tokens(endpoints: list[Endpoint]) -> list[RawFinding]:
     logged by intermediate proxies and browser history; surfacing them
     is the finding.
     """
-    findings: list[RawFinding] = []
-
-    for ep in endpoints:
-        if _SAS_RE.search(ep.url):
-            findings.append(
-                RawFinding(
-                    title=f"Azure SAS Token in URL - {ep.url}",
-                    vuln_class="CloudMisconfiguration",
-                    target=ep.url,
-                    evidence=(
-                        "SAS token query parameters (sv/se/sig/sr/sp) detected in URL. "
-                        "Tokens embedded in URLs are logged by proxies and browsers."
-                    ),
-                    tool="azure_sas_token_check",
-                    severity_hint=Severity.HIGH,
-                )
-            )
+    findings: list[RawFinding] = [
+        RawFinding(
+            title=f"Azure SAS Token in URL - {ep.url}",
+            vuln_class="CloudMisconfiguration",
+            target=ep.url,
+            evidence=(
+                "SAS token query parameters (sv/se/sig/sr/sp) detected in URL. "
+                "Tokens embedded in URLs are logged by proxies and browsers."
+            ),
+            tool="azure_sas_token_check",
+            severity_hint=Severity.HIGH,
+        )
+        for ep in endpoints
+        if _SAS_RE.search(ep.url)
+    ]
 
     logger.info("Azure SAS token check found %d findings", len(findings))
     return findings

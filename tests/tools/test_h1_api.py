@@ -557,9 +557,11 @@ class TestHydrateProgramme:
     def test_raises_when_detail_has_no_programme(self, h1_client):
         # Empty/malformed detail must fail loud, not fabricate an "unknown"
         # programme the PM then caches and "selects".
-        with patch.object(h1_client, "_get", side_effect=[{"data": {}}]):
-            with pytest.raises(ValueError, match="no usable programme detail"):
-                h1_client.hydrate_programme("ghost")
+        with (
+            patch.object(h1_client, "_get", side_effect=[{"data": {}}]),
+            pytest.raises(ValueError, match="no usable programme detail"),
+        ):
+            h1_client.hydrate_programme("ghost")
 
 
 class TestListReports:

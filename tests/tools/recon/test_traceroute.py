@@ -76,9 +76,11 @@ class TestRunTraceroute:
 
     def test_returns_hops_for_each_host(self):
         output = "203.0.113.1\n93.184.216.34\n"
-        with patch("shutil.which", return_value="/usr/bin/tracepath"):
-            with patch("tools.recon.traceroute._run", side_effect=self._fake_run(output)):
-                result = run_traceroute(["example.com", "other.com"])
+        with (
+            patch("shutil.which", return_value="/usr/bin/tracepath"),
+            patch("tools.recon.traceroute._run", side_effect=self._fake_run(output)),
+        ):
+            result = run_traceroute(["example.com", "other.com"])
         assert set(result.keys()) == {"example.com", "other.com"}
         assert "203.0.113.1" in result["example.com"]
 
@@ -93,9 +95,11 @@ class TestRunTraceroute:
         assert result == {}
 
     def test_exception_per_host_returns_empty_list(self):
-        with patch("shutil.which", return_value="/usr/bin/tracepath"):
-            with patch("tools.recon.traceroute._run", side_effect=Exception("timeout")):
-                result = run_traceroute(["example.com"])
+        with (
+            patch("shutil.which", return_value="/usr/bin/tracepath"),
+            patch("tools.recon.traceroute._run", side_effect=Exception("timeout")),
+        ):
+            result = run_traceroute(["example.com"])
         assert result == {"example.com": []}
 
     def test_skips_when_traceroute_disabled(self, monkeypatch):
@@ -108,9 +112,8 @@ class TestRunTraceroute:
         import tools.recon.traceroute as trace_mod
 
         monkeypatch.setattr(trace_mod.config.scan, "traceroute_enabled", False)
-        with patch("shutil.which") as which:
-            with patch("tools.recon.traceroute._run") as run:
-                result = run_traceroute(["example.com"])
+        with patch("shutil.which") as which, patch("tools.recon.traceroute._run") as run:
+            result = run_traceroute(["example.com"])
         assert result == {}
         which.assert_not_called()
         run.assert_not_called()
@@ -129,9 +132,11 @@ class TestRunTraceroute:
             calls.append(cmd)
             return CompletedProcess(cmd, 0, "", "")
 
-        with patch("shutil.which", side_effect=fake_which):
-            with patch("tools.recon.traceroute._run", side_effect=fake_run):
-                run_traceroute(["example.com"])
+        with (
+            patch("shutil.which", side_effect=fake_which),
+            patch("tools.recon.traceroute._run", side_effect=fake_run),
+        ):
+            run_traceroute(["example.com"])
 
         assert any("traceroute" in str(c) for c in calls)
         assert not any("tracepath" in str(c) for c in calls)
