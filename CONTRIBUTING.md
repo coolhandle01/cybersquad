@@ -26,6 +26,8 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
+If you apply a `ruff --fix` - especially `--unsafe-fixes` - re-run the whole stack, not just ruff. An autofix can change behaviour ruff itself cannot see, and mypy, the tests, and the coverage gate are what catch it. See "Linter and SAST findings are engineering signal" below for why.
+
 Advisory (not CI-gated): periodically run `vulture` to surface dead code that the import graph cannot see. Pydantic model fields trigger false positives at lower confidence, so 80% is the gospel floor:
 
 ```bash
@@ -35,7 +37,7 @@ Advisory (not CI-gated): periodically run `vulture` to surface dead code that th
 
 Treat findings as candidates for removal, not removal mandates - check the import graph (re-exports, conditional consumers) before deleting.
 
-`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 90% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
+`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 96% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
 
 Never push a change you haven't actually executed. A passing `mypy` run after removing a `# type: ignore` means nothing if the file wasn't reachable.
 
@@ -55,7 +57,7 @@ This discipline is not negotiable for code that ships. Bug-fix PRs without a reg
 
 ### Branch coverage on your diff is 100% or you say why
 
-The 90% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
+The 96% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
 
 Line coverage at 100% does not mean tested. Branch coverage at 100% on your diff means the conditional has been thought about.
 
@@ -137,6 +139,8 @@ result = something_dangerous()  # nosec
 ```
 
 The flip side: when you encounter a suppression in unfamiliar code, the suppressions are the codebase telling you where the load-bearing assumptions live. The one-line `why` is the original author handing you context the type system or scanner could not encode - read it before you change anything that depends on it.
+
+The same logic runs in reverse for a `ruff --fix`. A finding *flags* an assumption the tool could not verify; an autofix *acts* on one. `ruff check --fix` is safe, but `--fix --unsafe-fixes` rewrites code into a shape ruff judges equivalent on syntax alone - it cannot see runtime types, so an "equivalent" rewrite can silently change behaviour. Re-run the whole stack after any autofix: mypy, the tests, and the branch-coverage ratchet are what verify the rewrite, and a failure there on autofixed code is the signal, not an obstacle to route around.
 
 ### Pylint says split, not suppress
 
