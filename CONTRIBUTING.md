@@ -26,7 +26,7 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
-**A ruff autofix is a proposal to verify, not a result to trust.** `ruff check --fix` is safe. `--fix --unsafe-fixes` rewrites code into a form ruff judges equivalent on *syntax* alone - it cannot see runtime types, so an "equivalent" rewrite can silently change behaviour. That judgement is an assumption ruff cannot verify, and the rest of the stack is what verifies it: run all six after any autofix, and read a resulting mypy or coverage failure on autofixed code as engineering signal (see below), not an obstacle to route around.
+If you apply a `ruff --fix` - especially `--unsafe-fixes` - re-run the whole stack, not just ruff. An autofix can change behaviour ruff itself cannot see, and mypy, the tests, and the coverage gate are what catch it. See "Linter and SAST findings are engineering signal" below for why.
 
 Advisory (not CI-gated): periodically run `vulture` to surface dead code that the import graph cannot see. Pydantic model fields trigger false positives at lower confidence, so 80% is the gospel floor:
 
@@ -139,6 +139,8 @@ result = something_dangerous()  # nosec
 ```
 
 The flip side: when you encounter a suppression in unfamiliar code, the suppressions are the codebase telling you where the load-bearing assumptions live. The one-line `why` is the original author handing you context the type system or scanner could not encode - read it before you change anything that depends on it.
+
+The same logic runs in reverse for a `ruff --fix`. A finding *flags* an assumption the tool could not verify; an autofix *acts* on one. `ruff check --fix` is safe, but `--fix --unsafe-fixes` rewrites code into a shape ruff judges equivalent on syntax alone - it cannot see runtime types, so an "equivalent" rewrite can silently change behaviour. Re-run the whole stack after any autofix: mypy, the tests, and the branch-coverage ratchet are what verify the rewrite, and a failure there on autofixed code is the signal, not an obstacle to route around.
 
 ### Pylint says split, not suppress
 
