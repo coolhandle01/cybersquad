@@ -205,6 +205,8 @@ class TestPortScan:
         assert result == {}
 
     def test_raises_if_binary_missing(self):
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(EnvironmentError, match="nmap"):
-                port_scan(["example.com"])
+        with (
+            patch("shutil.which", return_value=None),
+            pytest.raises(EnvironmentError, match="nmap"),
+        ):
+            port_scan(["example.com"])

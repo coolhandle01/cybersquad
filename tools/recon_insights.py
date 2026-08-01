@@ -201,15 +201,15 @@ def validate_insight(
             )
 
     # detected_tech entries should be non-trivial strings.
-    for t in insight.detected_tech:
-        if len(t.strip()) < 2:
-            issues.append(
-                InsightValidationIssue(
-                    section="detected_tech",
-                    severity="error",
-                    message=f"tech entry too short to be a real product name: {t!r}",
-                )
-            )
+    issues.extend(
+        InsightValidationIssue(
+            section="detected_tech",
+            severity="error",
+            message=f"tech entry too short to be a real product name: {t!r}",
+        )
+        for t in insight.detected_tech
+        if len(t.strip()) < 2
+    )
 
     ok = not any(i.severity == "error" for i in issues)
     return InsightValidationReport(ok=ok, issues=issues)
@@ -511,9 +511,11 @@ def finalise_recon(
 
     if failures:
         lines = ["one or more host insights have unresolved errors:"]
-        for hostname, errs in failures:
-            for err in errs:
-                lines.append(f"  - insight {hostname} / {err.section}: {err.message}")
+        lines.extend(
+            f"  - insight {hostname} / {err.section}: {err.message}"
+            for hostname, errs in failures
+            for err in errs
+        )
         raise ReconFinalisationError("\n".join(lines))
 
     high_priority = [i for i in insights if i.priority == HostPriority.HIGH]

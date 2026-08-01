@@ -127,8 +127,7 @@ def finalise_research(plan: AttackForest) -> Path:
         # validate_attack_forest only emits errors today, so no filter; if a
         # warning level is added later, surface it the same way.
         lines = ["attack plan has unresolved errors:"]
-        for issue in report.issues:
-            lines.append(f"  - {issue.section}: {issue.message}")
+        lines.extend(f"  - {issue.section}: {issue.message}" for issue in report.issues)
         raise AttackForestFinalisationError("\n".join(lines))
 
     out_path = attack_forest_path()
