@@ -1,0 +1,18 @@
+/* cybersquad's theme layer, loaded after crewui's default.tcss (see
+   tools/tui/__init__.py's CSS_PATH). crewui ships the structural CSS; this
+   file carries only cybersquad's visual preferences and wins on ties. Keep it
+   to look-and-feel - structure and behaviour stay in crewui. */
+
+/* Slimmer scrollbars: half Textual's default vertical width (2 -> 1), so the
+   bar reads as a hairline rather than a slab, in every scrollable pane. */
+#agent-session, #crew-log, #sidebar {
+    scrollbar-size-vertical: 1;
+}
+
+/* Breathing room on the right of the agent session: inset its content so the
+   turn boxes never butt against the scrollbar, however thin it is. The bar
+   sits in the reserved gutter beyond this padding, so it stays in the same
+   column as the log pane's bar below. */
+#agent-session {
+    padding-right: 1;
+}
