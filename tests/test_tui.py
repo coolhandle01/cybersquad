@@ -56,17 +56,23 @@ def test_css_layer_lists_crewui_base_then_cybersquad_override() -> None:
     assert str(paths[-1]).endswith("cybersquad.tcss")
 
 
-def test_theme_layer_thins_scrollbars_and_insets_the_agent_session() -> None:
-    """Measured, not asserted from source: mount the app headless and read the
-    computed styles, so this fails if the layer stops loading or Textual's
-    defaults shift under us. crewui's default leaves scrollbars at Textual's
-    width of 2 and the agent session flush against the bar; the cybersquad
-    layer halves the bar and insets the content by one cell."""
+def test_theme_layer_thins_and_aligns_scrollbars_with_a_box_gap() -> None:
+    """Measured, not asserted from source: mount the app headless, overflow the
+    agent session so its scrollbar renders, and read the geometry the user sees
+    - the two panes' scrollbars in one column, the bars at half Textual's width,
+    and a gap between a turn box and the bar.
+
+    This guards against the padding-on-the-container regression: padding-right
+    on the scrollable dragged the bar inward *with* the content, so the bar
+    misaligned from the log pane's and no gap appeared. The gap must live on the
+    box (margin), which shrinks the box alone and leaves the bar at the edge."""
     import asyncio
+
+    from textual.widgets import Static
 
     from tools.tui import CybersquadTUI
 
-    async def _measure() -> tuple[int, int, int]:
+    async def _measure() -> tuple[int, int, int, int]:
         crew = cast("Crew", SimpleNamespace(tasks=[], step_callback=None))
         app = CybersquadTUI(
             crew=crew,
@@ -77,16 +83,23 @@ def test_theme_layer_thins_scrollbars_and_insets_the_agent_session() -> None:
             on_complete=lambda _result: None,
             get_token_cost=lambda _in, _out: 0.0,
         )
-        async with app.run_test():
+        async with app.run_test(size=(100, 40)) as pilot:
             session = app.query_one("#agent-session")
             log = app.query_one("#crew-log")
+            box = Static("a turn box", classes="agent-turn")
+            session.mount(box)
+            # Overflow the pane so the vertical scrollbar actually draws.
+            for i in range(60):
+                session.mount(Static(f"line {i} " + "x" * 40))
+            await pilot.pause(0.2)
             return (
                 session.styles.scrollbar_size_vertical,
-                log.styles.scrollbar_size_vertical,
-                session.styles.padding.right,
+                session.vertical_scrollbar.region.x,
+                log.vertical_scrollbar.region.x,
+                box.region.right,
             )
 
-    session_bar, log_bar, session_pad_right = asyncio.run(_measure())
-    assert session_bar == 1  # half Textual's default of 2
-    assert log_bar == 1
-    assert session_pad_right == 1  # gap between the turn boxes and the scrollbar
+    bar_size, session_bar_x, log_bar_x, box_right = asyncio.run(_measure())
+    assert bar_size == 1  # half Textual's default of 2
+    assert session_bar_x == log_bar_x  # both scrollbars share one column
+    assert box_right < session_bar_x  # a gap between the turn box and the bar
