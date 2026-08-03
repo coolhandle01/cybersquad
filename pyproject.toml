@@ -162,12 +162,13 @@ bdd_features_base_dir = "tests/features"
 
 [tool.coverage.run]
 source = ["."]
-# tools/tui/__init__.py is now a thin wrapper over crewui's CrewAIPipelineTUI
-# (the generic TUI, its helpers, and their tests live in the crewui package).
-# The wrapper is a bare subclass with no logic of its own, so it is omitted
-# rather than pilot-harnessed here; test_tui.py still pins the subclass +
-# construction contract.
-omit = ["tests/*", ".venv/*", "tools/tui/__init__.py"]
+# tools/tui/__init__.py is a thin wrapper over crewui's CrewAIPipelineTUI (the
+# generic TUI, its helpers, and their tests live in the crewui package), but it
+# is not logic-free: the CSS_PATH list construction (crewui base first,
+# cybersquad.tcss last so it wins ties, with a deliberate type re-widening) is
+# load-bearing and pinned by test_tui.py. It is imported and exercised by the
+# suite, so it stays in the coverage denominator rather than being omitted.
+omit = ["tests/*", ".venv/*"]
 branch = true
 
 [tool.coverage.report]
