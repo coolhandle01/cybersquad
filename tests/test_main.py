@@ -273,10 +273,136 @@ class TestMain:
         run_tui = MagicMock()
         monkeypatch.setattr(main, "_run_tui", run_tui)
         monkeypatch.setattr(main, "_run_headless", MagicMock())
+        # An interactive terminal is present, so the TUI path is allowed.
+        monkeypatch.setattr(main, "_interactive_tty", lambda: True)
 
         main.main()
 
         run_tui.assert_called_once_with(fake_crew, dry_run=False)
+
+    def test_non_tty_without_headless_exits_with_a_headless_hint(self, monkeypatch, caplog) -> None:
+        # The TUI needs an interactive terminal. Piped or run under CI, the
+        # default path must refuse with a clear pointer to --headless rather
+        # than crashing inside Textual - and it must not build the crew or
+        # fire the pipeline first (cybersquad acts on live targets).
+        import main
+
+        args = _args(dry_run=False, headless=False)
+        run_tui = MagicMock()
+        run_headless = MagicMock()
+        monkeypatch.setattr(main, "parse_args", lambda: args)
+        monkeypatch.setattr(main, "check_env", lambda: None)
+        monkeypatch.setattr(main, "warn_if_telemetry_enabled", lambda: None)
+        monkeypatch.setattr(main, "_run_tui", run_tui)
+        monkeypatch.setattr(main, "_run_headless", run_headless)
+        monkeypatch.setattr(main, "_interactive_tty", lambda: False)
+        # build_crew must never be reached: fail before opening the MCP scope.
+        import crew as crew_mod
+
+        def exploding_build_crew(verbose):  # pragma: no cover - must not run
+            raise AssertionError("build_crew reached before the TTY guard")
+
+        monkeypatch.setattr(crew_mod, "build_crew", exploding_build_crew)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="bounty_squad"),
+            pytest.raises(SystemExit) as exc,
+        ):
+            main.main()
+
+        assert exc.value.code == 1
+        run_tui.assert_not_called()
+        run_headless.assert_not_called()
+        assert "--headless" in caplog.text
+
+    def test_non_tty_dry_run_without_headless_is_also_refused(self, monkeypatch, caplog) -> None:
+        # A dry run still constructs the Textual app, so a non-TTY dry run is
+        # refused too - the operator is pointed at --headless --dry-run, which
+        # prints the pipeline without a terminal.
+        import main
+
+        args = _args(dry_run=True, headless=False)
+        run_tui = MagicMock()
+        monkeypatch.setattr(main, "parse_args", lambda: args)
+        monkeypatch.setattr(main, "check_env", lambda: None)
+        monkeypatch.setattr(main, "warn_if_telemetry_enabled", lambda: None)
+        monkeypatch.setattr(main, "_run_tui", run_tui)
+        monkeypatch.setattr(main, "_interactive_tty", lambda: False)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="bounty_squad"),
+            pytest.raises(SystemExit) as exc,
+        ):
+            main.main()
+
+        assert exc.value.code == 1
+        run_tui.assert_not_called()
+        assert "--headless" in caplog.text
+
+    def test_run_tui_without_crewui_exits_with_a_headless_hint(self, monkeypatch, caplog) -> None:
+        # tools.tui does a hard top-level `from crewui import ...`; a partial
+        # install (crewui absent) must surface a clear pointer to --headless,
+        # not a raw ImportError traceback. Modelled by a tools.tui module that
+        # lacks the symbol, so `from tools.tui import CybersquadTUI` raises.
+        import sys
+        import types
+
+        import main
+
+        monkeypatch.setitem(sys.modules, "tools.tui", types.ModuleType("tools.tui"))
+
+        with (
+            caplog.at_level(logging.ERROR, logger="bounty_squad"),
+            pytest.raises(SystemExit) as exc,
+        ):
+            main._run_tui(MagicMock(name="crew"), dry_run=False)
+
+        assert exc.value.code == 1
+        assert "--headless" in caplog.text
+
+    def test_non_tty_with_headless_still_runs(self, monkeypatch) -> None:
+        # The guard only blocks the TUI path; --headless needs no terminal, so a
+        # non-interactive headless run dispatches normally.
+        import main
+
+        captured: dict[str, object] = {}
+        args = _args(dry_run=False, headless=True)
+        fake_crew = self._wire(monkeypatch, args, captured)
+        run_headless = MagicMock()
+        monkeypatch.setattr(main, "_run_headless", run_headless)
+        monkeypatch.setattr(main, "_run_tui", MagicMock())
+        monkeypatch.setattr(main, "_interactive_tty", lambda: False)
+
+        main.main()
+
+        run_headless.assert_called_once_with(fake_crew, verbose=False, dry_run=False)
+
+
+class TestInteractiveTty:
+    """``_interactive_tty`` is True only when *both* streams are a terminal -
+    a redirected stdin or stdout (a pipe, a CI runner) reads as non-interactive.
+    """
+
+    def test_true_when_both_streams_are_a_terminal(self, monkeypatch) -> None:
+        import main
+
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        assert main._interactive_tty() is True
+
+    def test_false_when_stdin_is_not_a_terminal(self, monkeypatch) -> None:
+        import main
+
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        assert main._interactive_tty() is False
+
+    def test_false_when_stdout_is_not_a_terminal(self, monkeypatch) -> None:
+        import main
+
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        assert main._interactive_tty() is False
 
 
 class TestParseArgs:

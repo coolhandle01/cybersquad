@@ -2,7 +2,8 @@
 main.py - Bounty Squad pipeline entrypoint.
 
 Usage:
-    python main.py             # single run, settings from .env / env vars
+    python main.py             # single run in the Textual TUI (needs a terminal)
+    python main.py --headless  # run on the plain CLI, no TUI (pipes / CI)
     python main.py --verbose   # verbose LLM output
     python main.py --dry-run   # show crew layout without executing
 
@@ -119,6 +120,17 @@ def _new_run_id() -> str:
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
 
 
+def _interactive_tty() -> bool:
+    """Return whether both stdin and stdout are attached to a real terminal.
+
+    The Textual TUI needs an interactive terminal to draw and read keys; piped
+    or run under CI, one or both streams are redirected, so the default TUI
+    path is refused in favour of ``--headless`` rather than crashing inside
+    Textual.
+    """
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
     """Run, or on a dry run preview, the crew in the Textual TUI.
 
@@ -132,7 +144,17 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
     import runtime
     from config import config
     from tools.metrics import build_run_metrics, estimate_cost, save_metrics
-    from tools.tui import CybersquadTUI
+
+    # tools.tui pulls in crewui at import time. A partial install (crewui
+    # absent) would otherwise surface a raw ImportError traceback here; catch it
+    # and point the operator at the terminal-free surface instead.
+    try:
+        from tools.tui import CybersquadTUI
+    except ImportError:
+        logger.error(
+            "The Textual TUI is unavailable (crewui failed to import). Re-run with --headless."
+        )
+        sys.exit(1)
 
     runtime.bind_run_id(_new_run_id())
     # Seeded so a freakishly fast run can't race on_start; on_start overwrites
@@ -225,6 +247,18 @@ def main() -> None:
     args = parse_args()
     check_env()
     warn_if_telemetry_enabled()
+
+    # The TUI is the default surface but needs an interactive terminal. Refuse
+    # early - before build_crew opens the MCP scope - so a piped or CI run gets
+    # a clear pointer rather than a crash deep inside Textual. cybersquad fires
+    # on live targets, so a silent fall-back to headless would run the pipeline
+    # unseen; the operator opts in explicitly with --headless.
+    if not args.headless and not _interactive_tty():
+        logger.error(
+            "No interactive terminal detected (stdin/stdout is not a TTY); "
+            "the Textual TUI needs one. Re-run with --headless."
+        )
+        sys.exit(1)
 
     # Deferred until after check_env so a run missing required credentials
     # fails with check_env's clear message rather than an import-time error
