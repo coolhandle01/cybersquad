@@ -74,7 +74,18 @@ class TestDryRunSummary:
         crew = MagicMock(agents=[with_tools, without_tools], tasks=[named, unnamed])
         main.dry_run_summary(crew)
 
-        assert "DRY RUN" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "DRY RUN" in out
+        # The agent rows render: a role, its tool, and the "(none)" no-tools cell.
+        assert "osint_analyst" in out
+        assert "run_recon" in out
+        assert "(none)" in out
+        # The task rows render: the named task's heading and the human-review
+        # marker on the task that pauses (the unnamed task falls back to its
+        # agent role, exercised by "programme_manager" appearing at all).
+        assert "Reconnaissance" in out
+        assert "programme_manager" in out
+        assert "pauses for feedback" in out
 
 
 class TestRunHeadless:

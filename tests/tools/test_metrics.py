@@ -40,6 +40,25 @@ class TestEstimateCost:
         cost = estimate_cost("claude-opus-4-5", 1_000_000, 1_000_000)
         assert cost == pytest.approx(30.00)
 
+    def test_longest_prefix_wins_independent_of_pricing_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The real _PRICING happens to list every specific key before its
+        # shorter legacy prefix, so a first-match loop would coincidentally pass
+        # the case above. Pin the actual max(..., key=len) tie-break with an
+        # adversarial table: the *shorter* prefix is inserted FIRST, so a naive
+        # first-match iteration bills the wrong ($9) rate. Assert both orderings
+        # resolve to the longer key, so the resolution is order-independent.
+        from tools import metrics
+
+        short_first = {"brand-x": (9.0, 0.0), "brand-x-pro": (1.0, 0.0)}
+        monkeypatch.setattr(metrics, "_PRICING", short_first)
+        assert metrics.estimate_cost("brand-x-pro-mini", 1_000_000, 0) == pytest.approx(1.0)
+
+        long_first = {"brand-x-pro": (1.0, 0.0), "brand-x": (9.0, 0.0)}
+        monkeypatch.setattr(metrics, "_PRICING", long_first)
+        assert metrics.estimate_cost("brand-x-pro-mini", 1_000_000, 0) == pytest.approx(1.0)
+
     def test_haiku_pricing(self) -> None:
         # Haiku 4.5: $1 in + $5 out per 1M (not the legacy 3.5 rate).
         cost = estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
