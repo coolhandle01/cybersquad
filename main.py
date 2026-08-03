@@ -191,8 +191,12 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
     ).run()
 
 
-def _run_headless(crew: Any, *, verbose: bool, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
-    """Kick off the crew on the CLI - or, on a dry run, print the pipeline and stop."""
+def _run_headless(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Kick off the crew on the CLI - or, on a dry run, print the pipeline and stop.
+
+    Verbosity is a crew-level knob applied once at ``build_crew(verbose=...)`` in
+    ``main`` (for both surfaces), so it is not re-threaded here.
+    """
     import runtime
     from config import config
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
@@ -268,7 +272,7 @@ def main() -> None:
 
     with build_crew(verbose=args.verbose) as crew:
         if args.headless:
-            _run_headless(crew, verbose=args.verbose, dry_run=args.dry_run)
+            _run_headless(crew, dry_run=args.dry_run)
         else:
             _run_tui(crew, dry_run=args.dry_run)
 

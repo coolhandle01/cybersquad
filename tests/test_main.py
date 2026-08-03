@@ -96,7 +96,7 @@ class TestRunHeadless:
         monkeypatch.setattr(main, "dry_run_summary", summary)
         crew = MagicMock()
 
-        main._run_headless(crew, verbose=False, dry_run=True)
+        main._run_headless(crew, dry_run=True)
 
         summary.assert_called_once_with(crew)
         crew.kickoff.assert_not_called()
@@ -108,7 +108,7 @@ class TestRunHeadless:
         crew = MagicMock()
         crew.kickoff.return_value = MagicMock(token_usage=None)
 
-        main._run_headless(crew, verbose=False, dry_run=False)
+        main._run_headless(crew, dry_run=False)
 
         crew.kickoff.assert_called_once()
         mocks["build"].assert_not_called()
@@ -122,7 +122,7 @@ class TestRunHeadless:
             token_usage=MagicMock(prompt_tokens=10, completion_tokens=20)
         )
 
-        main._run_headless(crew, verbose=False, dry_run=False)
+        main._run_headless(crew, dry_run=False)
 
         mocks["build"].assert_called_once()
         mocks["save"].assert_called_once()
@@ -135,7 +135,7 @@ class TestRunHeadless:
         crew.kickoff.side_effect = KeyboardInterrupt
 
         with pytest.raises(SystemExit) as exc:
-            main._run_headless(crew, verbose=False, dry_run=False)
+            main._run_headless(crew, dry_run=False)
         assert exc.value.code == 0
 
     def test_unexpected_exception_exits_one(self, monkeypatch) -> None:
@@ -146,7 +146,7 @@ class TestRunHeadless:
         crew.kickoff.side_effect = RuntimeError("boom")
 
         with pytest.raises(SystemExit) as exc:
-            main._run_headless(crew, verbose=False, dry_run=False)
+            main._run_headless(crew, dry_run=False)
         assert exc.value.code == 1
 
 
@@ -273,7 +273,7 @@ class TestMain:
         main.main()
 
         assert captured == {"verbose": True}
-        run.assert_called_once_with(fake_crew, verbose=True, dry_run=True)
+        run.assert_called_once_with(fake_crew, dry_run=True)
 
     def test_default_dispatches_to_run_tui(self, monkeypatch) -> None:
         import main
@@ -386,7 +386,7 @@ class TestMain:
 
         main.main()
 
-        run_headless.assert_called_once_with(fake_crew, verbose=False, dry_run=False)
+        run_headless.assert_called_once_with(fake_crew, dry_run=False)
 
 
 class TestInteractiveTty:
