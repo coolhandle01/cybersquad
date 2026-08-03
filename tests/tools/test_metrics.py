@@ -64,6 +64,14 @@ class TestEstimateCost:
         cost = estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
         assert cost == pytest.approx(6.00)
 
+    def test_future_haiku_4_build_falls_back_to_the_family_rate(self) -> None:
+        # A haiku-4 build newer than the pinned 4-5 (e.g. a 4-6) must still price
+        # via the bare claude-haiku-4 family key rather than silently costing $0 -
+        # matching how opus and sonnet already carry a bare-family fallback. The
+        # specific 4-5 rate still wins for a 4-5 string via longest-prefix.
+        cost = estimate_cost("claude-haiku-4-6", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(6.00)
+
     def test_zero_tokens(self) -> None:
         assert estimate_cost("claude-sonnet-4-20250514", 0, 0) == 0.0
 

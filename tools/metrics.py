@@ -34,8 +34,11 @@ _PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-4": (15.00, 75.00),
     # Sonnet 4 / 4.5 / 4.6 share a rate.
     "claude-sonnet-4": (3.00, 15.00),
-    # Haiku 4.5, then legacy Haiku 3.5.
+    # Haiku 4.5, with a bare claude-haiku-4 family fallback (mirrors the opus /
+    # sonnet bare keys) so a newer 4.x build still prices instead of costing $0;
+    # longest-prefix keeps the specific 4-5 rate winning. Then legacy Haiku 3.5.
     "claude-haiku-4-5": (1.00, 5.00),
+    "claude-haiku-4": (1.00, 5.00),
     "claude-haiku-3-5": (0.80, 4.00),
 }
 
