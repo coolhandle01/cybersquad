@@ -149,6 +149,54 @@ class TestRunHeadless:
             main._run_headless(crew, dry_run=False)
         assert exc.value.code == 1
 
+    def test_metrics_without_a_bound_programme_warns_and_does_not_fail(
+        self, monkeypatch, caplog
+    ) -> None:
+        # A completed run that produced token usage but where the PM selected no
+        # programme has no run_dir to persist into (run_dir() raises). The
+        # metrics were already printed; that must not turn a completed run into a
+        # traceback + exit 1 - warn and finish cleanly, and never reach save.
+        import main
+        import runtime
+
+        mocks = _stub_headless_metrics(monkeypatch)
+
+        def _no_programme() -> None:
+            raise RuntimeError("runtime.programme_handle and run_id must be bound")
+
+        monkeypatch.setattr(runtime, "run_dir", _no_programme)
+
+        crew = MagicMock()
+        crew.kickoff.return_value = MagicMock(
+            token_usage=MagicMock(prompt_tokens=10, completion_tokens=20)
+        )
+
+        with caplog.at_level(logging.WARNING, logger="bounty_squad"):
+            main._run_headless(crew, dry_run=False)  # must not raise SystemExit
+
+        mocks["build"].assert_called_once()
+        mocks["print"].assert_called_once()  # metrics still shown to the operator
+        mocks["save"].assert_not_called()  # run_dir() raised before save
+        assert "not persisted" in caplog.text
+
+    def test_metrics_save_io_error_still_exits_one(self, monkeypatch) -> None:
+        # The no-programme warning is narrow: a genuine I/O failure during save
+        # (disk full, permission) is a real error and must still exit 1, not be
+        # swallowed by the missing-programme guard.
+        import main
+
+        mocks = _stub_headless_metrics(monkeypatch)
+        mocks["save"].side_effect = OSError("disk full")
+
+        crew = MagicMock()
+        crew.kickoff.return_value = MagicMock(
+            token_usage=MagicMock(prompt_tokens=10, completion_tokens=20)
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            main._run_headless(crew, dry_run=False)
+        assert exc.value.code == 1
+
 
 class TestRunTui:
     """``_run_tui`` injects cybersquad's run lifecycle into the CrewAI/Textual

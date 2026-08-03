@@ -238,7 +238,19 @@ def _run_headless(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decora
                 output_tokens=getattr(usage, "completion_tokens", 0),
             )
             print_metrics(metrics)
-            save_metrics(metrics, runtime.run_dir())
+            try:
+                save_metrics(metrics, runtime.run_dir())
+            except RuntimeError:
+                # No programme was bound this run (e.g. the PM selected none), so
+                # run_dir() has nowhere to persist into. The metrics were already
+                # printed above; warn rather than letting the broad handler below
+                # turn a completed run into a traceback and exit 1. A genuine I/O
+                # failure in save_metrics is an OSError, not caught here, so it
+                # still surfaces as a real error.
+                logger.warning(
+                    "Run metrics printed but not persisted: no programme was selected "
+                    "this run, so there is no run directory to save into."
+                )
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(0)
