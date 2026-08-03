@@ -5,7 +5,8 @@ Usage:
     python main.py             # single run in the Textual TUI (needs a terminal)
     python main.py --headless  # run on the plain CLI, no TUI (pipes / CI)
     python main.py --verbose   # verbose LLM output
-    python main.py --dry-run   # show crew layout without executing
+    python main.py --dry-run   # preview the pipeline without executing (dry-run TUI;
+                               #   with --headless, prints the crew-layout tables)
 
 Environment variables (see config.py for full list):
     H1_API_USERNAME     HackerOne API username         (required)
@@ -57,7 +58,11 @@ def parse_args() -> argparse.Namespace:
         epilog=__doc__,
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
-    parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the pipeline without executing (tables under --headless)",
+    )
     parser.add_argument("--headless", action="store_true", help="Run without the Textual TUI")
     return parser.parse_args()
 
@@ -120,6 +125,30 @@ def _new_run_id() -> str:
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
 
 
+def _persist_run_metrics(metrics: Any) -> None:  # noqa: ANN401 - RunMetrics; a top-level import buys nothing
+    """Persist run metrics, tolerating a run where no programme was selected.
+
+    Both run surfaces (headless and the TUI) call this so their no-programme
+    handling cannot drift apart. ``runtime.run_dir()`` raises ``RuntimeError``
+    when no programme was bound - a normal outcome (every candidate programme
+    out of scope) - in which case there is nowhere to persist; warn and return
+    rather than surfacing the internal ``bind_*`` invariant string. A genuine
+    write failure (``OSError``) is deliberately not caught, so each caller can
+    treat it as the real error it is: headless exits 1, the TUI surfaces it in
+    the pipeline log.
+    """
+    import runtime
+    from tools.metrics import save_metrics
+
+    try:
+        save_metrics(metrics, runtime.run_dir())
+    except RuntimeError:
+        logger.warning(
+            "Run metrics were not persisted: no programme was selected this run, "
+            "so there is no run directory to save into."
+        )
+
+
 def _interactive_tty() -> bool:
     """Return whether both stdin and stdout are attached to a real terminal.
 
@@ -143,7 +172,7 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
     """
     import runtime
     from config import config
-    from tools.metrics import build_run_metrics, estimate_cost, save_metrics
+    from tools.metrics import build_run_metrics, estimate_cost
 
     # tools.tui pulls in crewui at import time. A partial install (crewui
     # absent) would otherwise surface a raw ImportError traceback here; catch it
@@ -175,7 +204,7 @@ def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-w
             input_tokens=getattr(usage, "prompt_tokens", 0),
             output_tokens=getattr(usage, "completion_tokens", 0),
         )
-        save_metrics(metrics, runtime.run_dir())
+        _persist_run_metrics(metrics)
 
     def get_token_cost(input_tokens: int, output_tokens: int) -> float:
         return estimate_cost(config.llm.model, input_tokens, output_tokens)
@@ -199,7 +228,7 @@ def _run_headless(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decora
     """
     import runtime
     from config import config
-    from tools.metrics import build_run_metrics, print_metrics, save_metrics
+    from tools.metrics import build_run_metrics, print_metrics
 
     if dry_run:
         dry_run_summary(crew)
@@ -238,19 +267,7 @@ def _run_headless(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decora
                 output_tokens=getattr(usage, "completion_tokens", 0),
             )
             print_metrics(metrics)
-            try:
-                save_metrics(metrics, runtime.run_dir())
-            except RuntimeError:
-                # No programme was bound this run (e.g. the PM selected none), so
-                # run_dir() has nowhere to persist into. The metrics were already
-                # printed above; warn rather than letting the broad handler below
-                # turn a completed run into a traceback and exit 1. A genuine I/O
-                # failure in save_metrics is an OSError, not caught here, so it
-                # still surfaces as a real error.
-                logger.warning(
-                    "Run metrics printed but not persisted: no programme was selected "
-                    "this run, so there is no run directory to save into."
-                )
+            _persist_run_metrics(metrics)
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(0)

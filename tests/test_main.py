@@ -286,6 +286,78 @@ class TestRunTui:
 
         assert get_token_cost(10, 20) == 1.23
 
+    def test_callbacks_warn_when_no_programme_bound(self, monkeypatch, caplog) -> None:
+        # The TUI is the DEFAULT surface, so its no-programme handling must match
+        # headless: a completed run with usage but no bound programme has no
+        # run_dir to persist into (run_dir raises RuntimeError). on_complete must
+        # warn and return cleanly - not raise an internal invariant string up
+        # into crewui's callback handler (where it would show a developer-facing
+        # message instead of the actionable one).
+        import main
+        import runtime
+        from config import config
+
+        monkeypatch.setattr(runtime, "run_id", "rid-xyz")
+        monkeypatch.setattr(runtime, "bind_run_id", lambda _rid: None)
+
+        def _no_programme() -> None:
+            raise RuntimeError("runtime.programme_handle and run_id must be bound")
+
+        monkeypatch.setattr(runtime, "run_dir", _no_programme)
+        monkeypatch.setattr(config.llm, "model", "anthropic/claude-sonnet-4-6")
+
+        build = MagicMock(return_value=MagicMock())
+        save = MagicMock()
+        monkeypatch.setattr("tools.metrics.build_run_metrics", build)
+        monkeypatch.setattr("tools.metrics.save_metrics", save)
+
+        captured: dict[str, object] = {}
+        self._patch_tui(monkeypatch, captured)
+        main._run_tui(MagicMock(name="crew"), dry_run=False)
+        on_start = cast(Callable[[], None], captured["on_start"])
+        on_complete = cast(Callable[[object], None], captured["on_complete"])
+        on_start()
+
+        result = MagicMock()
+        result.token_usage = MagicMock(prompt_tokens=10, completion_tokens=20)
+        with caplog.at_level(logging.WARNING, logger="bounty_squad"):
+            on_complete(result)  # must not raise
+
+        build.assert_called_once()
+        save.assert_not_called()  # run_dir() raised before save
+        assert "not persisted" in caplog.text
+
+    def test_callbacks_metrics_save_io_error_propagates(self, monkeypatch) -> None:
+        # Symmetry with headless: a genuine write failure is NOT the no-programme
+        # case. An OSError during save must propagate out of on_complete (crewui
+        # surfaces it as a real error), not be swallowed by the no-programme
+        # guard. This is the guarantee that keeps the two failure modes distinct.
+        import main
+        import runtime
+        from config import config
+
+        monkeypatch.setattr(runtime, "run_id", "rid-xyz")
+        monkeypatch.setattr(runtime, "bind_run_id", lambda _rid: None)
+        monkeypatch.setattr(runtime, "run_dir", lambda: MagicMock(name="run_dir"))
+        monkeypatch.setattr(config.llm, "model", "anthropic/claude-sonnet-4-6")
+
+        monkeypatch.setattr("tools.metrics.build_run_metrics", MagicMock(return_value=MagicMock()))
+        monkeypatch.setattr(
+            "tools.metrics.save_metrics", MagicMock(side_effect=OSError("disk full"))
+        )
+
+        captured: dict[str, object] = {}
+        self._patch_tui(monkeypatch, captured)
+        main._run_tui(MagicMock(name="crew"), dry_run=False)
+        on_start = cast(Callable[[], None], captured["on_start"])
+        on_complete = cast(Callable[[object], None], captured["on_complete"])
+        on_start()
+
+        result = MagicMock()
+        result.token_usage = MagicMock(prompt_tokens=10, completion_tokens=20)
+        with pytest.raises(OSError, match="disk full"):
+            on_complete(result)
+
 
 class TestMain:
     """main() opens build_crew with the parsed flags and, inside that block,
@@ -491,7 +563,7 @@ class TestWarnIfTelemetryEnabled:
 
         for var in self._OPT_OUTS:
             monkeypatch.delenv(var, raising=False)
-        with caplog.at_level(logging.WARNING, logger="main"):
+        with caplog.at_level(logging.WARNING, logger="bounty_squad"):
             main.warn_if_telemetry_enabled()
         # Assert on a distinctive phrase, not the bare domain: a domain literal
         # in an `in` check trips CodeQL's incomplete-url-substring-sanitization
@@ -505,6 +577,6 @@ class TestWarnIfTelemetryEnabled:
         for other in self._OPT_OUTS:
             monkeypatch.delenv(other, raising=False)
         monkeypatch.setenv(var, "true")
-        with caplog.at_level(logging.WARNING, logger="main"):
+        with caplog.at_level(logging.WARNING, logger="bounty_squad"):
             main.warn_if_telemetry_enabled()
         assert "CrewAI telemetry is enabled" not in caplog.text
