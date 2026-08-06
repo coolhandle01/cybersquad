@@ -68,6 +68,11 @@ class TestFilterInScope:
         result = filter_in_scope(["attackerexample.com"], programme)
         assert result == []
 
+    def test_in_scope_label_as_prefix_blocked(self, programme):
+        """An in-scope domain appearing as a leading label must be OUT -
+        the suffix anchor must not match a prefix occurrence."""
+        assert filter_in_scope(["example.com.evil.com"], programme) == []
+
     def test_mixed_batch(self, programme):
         hosts = ["api.example.com", "evil.notexample.com", "admin.example.com", "other.io"]
         result = filter_in_scope(hosts, programme)
@@ -183,6 +188,40 @@ class TestInScopeTypedAliases:
 
         with pytest.raises(ValidationError, match="not in the selected programme's scope"):
             _Args.model_validate({"endpoint": {"url": bystander_url, "status_code": 200}})
+
+    def test_single_hostname_accepts_in_scope(self, programme_in_workspace, target_apex):
+        """The positive path for ``TargetFQDN``: an in-scope single pick
+        passes the validator unchanged. Pins that the guard *accepts*
+        what it should - a rejection-only suite would still pass if the
+        validator rejected everything."""
+        from pydantic import BaseModel
+
+        from tools.recon.scope import TargetFQDN
+
+        class _Args(BaseModel):
+            hostname: TargetFQDN
+
+        parsed = _Args.model_validate({"hostname": f"api.{target_apex}"})
+        assert parsed.hostname == f"api.{target_apex}"
+
+    def test_single_endpoint_accepts_in_scope(self, programme_in_workspace, target_apex):
+        """The positive path for ``TargetEndpoint``: an in-scope single
+        endpoint passes through, host-extracted from its ``url``. This
+        pins that the guard reads the *endpoint's own host* - a validator
+        that dropped ``endpoint.url`` and checked an empty host would
+        reject every endpoint (in-scope included) yet still satisfy the
+        OOS-rejection tests, so the acceptance case is what observes it."""
+        from pydantic import BaseModel
+
+        from tools.recon.scope import TargetEndpoint
+
+        class _Args(BaseModel):
+            endpoint: TargetEndpoint
+
+        parsed = _Args.model_validate(
+            {"endpoint": {"url": f"https://api.{target_apex}", "status_code": 200}}
+        )
+        assert parsed.endpoint.url == f"https://api.{target_apex}"
 
     def test_empty_list_skips_programme_lookup(self):
         """An empty list short-circuits the validator - no
