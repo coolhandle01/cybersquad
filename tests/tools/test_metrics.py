@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -27,18 +28,17 @@ class TestParseLlm:
 
 class TestEstimateCost:
     def test_sonnet_pricing(self) -> None:
+        # 1M in + 1M out at sonnet (3.00 + 15.00) is exactly 18.0 - the quotient
+        # is representable, so an exact `==` pins the per-1M divisor. A perturbed
+        # denominator (e.g. /1000001) yields 17.999982 and reddens.
         cost = estimate_cost("claude-sonnet-4-20250514", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(18.00)
-
-    def test_exact_quotient_no_denominator_drift(self) -> None:
-        # 1M in + 1M out at sonnet (3.00 + 15.00) is exactly 18.0 - the
-        # quotient is representable, so an exact `==` pins the per-1M divisor.
-        # A perturbed denominator (e.g. /1000001) yields 17.999982 and reddens.
-        assert estimate_cost("claude-sonnet-4-20250514", 1_000_000, 1_000_000) == 18.0
+        assert cost == 18.0
 
     def test_opus_pricing(self) -> None:
+        # (15.00 + 75.00) is exactly 90.0 and representable, so `==` pins the
+        # divisor for opus too, not just sonnet.
         cost = estimate_cost("claude-opus-4-20250514", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(90.00)
+        assert cost == 90.0
 
     def test_haiku_pricing(self) -> None:
         cost = estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
@@ -150,35 +150,51 @@ class TestPrintMetrics:
     _INSTANT = datetime(2026, 1, 1, tzinfo=UTC)
     _SEP = "-" * 50
 
-    def _metrics(self, **overrides: object) -> RunMetrics:
-        base: dict[str, object] = {
-            "run_id": "print-test",
-            "started_at": self._INSTANT,
-            "completed_at": self._INSTANT,
-            "duration_seconds": 3.5,
-            "llm_model": "claude-sonnet-4-20250514",
-            "programme_handle": "acme",
-            "input_tokens": 1500,
-            "output_tokens": 900,
-            "total_tokens": 2400,
-            "estimated_cost_usd": 0.0186,
-            "findings_raw": 7,
-            "findings_verified": 3,
-            "submitted": True,
-        }
-        base.update(overrides)
-        return RunMetrics(**base)  # type: ignore[arg-type]
+    def _metrics(
+        self,
+        *,
+        run_id: str = "print-test",
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        duration_seconds: float = 3.5,
+        llm_model: str = "claude-sonnet-4-20250514",
+        programme_handle: str | None = "acme",
+        input_tokens: int = 1500,
+        output_tokens: int = 900,
+        total_tokens: int = 2400,
+        estimated_cost_usd: float = 0.0186,
+        findings_raw: int = 7,
+        findings_verified: int = 3,
+        submitted: bool = True,
+    ) -> RunMetrics:
+        return RunMetrics(
+            run_id=run_id,
+            started_at=started_at or self._INSTANT,
+            completed_at=completed_at or self._INSTANT,
+            duration_seconds=duration_seconds,
+            llm_model=llm_model,
+            programme_handle=programme_handle,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            findings_raw=findings_raw,
+            findings_verified=findings_verified,
+            submitted=submitted,
+        )
 
-    def test_prints_without_error(self, capsys: pytest.CaptureFixture) -> None:
-        # Preserve the build_run_metrics -> print_metrics smoke path (real,
-        # clock-derived duration); the exact-render pins below carry the
-        # observation.
+    def test_prints_real_clock_duration(self, capsys: pytest.CaptureFixture) -> None:
+        # The build_run_metrics -> print_metrics path with a real, clock-derived
+        # duration - the one thing test_full_render (fixed duration) cannot cover.
+        # Observe the rendered duration row matches its `:.1f` "s" format rather
+        # than merely asserting the line ran.
         started = datetime.now(UTC) - timedelta(seconds=3)
         m = build_run_metrics(
             "print-test", started, "claude-sonnet-4-20250514", 500, 250, submitted=True
         )
         print_metrics(m)
-        assert "print-test" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert re.search(r"Duration     : \d+\.\ds\n", out)
 
     def test_full_render(self, capsys: pytest.CaptureFixture) -> None:
         # Pin the entire rendered block. Every label, row and value is asserted
