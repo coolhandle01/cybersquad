@@ -38,6 +38,70 @@ class TestCheckAzureBlobContainers:
         assert results == []
         mget.assert_not_called()
 
+    def test_no_finding_when_status_200_but_marker_absent(
+        self, azure_blob_hostname, make_response, clean_response_body
+    ):
+        # A bare 200 without the <EnumerationResults marker is a container
+        # that exists but is not publicly listable - no finding. The guard
+        # is status AND marker; kills the and->or mutation.
+        with patch(
+            "requests.get", return_value=make_response(status=200, body=clean_response_body)
+        ):
+            results = check_azure_blob_containers([azure_blob_hostname])
+        assert results == []
+
+    def test_listed_finding_fields_and_call_args(self, azure_blob_hostname, make_response):
+        # Trigger exactly the "public" container by matching only its URL;
+        # pin the finding fields, the evidence [:500] excerpt, and the call.
+        body = "<EnumerationResults>" + "x" * 600
+        expected_url = f"https://{azure_blob_hostname}/public?restype=container&comp=list"
+        calls: list[tuple[str, dict]] = []
+
+        def recording_get(url, **kwargs):
+            calls.append((url, kwargs))
+            if url == expected_url:
+                return make_response(status=200, body=body)
+            return make_response(status=404, body="")
+
+        with patch("requests.get", side_effect=recording_get):
+            results = check_azure_blob_containers([azure_blob_hostname])
+
+        matched = [c for c in calls if c[0] == expected_url]
+        assert len(matched) == 1
+        _, kwargs = matched[0]
+        assert kwargs["timeout"] == 10
+        assert kwargs["allow_redirects"] is False
+
+        assert len(results) == 1
+        f = results[0]
+        assert f.title == f"Azure Blob Container Publicly Listed - {azure_blob_hostname}/public"
+        assert f.target == expected_url
+        assert f.vuln_class == "CloudMisconfiguration"
+        assert f.tool == "azure_blob_container_check"
+        assert f.severity_hint == Severity.HIGH
+        assert f.evidence == (
+            f"Container listing returned HTTP 200.\nResponse excerpt:\n{body[:500]}"
+        )
+
+    def test_probe_continues_after_a_container_errors(self, azure_blob_hostname, make_response):
+        # An exception probing one container must not abandon the remaining
+        # containers on that host: the except-branch continues, not breaks.
+        listed_url = f"https://{azure_blob_hostname}/assets?restype=container&comp=list"
+
+        def flaky_get(url, **kwargs):
+            if "/public?" in url:
+                raise Exception("timeout")
+            if url == listed_url:
+                return make_response(
+                    status=200, body="<EnumerationResults><Blobs/></EnumerationResults>"
+                )
+            return make_response(status=404, body="")
+
+        with patch("requests.get", side_effect=flaky_get):
+            results = check_azure_blob_containers([azure_blob_hostname])
+
+        assert [r.target for r in results] == [listed_url]
+
     def test_probes_every_supplied_hostname(self, make_azure_blob_hostname, make_response):
         seen_urls: list[str] = []
 
@@ -69,6 +133,23 @@ class TestCheckAzureSasTokens:
         assert len(sas_findings) == 1
         assert sas_findings[0].severity_hint == Severity.HIGH
         # Static URL inspection: never fires HTTP.
+        mget.assert_not_called()
+
+    def test_sas_finding_fields_are_fully_pinned(self, azure_sas_endpoint):
+        with patch("requests.get") as mget:
+            results = check_azure_sas_tokens([azure_sas_endpoint])
+
+        assert len(results) == 1
+        f = results[0]
+        assert f.title == f"Azure SAS Token in URL - {azure_sas_endpoint.url}"
+        assert f.target == azure_sas_endpoint.url
+        assert f.vuln_class == "CloudMisconfiguration"
+        assert f.tool == "azure_sas_token_check"
+        assert f.severity_hint == Severity.HIGH
+        assert f.evidence == (
+            "SAS token query parameters (sv/se/sig/sr/sp) detected in URL. "
+            "Tokens embedded in URLs are logged by proxies and browsers."
+        )
         mget.assert_not_called()
 
     def test_clean_urls_produce_no_findings(self, target_url):
