@@ -257,13 +257,14 @@ class TestCheckSensitiveFiles:
             url=f"https://app.{target_apex}/dashboard/index?tab=1#top", status_code=200
         )
         body = "ref: refs/heads/main\n" + "x" * 400
+        captured: dict = {}
 
         def fake_get(url, **kwargs):
             resp = MagicMock()
             if url.endswith("/.git/HEAD"):
+                captured["kwargs"] = kwargs
                 resp.status_code = 200
                 resp.text = body
-                assert kwargs["allow_redirects"] is False
             else:
                 resp.status_code = 404
                 resp.text = ""
@@ -272,6 +273,10 @@ class TestCheckSensitiveFiles:
         with patch("requests.get", side_effect=fake_get):
             results = check_sensitive_files([endpoint])
 
+        # Assert the outbound call args outside the side_effect: check_sensitive_files
+        # swallows broad Exception (incl. AssertionError), so an assert raised inside
+        # fake_get would be silently absorbed rather than failing the test.
+        assert captured["kwargs"]["allow_redirects"] is False
         git = [r for r in results if "Git Repository" in r.title]
         assert len(git) == 1
         f = git[0]
@@ -374,6 +379,24 @@ class TestCheckAdminPanels:
         with patch("requests.get", side_effect=fake_get):
             results = check_admin_panels(self._make_eps(target_apex))
         assert results == []
+
+    def test_marker_ending_at_last_scanned_char_is_detected(self, target_apex):
+        # Lower-bound complement to the window test above: a "login" marker
+        # whose last character sits at index 999 is fully inside body[:1000]
+        # but would be clipped by body[:999]. Asserting a finding *is*
+        # produced pins the scan window's near edge - a shrink of the bound
+        # ([:999] or smaller) stops matching and reddens this test.
+        body = "x" * 995 + "login" + "x" * 5  # 'login' occupies indices 995..999
+
+        def fake_get(url, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.text = body
+            return resp
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_admin_panels(self._make_eps(target_apex))
+        assert len(results) >= 1
 
     def test_finding_fields_and_call_args(self, target_apex):
         captured: dict = {}
