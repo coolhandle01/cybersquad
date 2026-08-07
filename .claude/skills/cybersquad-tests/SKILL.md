@@ -26,8 +26,8 @@ Named ways a test goes green for the wrong reason. The mutation you can't kill i
 
 | Mode | The mutation that survives it |
 |---|---|
-| **Stub the subject** | The `@tool` wrapper tests in `tests/squad/penetration_tester/test_tools.py` patch the checker with an arg-ignoring constant and assert `result == constant`. Drop or swap an argument - still green. |
-| **Bypass the real wiring** | Same file: `.func(...)` calls the wrapper directly, skipping the `TargetEndpoints` scope validator - the security boundary. Detach the guard - undetected. |
+| **Stub the subject** | Patch the function under test with a constant that ignores its arguments, then assert that constant came back. Drop or swap an argument - still green, because nothing observed the arguments. |
+| **Bypass the real wiring** | Reach the subject by its private path (`.func(...)`) instead of the validated production seam (`invoke_tool` / `args_schema`), so the scope validator never fires. Detach the guard entirely - undetected. |
 | **Missing direction** | A two-way guard tested one way only. A validator proved to reject but never to accept passes even when it rejects everything. |
 | **Absence of observable** | Assert a few substrings, not the whole artefact. Checking three substrings of a rendered block lets an input/output row transpose survive. |
 | **Wrong-reason green** | The assertion passes via a path unrelated to the claim - `"https" in evidence` to prove a variant is named, when the template always contains `https://`. |
@@ -36,7 +36,7 @@ Named ways a test goes green for the wrong reason. The mutation you can't kill i
 | **`in`, not `==`** | Insertion checked, removal not: asserts a marker was added but not that the raw run it replaces was removed. |
 | **Constant-fixture blindness** | The double is too constant to notice - a truthy response mock, an arg-discarding `sleep` lambda. A renamed attribute or a wrong backoff delay goes unseen. |
 
-The hunt looked hard for pure tautologies and for missing adversarial coverage on LLM-facing fields and did **not** find them in force - the domain layer already does the hard axis well. The gaps above are narrow and worth fixing precisely.
+Two more worth checking for, easy to miss because they read as thorough: a pure tautology (an assertion that cannot fail against any implementation), and a missing adversarial case on an LLM-facing free-text field.
 
 ## Mutation testing - the audit signal
 
@@ -48,8 +48,6 @@ Coverage is a floor the gate already enforces; mutation is the *observation* axi
 - **Equivalence is per-*site*, not per-mutation-*shape*.** The same mutant can be killable at one site and equivalent at another, decided by the reachable input set. The string-wrap on `lstrip("*.")` is killable in `cert_transparency` (a certificate SAN name can lead with an uppercase letter) and equivalent in the scope guard (its identifiers never do). Re-earn the proof at each site.
 - **100% kill is not "exhaustively observed".** A kill-rate is bounded by the mutator's operators, which are directional: `mutmut` mutates an integer to `n+1` only and *wraps* string literals rather than shrinking them - so `text[:1000]` has a `[:1001]` mutant and no `[:999]`, and `lstrip("*.")` has no charset-shrink mutant at all. Read a clean module as *nothing the mutator knew how to ask survived*, and still write the boundary test on the side the tool cannot reach - as regression protection, not a survivor closed.
 - **A per-module pass is blind to its siblings.** Fixing the module you point `mutmut` at says nothing about the sibling suites that share its fixture or its anti-pattern: a truthy shared response fixture stays truthy everywhere, and an identical stub-the-subject shortcut stays live one directory over. After a module scores clean, grep the anti-pattern across its siblings; the score will not.
-
-**The keystone.** `make_response` (`tests/fixtures/responses.py`) returns a bare `MagicMock` and never wires `raise_for_status`, so `resp.raise_for_status()` is a no-op under test and every HTTP status guard is an unobserved sad path in every file that uses it. Until it is made status-aware (tracked on #232), a test that needs the error path must wire `raise_for_status.side_effect` by hand and cannot rely on `status=` alone.
 
 ## Splitting a large test file
 
