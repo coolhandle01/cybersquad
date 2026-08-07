@@ -1,9 +1,68 @@
 ---
 name: cybersquad-tests
-description: Use the shared pytest fixtures in tests/fixtures/ instead of redefining local equivalents when writing or editing cybersquad tests. Covers make_response, the canonical model fixtures, clean_response_body, and the domain URL fixtures. Load before editing any file under tests/.
+description: The cybersquad test-observability doctrine - observe don't just execute, the paper-tiger taxonomy, mutation-audit practice, when to split a test file - plus the shared-fixture catalogue (make_response, the canonical model fixtures, clean_response_body, the domain URLs). Load before writing, editing, or reviewing any file under tests/.
 ---
 
-# cybersquad test fixtures
+# cybersquad tests
+
+This skill carries two things: the **test-observability doctrine** - how to write a test that *watches* behaviour rather than merely runs it - and the **shared-fixture catalogue** it is applied with. The doctrine comes first because it governs every test and every review; the catalogue follows.
+
+## Observe, don't just execute
+
+Coverage asks *did this line run?* The question that decides whether a test is worth anything is *would anyone notice if it were wrong?* A cybersquad suite can sit near 100% branch coverage and still stay green against a deliberately broken implementation - running is not observing. A mutation pass over four modules found kill-rates of 42-55% behind full coverage; the fixes added no production code, only the assertions that were missing.
+
+- **Name the plausible wrong implementations first.** Each becomes an assertion. If you can't say how the test reddens against a wrong impl, that is the assertion you are missing.
+- **Assert what was *done*, not what your stub *returned*.** Pin the outbound call (URL, params, `timeout`, `allow_redirects`), the emitted finding's fields, the persisted artefact - not the constant you handed back. Drive the real seam with `invoke_tool` rather than `.func(...)`, which skips the `args_schema` scope validator.
+- **Never stub the subject.** Stub collaborators only. Mocking the exact function under test and asserting its own return value specifies nothing.
+- **Test both directions of a decision.** A guard proved only to *reject* stays green when it rejects everything - safe and useless at once. Assert the *accept* path and the value that survives it, not just the refusal. The scope guard (`tools/recon/scope.py`) scored highest in the repo and still hid this: nothing asserted that `filter_in_scope` *admits* an in-scope host.
+- **Assert *outside* the double.** An `assert` inside a mock `side_effect` is swallowed wherever production catches broadly (a probe's `except Exception`), and the failure then surfaces on some later unrelated line. Capture into a closure dict, return normally, assert after the call.
+- **`==` for invariants, `in` for a genuinely distinctive token.** When the claim is exhaustive - these rows, this evidence slice, this rendered block - assert `==`. A single-character `in` check is a coincidence waiting to pass.
+- **Three axes, not one point.** Happy, sad (refuses / errors / handles empty and `None`), adversarial (malformed or hostile - and injection-shaped for the LLM-facing free-text fields `cybersquad-models` flags).
+- **Contract is what lands in the run directory, or renders something that does.** `main.py` configures a console-only `RichHandler` with no `FileHandler`, so every `logger.*` call in `tools/` evaporates when the terminal closes - a log line is not a contract and its mutants are equivalent. A rendered metrics block *is* contract, because it renders `RunMetrics`, which persists. Check where the output lands before you assert on it.
+
+## The paper-tiger taxonomy
+
+Named ways a test goes green for the wrong reason. The mutation you can't kill is the assertion you forgot to write. Anchored to modules rather than line numbers, which rot.
+
+| Mode | The mutation that survives it |
+|---|---|
+| **Stub the subject** | The `@tool` wrapper tests in `tests/squad/penetration_tester/test_tools.py` patch the checker with an arg-ignoring constant and assert `result == constant`. Drop or swap an argument - still green. |
+| **Bypass the real wiring** | Same file: `.func(...)` calls the wrapper directly, skipping the `TargetEndpoints` scope validator - the security boundary. Detach the guard - undetected. |
+| **Missing direction** | A two-way guard tested one way only. A validator proved to reject but never to accept passes even when it rejects everything. |
+| **Absence of observable** | Assert a few substrings, not the whole artefact. Checking three substrings of a rendered block lets an input/output row transpose survive. |
+| **Wrong-reason green** | The assertion passes via a path unrelated to the claim - `"https" in evidence` to prove a variant is named, when the template always contains `https://`. |
+| **Coincidental token** | A token incidentally always present - `"b" in evidence` where "b" hides inside *ambiguous* or *baseline*. |
+| **Lenient `or`** | `"Mako" in e or "FreeMarker" in e` stops pinning which label the probe actually produced. |
+| **`in`, not `==`** | Insertion checked, removal not: asserts a marker was added but not that the raw run it replaces was removed. |
+| **Constant-fixture blindness** | The double is too constant to notice - a truthy response mock, an arg-discarding `sleep` lambda. A renamed attribute or a wrong backoff delay goes unseen. |
+
+The hunt looked hard for pure tautologies and for missing adversarial coverage on LLM-facing fields and did **not** find them in force - the domain layer already does the hard axis well. The gaps above are narrow and worth fixing precisely.
+
+## Mutation testing - the audit signal
+
+Coverage is a floor the gate already enforces; mutation is the *observation* axis, the one number a suite cannot earn by visiting lines. Run it as a **periodic, per-module audit - never a merge gate.**
+
+- **How.** `mutmut` (3.7) against the **deterministic unit layer only** (`-m "unit and not bdd and not integration"` - the BDD layer hits a real LLM and would flap). Scope with a temporary, untracked `setup.cfg` `[mutmut]` block: a broad `source_paths` (so the copied `mutants/` tree can import the package) and `only_mutate` set to the target module. Remove the `setup.cfg` and the `mutants/` tree before committing - neither is ever staged.
+- **Point it by criticality, not score.** The worst defect found was on the *highest*-scoring module. Rank a security decision, a scope filter, or an irreversible side effect ahead of a formatter, whatever the percentages read.
+- **Prove a mutant equivalent; do not assert it.** The reason has to be an argument from the code: *"`json.dumps` defaults to `ensure_ascii=True`, so the payload is ASCII by construction and the `encoding=` mutants cannot change a byte"* is a proof. *"only reachable on a missing key"* is not, unless you state why every reachable value behaves identically.
+- **Equivalence is per-*site*, not per-mutation-*shape*.** The same mutant can be killable at one site and equivalent at another, decided by the reachable input set. The string-wrap on `lstrip("*.")` is killable in `cert_transparency` (a certificate SAN name can lead with an uppercase letter) and equivalent in the scope guard (its identifiers never do). Re-earn the proof at each site.
+- **100% kill is not "exhaustively observed".** A kill-rate is bounded by the mutator's operators, which are directional: `mutmut` mutates an integer to `n+1` only and *wraps* string literals rather than shrinking them - so `text[:1000]` has a `[:1001]` mutant and no `[:999]`, and `lstrip("*.")` has no charset-shrink mutant at all. Read a clean module as *nothing the mutator knew how to ask survived*, and still write the boundary test on the side the tool cannot reach - as regression protection, not a survivor closed.
+- **A per-module pass is blind to its siblings.** Fixing the module you point `mutmut` at says nothing about sibling suites that share its fixture or its anti-pattern. Hardening the cloud probes left the identical stub-the-subject pattern live one directory over and left `make_response` truthy for ~50 other files. After a module scores clean, grep the anti-pattern across its siblings - the score will not.
+
+**The keystone.** `make_response` (`tests/fixtures/responses.py`) returns a bare `MagicMock` and never wires `raise_for_status`, so `resp.raise_for_status()` is a no-op under test and every HTTP status guard is an unobserved sad path across the ~50 files that use it. Until it is made status-aware (tracked on #232), a test that needs the error path must wire `raise_for_status.side_effect` by hand and cannot rely on `status=` alone.
+
+## Splitting a large test file
+
+Past roughly 500 lines a test module stops being navigable. Split it, but only ever as a **pure move**: a `refactor(test)` that relocates tests and changes none of them, in its own PR with nothing semantic in the diff.
+
+Split along a **seam that already exists**, never an arbitrary line count:
+
+- **By the source's functional units** - one public function / probe family per file, mirroring how the source groups them; the existing per-class structure (`TestCheckAdminPanels`, ...) is usually the seam. The args-schema contract-tests split (below) is the worked instance: the generic contract loop and the per-case schema classes need different imports, so nothing duplicates across the cut.
+- **Into a per-scope package** when a whole area grows - the `tests/squad/<member>/` layout, with shared helpers hoisted into `tests/fixtures/` rather than copied.
+
+A split is correct only if it is **invariant-preserving**. Identical before and after: the collected-test count (`pytest --collect-only -q`), the coverage percentage, and - where the area has been mutation-audited - the kill-rate. If any of the three moves, the "move" changed behaviour and is not a move. Put the before/after collected count in the PR body so review is a thirty-second diff. Never bundle a split into a feature or model change - a relocation hidden inside a semantic PR is unreviewable.
+
+## Shared fixtures
 
 `tests/fixtures/` is the source of truth, grouped by concern. The top-level `tests/conftest.py` does the env seeding and pulls the fixture modules in via `pytest_plugins` (see [pytest docs](https://docs.pytest.org/en/stable/how-to/fixtures.html#use-fixtures-from-other-projects)); no other indirection is needed at the test-author side - fixtures resolve by name across the whole suite.
 
