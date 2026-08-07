@@ -47,15 +47,26 @@ Coverage is a floor the gate already enforces; mutation is the *observation* axi
 
   ```ini
   [mutmut]
-  # broad, so the copied mutants/ tree can import the flat-layout package
-  source_paths = tools models config.py runtime.py
+  # multi-value keys are newline-indented lists, NOT space-separated - see below
+  source_paths =
+      tools
+      models
+      config.py
+      runtime.py
   only_mutate = tools/<module>.py
   # pin selection to THIS module's test file (see "Attribute the kill")
   pytest_add_cli_args_test_selection = tests/.../test_<module>.py
-  pytest_add_cli_args = -m "unit and not bdd and not integration"
+  pytest_add_cli_args =
+      -m
+      unit and not bdd and not integration
   ```
 
-  Read survivors with a results-then-show loop: `mutmut results` lists every mutant's status, `mutmut results | grep survived` is the worklist, and `mutmut show <id>` prints a mutant's diff so you can judge kill-vs-equivalent.
+  Two format traps, both of which fail by *under-reporting* - the exact defect this doctrine exists to catch, so measure the config twice:
+  - **`source_paths` must be a newline-indented list, not space-separated.** `source_paths = tools models ...` on one line is read as a single path `tools models ...`, which does not exist, so `mutmut` copies *nothing* into the `mutants/` tree and every mutant dies on `BadTestExecutionCommandsException` (an import error, not a real kill). Newline-indented, each entry copies. The set stays broad on purpose: the copied tree has to import the whole flat-layout package even though `only_mutate` narrows what gets mutated. For a wrapper under `squad/<member>/`, add `squad` to the list or the copied tree can't import the member package.
+  - **`-m` and its marker expression go on separate lines.** `pytest_add_cli_args = -m "unit and not bdd and not integration"` passes the whole quoted string as *one* argv element, which pytest rejects as an unknown marker path. Split so `-m` and the expression reach pytest as two argv elements. Same rule for any flag-plus-value pair.
+
+  Read survivors with a results-then-show loop: `mutmut results` lists every mutant's status, `mutmut results | grep survived` is the worklist, and `mutmut show <id>` prints a mutant's diff so you can judge kill-vs-equivalent. A run that reports *every* mutant killed at suspiciously high speed is the tell for the copy-failure above - confirm the `mutants/` tree actually holds your package before you trust a clean board.
+- **`mutmut` skips decorated functions - so audit the validator, not the wrapper.** A `@cyber_tool` / `@pentest_tool` wrapper is a decorated function; `mutmut` does not mutate its body, so pointing `only_mutate` at the wrapper module scores an empty or trivial board that means nothing. The observable logic a wrapper carries lives in the `args_schema`'s `AfterValidator` (the scope guard) and the models it returns - point `only_mutate` at *those* modules, and drive them through `invoke_tool` so the validator is on the real path.
 - **Attribute the kill.** Pin selection to the module's *own* test file, not the whole unit layer. With selection across the layer, a mutant killed by a *sibling* suite still counts - inflating this module's apparent score and hiding whether these tests did the work. And to trust a claimed before -> after delta, re-run the baseline against the pre-change test file; the endpoint alone does not prove the gain.
 - **Point it by criticality, not score.** The worst defect is often on the *highest*-scoring module - a suite that looks thorough gets less scrutiny. Rank a security decision, a scope filter, or an irreversible side effect ahead of a formatter, whatever the percentages read.
 - **Prove a mutant equivalent; do not assert it.** The reason has to be an argument from the code: *"`json.dumps` defaults to `ensure_ascii=True`, so the payload is ASCII by construction and the `encoding=` mutants cannot change a byte"* is a proof. *"only reachable on a missing key"* is not, unless you state why every reachable value behaves identically.
