@@ -1,5 +1,5 @@
 ---
-name: cybersquad-test-fixtures
+name: cybersquad-tests
 description: Use the shared pytest fixtures in tests/fixtures/ instead of redefining local equivalents when writing or editing cybersquad tests. Covers make_response, the canonical model fixtures, clean_response_body, and the domain URL fixtures. Load before editing any file under tests/.
 ---
 

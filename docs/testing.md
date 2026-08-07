@@ -27,7 +27,7 @@ Pytest is configured for `--import-mode=importlib`, so subdirs do not require `_
 
 `tests/conftest.py` provides fixtures for all tests. Use them instead of defining local equivalents.
 
-The `cybersquad-test-fixtures` skill at `.claude/skills/cybersquad-test-fixtures/SKILL.md` covers the same material in a form Claude Code can load on demand when editing test files. The reference below is the same information in human-readable prose.
+The `cybersquad-tests` skill at `.claude/skills/cybersquad-tests/SKILL.md` covers the same material - and the test-observability doctrine - in a form Claude Code can load on demand when editing *or reading* test files. The reference below is the same information in human-readable prose.
 
 ## Args-schema contract tests
 
