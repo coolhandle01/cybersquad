@@ -61,3 +61,32 @@ class TestMakeResponseRaiseForStatus:
             make_response(status=404).raise_for_status()
         with pytest.raises(requests.HTTPError, match="503 Server Error"):
             make_response(status=503).raise_for_status()
+
+
+class TestMakeResponseFidelity:
+    def test_spec_rejects_attribute_not_on_response(self, make_response) -> None:
+        # The point of spec=requests.Response: a production typo or a renamed
+        # attribute reads as AttributeError, not a truthy child mock that
+        # passes a broken test. Without spec this line returns a mock and the
+        # assertion below fails.
+        resp = make_response()
+        with pytest.raises(AttributeError):
+            _ = resp.stauts_code  # deliberate typo for status_code
+
+    def test_core_attributes_are_readable(self, make_response) -> None:
+        # The four attributes the factory sets must remain readable under spec
+        # (they are instance attributes not on the Response class, so spec
+        # permits them only because the factory assigns them).
+        resp = make_response(status=201, body="hi", headers={"X-A": "1"}, cookies={"c": "1"})
+        assert resp.status_code == 201
+        assert resp.text == "hi"
+        assert resp.cookies == {"c": "1"}
+        assert resp.json  # real Response member, usable for return_value wiring
+
+    def test_headers_are_case_insensitive(self, make_response) -> None:
+        # Production reads headers.get("content-type"); a plain-dict fixture
+        # would fail correct code that set "Content-Type". CaseInsensitiveDict
+        # matches production so the fixture cannot fail a correct reader.
+        resp = make_response(headers={"Content-Type": "text/html"})
+        assert resp.headers.get("content-type") == "text/html"
+        assert resp.headers["CONTENT-TYPE"] == "text/html"

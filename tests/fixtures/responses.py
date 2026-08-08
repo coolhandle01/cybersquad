@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
+from requests.structures import CaseInsensitiveDict
 
 
 @pytest.fixture
@@ -27,6 +28,11 @@ def make_response():
     _resp in test_cookies.py (exposes ``.raw.headers.getlist`` for multiple
     Set-Cookie headers) and the POST-context _post_resp in test_csrf.py
     (intended naming convenience for ``requests.post`` return-value mocks).
+
+    The mock is ``spec``'d to ``requests.Response`` (reading an attribute the
+    real Response lacks raises ``AttributeError`` rather than returning a
+    truthy mock), and ``headers`` is a case-insensitive ``CaseInsensitiveDict``
+    as it is in production.
 
     ``raise_for_status()`` is status-aware: a ``status`` of 400 or above wires
     it to raise ``requests.HTTPError`` (carrying ``.response``), and anything
@@ -42,10 +48,22 @@ def make_response():
         cookies: dict | None = None,
         json: object = None,
     ) -> MagicMock:
-        resp = MagicMock()
+        # spec=requests.Response so a read of an attribute the real Response
+        # does not have (a production typo like `resp.stauts_code`, or an
+        # attribute lost in a refactor) raises AttributeError instead of
+        # returning a truthy child mock that sails a broken test through -
+        # the structural form of the same faithfulness the raise_for_status
+        # wiring gives by enumeration. spec (not spec_set) still permits
+        # assignment, so `resp.json.return_value = ...` below and the
+        # `.raw.headers.getlist` locals keep working - json and raw are both
+        # real Response members.
+        resp = MagicMock(spec=requests.Response)
         resp.status_code = status
         resp.text = body
-        resp.headers = headers or {}
+        # Response headers are case-insensitive in production; a plain dict
+        # here would let a test set {"Content-Type": ...} pass against a line
+        # reading headers.get("content-type") in the fixture but fail live.
+        resp.headers = CaseInsensitiveDict(headers or {})
         resp.cookies = cookies or {}
         if json is not None:
             resp.json.return_value = json
