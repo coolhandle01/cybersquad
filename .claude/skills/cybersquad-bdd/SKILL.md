@@ -63,7 +63,7 @@ Feature: Programme Manager agent
 
 ## Writing step definitions
 
-Step definitions live in `tests/bdd/test_<agent>.py`. Use `scenarios()` to link to the feature file. Steps receive pytest fixtures via dependency injection - the shared fixtures under `tests/fixtures/` (loaded via `pytest_plugins` in `tests/conftest.py`) are all available, and you should reuse them rather than re-constructing models locally. See the `cybersquad-test-fixtures` skill for the catalogue.
+Step definitions live in `tests/bdd/test_<agent>.py`. Use `scenarios()` to link to the feature file. Steps receive pytest fixtures via dependency injection - the shared fixtures under `tests/fixtures/` (loaded via `pytest_plugins` in `tests/conftest.py`) are all available, and you should reuse them rather than re-constructing models locally. See the `cybersquad-tests` skill for the catalogue.
 
 ```python
 from pytest_bdd import scenarios, given, when, then

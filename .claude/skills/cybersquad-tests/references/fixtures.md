@@ -1,13 +1,26 @@
----
-name: cybersquad-test-fixtures
-description: Use the shared pytest fixtures in tests/fixtures/ instead of redefining local equivalents when writing or editing cybersquad tests. Covers make_response, the canonical model fixtures, clean_response_body, and the domain URL fixtures. Load before editing any file under tests/.
----
+# cybersquad shared-fixture catalogue
 
-# cybersquad test fixtures
+The lookup layer for the `cybersquad-tests` skill: which fixtures exist, what
+each provides, and the rules for using and extending them. The doctrine that
+governs *how* to write a test lives in the skill's `SKILL.md`; this file is the
+reference you reach for mid-write, when you need a fixture's shape or the
+in-scope derivation rule. Load it on demand - it is not needed to review a test,
+only to author one.
+
+- [Shared fixtures](#shared-fixtures)
+- [Layout](#layout) - which module holds which fixture
+- [Catalogue](#catalogue) - what each fixture provides
+- [Authoring a new in-scope fixture](#authoring-a-new-in-scope-fixture)
+- [Derive variants with `model_copy`](#derive-variants-with-model_copy)
+- [Use the domain fixtures](#use-the-domain-fixtures)
+- [Tool-specific response builders](#tool-specific-response-builders)
+- [Args-schema contract tests](#args-schema-contract-tests)
+
+## Shared fixtures
 
 `tests/fixtures/` is the source of truth, grouped by concern. The top-level `tests/conftest.py` does the env seeding and pulls the fixture modules in via `pytest_plugins` (see [pytest docs](https://docs.pytest.org/en/stable/how-to/fixtures.html#use-fixtures-from-other-projects)); no other indirection is needed at the test-author side - fixtures resolve by name across the whole suite.
 
-Use these fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful.
+Use these fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful. Migrating a *generic* local response builder to `make_response` while you harden a file is a sanctioned exception to the minimal-diff rule - do it in the same PR; a builder that carries real extra logic (see "Tool-specific response builders" below) stays.
 
 ## Layout
 
