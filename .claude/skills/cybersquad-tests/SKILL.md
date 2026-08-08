@@ -5,7 +5,7 @@ description: The cybersquad test-observability doctrine - observe don't just exe
 
 # cybersquad tests
 
-This skill carries two things: the **test-observability doctrine** - how to write a test that *watches* behaviour rather than merely runs it - and the **shared-fixture catalogue** it is applied with. The doctrine comes first because it governs every test and every review; the catalogue follows.
+This skill carries the **test-observability doctrine** - how to write a test that *watches* behaviour rather than merely runs it. It governs every test and every review, so it loads whenever a test file is touched. The **shared-fixture catalogue** it is applied with - which fixtures exist, what each provides, the in-scope derivation rule - is a lookup layer an author reaches for mid-write, not something a reviewer needs, so it lives one hop away in [`references/fixtures.md`](references/fixtures.md) and loads on demand.
 
 ## Observe, don't just execute
 
@@ -90,116 +90,13 @@ Past roughly 500 lines a test module stops being navigable. Split it, but only e
 
 Split along a **seam that already exists**, never an arbitrary line count:
 
-- **By the source's functional units** - one public function / probe family per file, mirroring how the source groups them; the existing per-class structure (`TestCheckAdminPanels`, ...) is usually the seam. The args-schema contract-tests split (below) is the worked instance: the generic contract loop and the per-case schema classes need different imports, so nothing duplicates across the cut.
+- **By the source's functional units** - one public function / probe family per file, mirroring how the source groups them; the existing per-class structure (`TestCheckAdminPanels`, ...) is usually the seam. The args-schema contract-tests split (see [`references/fixtures.md`](references/fixtures.md)) is the worked instance: the generic contract loop and the per-case schema classes need different imports, so nothing duplicates across the cut.
 - **Into a per-scope package** when a whole area grows - the `tests/squad/<member>/` layout, with shared helpers hoisted into `tests/fixtures/` rather than copied.
 
 A split is correct only if it is **invariant-preserving**. Identical before and after: the collected-test count (`pytest --collect-only -q`), the coverage percentage, and - where the area has been mutation-audited - the kill-rate. If any of the three moves, the "move" changed behaviour and is not a move. Put the before/after collected count in the PR body so review is a thirty-second diff. Never bundle a split into a feature or model change - a relocation hidden inside a semantic PR is unreviewable.
 
 ## Shared fixtures
 
-`tests/fixtures/` is the source of truth, grouped by concern. The top-level `tests/conftest.py` does the env seeding and pulls the fixture modules in via `pytest_plugins` (see [pytest docs](https://docs.pytest.org/en/stable/how-to/fixtures.html#use-fixtures-from-other-projects)); no other indirection is needed at the test-author side - fixtures resolve by name across the whole suite.
+The shared-fixture catalogue - the `tests/fixtures/` layout, the per-fixture reference table (`make_response`, the canonical model fixtures, `clean_response_body`, the domain URLs), the in-scope derivation rule, the `model_copy` variant pattern, the response-builder keepers, and the args-schema contract-test structure - is in [`references/fixtures.md`](references/fixtures.md). Read it when you are mid-write and need a fixture's shape or name; a reviewer confirming a test *observes* rarely needs it, which is why it is a separate load rather than carried here.
 
-Use these fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful. Migrating a *generic* local response builder to `make_response` while you harden a file is a sanctioned exception to the minimal-diff rule - do it in the same PR; a builder that carries real extra logic (see "Tool-specific response builders" below) stays.
-
-## Layout
-
-| Module | Holds |
-|---|---|
-| `tests/fixtures/domains.py` | `target_url`, `bystander_url`, `callback_url`, `target_apex`, `target_sld`, `make_html_page` |
-| `tests/fixtures/programme.py` | `scope_item_*`, `programme`, `programme_in_workspace`, `dvwa_programme`, `dvwa_in_workspace`, `run_dir`; staging helpers (imported, not fixtures): `stage_models_json(run_dir, name, model_or_list)` writes a JSON **array** (`findings.json` / `verified.json`), `stage_model_json(run_dir, name, model)` writes a single **object** (`recon.json` / `attack_graph.json`) |
-| `tests/fixtures/recon.py` | `endpoint`, `recon_result`, `make_s3_hostname` / `s3_hostname`, `make_azure_blob_hostname` / `azure_blob_hostname`, `azure_sas_endpoint` |
-| `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_tree`, `attack_forest`; helpers `draft_report_kwargs(**overrides)` / `assess_finding_kwargs(**overrides)` (canonical `Draft Vulnerability Report` / `Assess Raw Finding` kwargs - the inner `Authored*` shape is at `["authored"]`; imported, not fixtures) |
-| `tests/fixtures/responses.py` | `make_response`, `clean_response_body` |
-| `tests/fixtures/tools.py` | `invoke_tool`, `reload_module` |
-| `tests/fixtures/task_output.py` | `make_task_output` |
-
-When adding a new fixture, put it in the matching module rather than re-opening `conftest.py` - that's the single rule that keeps the catalogue navigable.
-
-## Catalogue
-
-| Fixture | What it provides |
-|---|---|
-| `make_response` | Factory for `MagicMock` shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, `json`. |
-| `make_html_page` | Factory for minimal HTML pages with `<script>` tags. Default: one script at `{target_url}/app.js`. |
-| `target_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `target_apex`. Flip `target_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_tree` all follow. |
-| `target_apex` | Apex domain parsed out of `target_url` (e.g. `example.com`). The derivation point every in-scope fixture builds against - use it when authoring a new in-scope fixture rather than embedding a literal. |
-| `bystander_url` | `https://bystander.example.org` - out-of-scope; use whenever a test exercises the scope guard. |
-| `callback_url` | `https://callback.cybersquad.com` - OOB receiver placeholder. |
-| `run_dir` | Points `runtime.run_dir()` at the test's `tmp_path` and returns the `Path`. Take this instead of patching `runtime.run_dir` at every consumer's import alias (`tools.workspace.runtime.run_dir` / `tools.triage_tools.runtime.run_dir` / etc) - every consumer `import runtime` so the single setattr propagates everywhere. Tests that need a *non-existent* rundir (to exercise `mkdir` behaviour or the missing-dir branch) stay on an explicit `monkeypatch.setattr("runtime.run_dir", ...)` since the fixture always returns an existing path. |
-| `programme` | A `Programme` model. In-scope: `https://<target_apex>` and `*.<target_apex>`. |
-| `programme_in_workspace` | `programme` staged into the test's rundir as `<run_dir>/programme.json`, with `runtime.programme_handle` monkeypatched. Composes on top of `run_dir`. Tests that need `current_programme()` to work end-to-end take this fixture instead of patching the loader at every import site. |
-| `dvwa_programme` | A `Programme` shaped like Damn Vulnerable Web Application on `http://localhost` / `http://127.0.0.1`. Use for BDD scenarios and integration work that point at a real runnable target (the usual deployment is a local Docker container). |
-| `dvwa_in_workspace` | DVWA staged into the rundir - same shape as `programme_in_workspace` but the in-flight programme is DVWA. Composes on top of `run_dir`. |
-| `endpoint` | An `Endpoint` model at `https://api.<target_apex>`. |
-| `recon_result` | A `AttackGraph` combining `programme` and `endpoint`. |
-| `target_sld` | Second-level-domain prefix of `target_apex` (`example` from `example.com`). The basis for cloud bucket / account names, which cannot embed the apex's dot. |
-| `make_s3_hostname` / `s3_hostname` | Factory + canonical value for in-scope-themed S3 hostnames (`example-assets.s3.us-east-1.amazonaws.com`). Pair shape: factory when a test needs variants, single value for the common case. |
-| `make_azure_blob_hostname` / `azure_blob_hostname` | Same pair shape, for Azure Blob hostnames (`examplestorage.blob.core.windows.net`). |
-| `azure_sas_endpoint` | An `Endpoint` whose URL carries embedded Azure SAS-token query parameters - the canonical positive case for `check_azure_sas_tokens`. |
-| `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
-| `verified_vuln` | A `VerifiedVulnerability` model. |
-| `disclosure_report` | A `DisclosureReport` derived from `verified_vuln`. |
-| `attack_tree` / `attack_forest` | The VR's research artefact the PT consumes. |
-| `clean_response_body` | An HTML body verified at setup time to contain no pentest probe marker - use for "no finding" cases. |
-| `invoke_tool` | Invoke a `@cyber_tool` wrapper through its args_schema (CrewAI's production path). Tests that exercise the `Target*` scope guard take this instead of `.func(...)` so the `AfterValidator` actually fires. |
-| `reload_module` | Wraps `importlib.reload` so tests can pick up env-var changes on module-level singletons. |
-| `make_task_output` | Factory for a real `crewai.TaskOutput` (leading positional `raw`; `description` / `agent` required by the model carry placeholders). The unit-test surface for *task guardrails*, whose signature is `(TaskOutput) -> (bool, Any)` - hands the guardrail the real type rather than a `MagicMock`. Pair with `run_dir` / `programme_in_workspace` when the guardrail validates a workspace artefact (e.g. `validate_select_output`). |
-
-## Authoring a new in-scope fixture
-
-Derive from `target_apex`, never embed the apex literal:
-
-```python
-# correct
-@pytest.fixture()
-def my_admin_endpoint(target_apex: str) -> Endpoint:
-    return Endpoint(url=f"https://admin.{target_apex}", status_code=200, ...)
-
-# wrong - hardcoded apex won't follow when target_url changes
-@pytest.fixture()
-def my_admin_endpoint() -> Endpoint:
-    return Endpoint(url="https://admin.example.com", status_code=200, ...)
-```
-
-The chain `target_url -> target_apex -> in-scope fixtures` is the single knob for retargeting the suite (e.g. flipping to DVWA on localhost would adjust `target_url` and the dependent fixtures follow). A new fixture that hardcodes `example.com` breaks that property and gets caught at review.
-
-## Derive variants with `model_copy`
-
-Do not reconstruct a fixture model from scratch:
-
-```python
-# correct
-out_of_scope = programme.model_copy(update={"in_scope": []})
-
-# wrong - duplicates every other field
-out_of_scope = Programme(handle=programme.handle, name=programme.name, ...)
-```
-
-## Use the domain fixtures
-
-```python
-# correct - intent is readable at the call site
-def test_drops_out_of_scope(make_response, bystander_url):
-    ...
-
-# wrong - opaque hostname, no indication of role
-def test_drops_out_of_scope(make_response):
-    url = "https://malicious.invalid"
-```
-
-## Tool-specific response builders
-
-A local response builder that carries extra logic can stay local. Two specific keepers:
-
-- `_resp` in `test_cookies.py` - cookie-jar inspection via `raw.headers.getlist` for multiple Set-Cookie headers.
-- `_post_resp` in `test_csrf.py` - generic in shape but kept for POST-context naming convenience at the call site (16 usages mocking `requests.post` return values).
-
-Otherwise the rule is: if the local helper is just constructing a generic mock response, replace it with `make_response`.
-
-## Args-schema contract tests
-
-Per-agent `tests/squad/<agent>/test_args_schemas.py` files parametrise over `MEMBER.schemas` and call the shared assertions in `tests/squad/_contract_assertions.py` (`assert_tool_wires_explicit_schema`, `assert_field_descriptions_present`, `assert_closed_world_mapping`). The helper module is intentionally not a `test_*.py` so pytest does not collect it; it is imported by each per-agent file. Agent-specific accept / reject cases (StrEnum payload rejection, hostname-shape rejection, wording pins like `Submit Report`'s irreversibility description) stay in the per-agent file.
-
-When those case tables outgrow the file-size bar - the Penetration Tester is the first - split along the seam the imports already draw: the generic contract loop (needs `MEMBER` + the shared assertions) stays in `test_args_schemas.py`, and the accept / reject cases (need the individual `_XArgs` schema classes) move to a sibling `test_args_schema_cases.py`. The two import sets are disjoint, so nothing is duplicated across the split. Keep the autouse `programme_in_workspace` seeding fixture (the one the typed-target `AfterValidator`s need) in the cases file only - the contract-loop assertions never call `model_validate`, so they do not need it.
-
-When adding a new typed tool, add the schema to `MEMBER.schemas` in the agent's `__init__.py` alongside `tools`; the closed-world test refuses the PR if the registry and the mapping disagree.
+The one rule worth stating up front, because it governs the diff you write rather than a lookup you make: use the shared fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful. Migrating a *generic* local response builder to `make_response` while you harden a file is a sanctioned exception to the minimal-diff rule; a builder that carries real extra logic stays.
