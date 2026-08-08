@@ -44,6 +44,66 @@ class TestCheckS3Buckets:
         assert len(accessible) == 1
         assert accessible[0].severity_hint == Severity.MEDIUM
 
+    def test_listable_finding_fields_and_call_args(self, s3_hostname, make_response):
+        # Long, listing-bearing body: pins the evidence excerpt (and its
+        # [:500] truncation boundary) and every other finding field, plus
+        # the outbound call args (URL / timeout / allow_redirects).
+        body = "<ListBucketResult>" + "x" * 600
+        calls: list[tuple[str, dict]] = []
+
+        def recording_get(url, **kwargs):
+            calls.append((url, kwargs))
+            return make_response(status=200, body=body)
+
+        with patch("requests.get", side_effect=recording_get):
+            results = check_s3_buckets([s3_hostname])
+
+        assert len(calls) == 1
+        url, kwargs = calls[0]
+        assert url == f"https://{s3_hostname}/"
+        assert kwargs["timeout"] == 10
+        assert kwargs["allow_redirects"] is False
+
+        listable = [r for r in results if "Publicly Listable" in r.title]
+        assert len(listable) == 1
+        f = listable[0]
+        assert f.title == f"S3 Bucket Publicly Listable - {s3_hostname}"
+        assert f.target == f"https://{s3_hostname}/"
+        assert f.vuln_class == "CloudMisconfiguration"
+        assert f.tool == "s3_bucket_check"
+        assert f.severity_hint == Severity.HIGH
+        assert f.evidence == (f"Bucket listing returned HTTP 200.\nResponse excerpt:\n{body[:500]}")
+
+    def test_accessible_finding_fields(self, s3_hostname, make_response):
+        with patch("requests.get", return_value=make_response(status=200, body="plain page")):
+            results = check_s3_buckets([s3_hostname])
+
+        accessible = [r for r in results if "Publicly Accessible" in r.title]
+        assert len(accessible) == 1
+        f = accessible[0]
+        assert f.title == f"S3 Bucket Publicly Accessible - {s3_hostname}"
+        assert f.target == f"https://{s3_hostname}/"
+        assert f.vuln_class == "CloudMisconfiguration"
+        assert f.tool == "s3_bucket_check"
+        assert f.severity_hint == Severity.MEDIUM
+        assert f.evidence == "Bucket URL returned HTTP 200 without listing - verify manually."
+
+    def test_probe_continues_after_a_host_errors(self, make_s3_hostname, make_response):
+        # A per-host failure must not abandon the remaining hostnames: the
+        # loop continues past the exception rather than breaking out.
+        bad = make_s3_hostname("broken")
+        good = make_s3_hostname("open")
+
+        def flaky_get(url, **kwargs):
+            if bad in url:
+                raise Exception("connection reset")
+            return make_response(status=200, body="<ListBucketResult>listing</ListBucketResult>")
+
+        with patch("requests.get", side_effect=flaky_get):
+            results = check_s3_buckets([bad, good])
+
+        assert [r.target for r in results] == [f"https://{good}/"]
+
     def test_non_200_produces_no_finding(self, s3_hostname, make_response):
         with patch("requests.get", return_value=make_response(status=403, body="Access Denied")):
             results = check_s3_buckets([s3_hostname])
