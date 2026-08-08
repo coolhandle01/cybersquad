@@ -32,7 +32,7 @@ executing the pipeline).
 
 ### Contributor skills (Claude Code)
 
-Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edit` configured in `.claude/settings.json`. The relevant skill's full `SKILL.md` is injected into context on the first matching edit per session, deduplicated so repeated edits to the same scope are silent.
+Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edit`/`Read` configured in `.claude/settings.json`. The relevant skill's full `SKILL.md` is injected into context on the first matching tool call per session, deduplicated so repeated edits or reads of the same scope are silent. `Read` is matched as well as `Write`/`Edit` so a **reviewer** - who reads, greps and runs tests but never edits - loads the governing skill too, not only the author. (A per-session sentinel means the extra `Read` matching costs one injection per scope, not one per read.)
 
 | Skill | Triggers on |
 |---|---|
@@ -45,7 +45,7 @@ Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edi
 | `cybersquad-agent-llm` | `crew.py` |
 | `cybersquad-mcp` | Any file under `mcp_servers/` (the package with the orchestrator + one submodule per MCP), plus stacks on `crew.py` where the provisioned-MCP tool list is distributed to agents. Carries the threat-model rules from #144: build-time provisioning only, no runtime attach, disjoint sets for provisioned vs. discovered MCPs, explicit tool allowlist, audit log. |
 | `cybersquad-task` | `tasks.py` |
-| `cybersquad-test-fixtures` | Any file under `tests/` (including the `tests/squad/` mirror) |
+| `cybersquad-tests` | Any file under `tests/` (including the `tests/squad/` mirror). Shared fixtures **and** the test-observability doctrine (observe don't just execute; the paper-tiger taxonomy; mutation-audit practice). |
 | `cybersquad-bdd` | `tests/features/**` or `tests/bdd/**` |
 | `cybersquad-skill` | Any agent-facing markdown under `squad/`: `squad/skills/<name>/SKILL.md`, `squad/<member>/skills/<name>/SKILL.md`, `squad/<member>/role.md`/`goal.md`/`backstory.md`, `squad/<member>/<task>/description.md`/`expected_output.md` |
 
