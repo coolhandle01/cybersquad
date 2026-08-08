@@ -15,6 +15,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 
 @pytest.fixture
@@ -26,6 +27,12 @@ def make_response():
     _resp in test_cookies.py (exposes ``.raw.headers.getlist`` for multiple
     Set-Cookie headers) and the POST-context _post_resp in test_csrf.py
     (intended naming convenience for ``requests.post`` return-value mocks).
+
+    ``raise_for_status()`` is status-aware: a ``status`` of 400 or above wires
+    it to raise ``requests.HTTPError`` (carrying ``.response``), and anything
+    below is a no-op - matching a real ``requests.Response``. Pass the error
+    ``status`` and let the fixture raise; do not hand-wire
+    ``resp.raise_for_status.side_effect`` (that makes ``status`` decorative).
     """
 
     def _make(
@@ -42,6 +49,22 @@ def make_response():
         resp.cookies = cookies or {}
         if json is not None:
             resp.json.return_value = json
+        # Faithful to requests.Response.raise_for_status(): raise HTTPError
+        # for 4xx/5xx, no-op for anything below 400. This makes `status`
+        # load-bearing for any code that gates on raise_for_status() - the
+        # scope-guard equivalent for HTTP-error handling - instead of leaving
+        # every author to hand-wire the side_effect (making `status` decorative)
+        # or, worse, silently not exercising the guard at all because the bare
+        # MagicMock never raises. The message mirrors requests' own
+        # "<code> Client Error" / "<code> Server Error" split, and the error
+        # carries `.response` so `except HTTPError as e: e.response...` works.
+        if status >= 400:
+            kind = "Client Error" if status < 500 else "Server Error"
+            resp.raise_for_status.side_effect = requests.HTTPError(
+                f"{status} {kind}", response=resp
+            )
+        else:
+            resp.raise_for_status.return_value = None
         return resp
 
     return _make

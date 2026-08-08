@@ -109,7 +109,6 @@ class TestCertTransparency:
         failure is the documented behaviour; a silent ``[]`` on an HTTP error
         would look identical to a domain with no certificates."""
         mock_resp = make_response(status=503)
-        mock_resp.raise_for_status.side_effect = requests.HTTPError("503 Server Error")
 
         with (
             patch("requests.get", return_value=mock_resp),
