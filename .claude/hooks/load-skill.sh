@@ -35,6 +35,9 @@ session_id=$(echo "$input" | jq -r '.session_id // ""')
 [ -z "$file_path" ] && exit 0
 [ -z "$session_id" ] && exit 0
 
+# file_path is absolute (Claude Code sends absolute paths); a relative one
+# matches none of the */dir/* patterns below and harmlessly no-ops - not a bug.
+
 # Repo-root anchor: hook runs from project cwd; resolve skill paths against it.
 repo_root=$(cd "$(dirname "$0")/../.." && pwd)
 skills_root="$repo_root/.claude/skills"
