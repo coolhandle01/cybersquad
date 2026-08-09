@@ -312,6 +312,17 @@ class AppConfig:
     human_input: bool = field(
         default_factory=lambda: os.getenv("CYBERSQUAD_HUMAN_INPUT", "true").lower() == "true"
     )
+    # Attacker-controlled origin used as the spoofed Origin / Referer in the
+    # CSRF and CORS Origin-validation probes - the out-of-band ("OOB") server
+    # a target would call back to in a real cross-origin attack. No live
+    # receiver exists yet, so the default is an RFC 2606 example.com
+    # placeholder; point CYBERSQUAD_OOB_SERVER at real OOB infrastructure
+    # (e.g. interactsh) when #77 lands it. The distinct blind-callback
+    # receiver for open-redirect / blind probes is tracked separately (see
+    # tools/pentest/canary.py REDIRECT_HOST and the callback_url fixture).
+    oob_server: str = field(
+        default_factory=lambda: os.getenv("CYBERSQUAD_OOB_SERVER", "https://evil.example.com")
+    )
 
 
 # Singleton - import this everywhere rather than re-instantiating

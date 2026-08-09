@@ -219,3 +219,17 @@ class TestAppConfig:
 
         c = AppConfig()
         assert c.output_log_enabled is False
+
+    def test_oob_server_default_is_placeholder(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_OOB_SERVER", raising=False)
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.oob_server == "https://evil.example.com"
+
+    def test_oob_server_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_OOB_SERVER", "https://oob.operator.example")
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.oob_server == "https://oob.operator.example"
