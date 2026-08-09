@@ -32,21 +32,21 @@ from pydantic import BaseModel, ValidationError
 from squad.osint_analyst import (
     MEMBER,
     _AnnotateHostArgs,
-    _CertTransparencyArgs,
-    _DetectTakeoverCandidatesArgs,
+    _DiscoverHistoricalUrlsArgs,
+    _DiscoverLlmEndpointsArgs,
+    _DiscoverSubdomainsArgs,
+    _DiscoverTakeoverCandidatesArgs,
+    _DiscoverWebpagesArgs,
     _FinaliseReconArgs,
-    _HistoricalUrlsArgs,
-    _LlmDetectionArgs,
+    _ListEndpointsArgs,
+    _ListOpenPortsArgs,
+    _ListSubdomainsArgs,
+    _ListUncoveredHostsArgs,
     _OsintLookupCweArgs,
     _OsintLookupOwaspArgs,
-    _ProbeHostnamesArgs,
-    _ReconEndpointsArgs,
-    _ReconOpenPortsArgs,
-    _ReconSubdomainsArgs,
     _RunInitialSweepArgs,
-    _UncoveredHostsArgs,
 )
-from squad.workspace_tools import (
+from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )
@@ -60,7 +60,7 @@ pytestmark = pytest.mark.unit
 
 
 # Every schema in this file with a typed-target field
-# (``TargetHostnames`` / ``TargetEndpoints`` / ``TargetHostname`` /
+# (``TargetFQDNs`` / ``TargetEndpoints`` / ``TargetFQDN`` /
 # ``TargetEndpoint``) runs its ``AfterValidator`` during
 # ``model_validate`` - and that validator calls ``current_programme()``.
 # Autousing ``programme_in_workspace`` stages a programme into the
@@ -116,17 +116,20 @@ class TestSchemaAcceptReject:
         ("schema_cls", "kwargs"),
         [
             (_RunInitialSweepArgs, {}),
-            (_ReconSubdomainsArgs, {}),
-            (_ReconSubdomainsArgs, {"sweep_path": "sweep.json", "host_filter": "api"}),
-            (_ReconEndpointsArgs, {}),
+            (_ListSubdomainsArgs, {}),
             (
-                _ReconEndpointsArgs,
+                _ListSubdomainsArgs,
+                {"attack_graph_path": "attack_graph.json", "host_filter": "api"},
+            ),
+            (_ListEndpointsArgs, {}),
+            (
+                _ListEndpointsArgs,
                 {"status": 200, "tech": "wordpress", "host_contains": "admin", "limit": 25},
             ),
-            (_ReconOpenPortsArgs, {}),
-            (_OsintLookupCweArgs, {"query": "xss"}),
+            (_ListOpenPortsArgs, {}),
+            (_OsintLookupCweArgs, {"cwe_id": 79}),
             (_OsintLookupOwaspArgs, {"query": "csrf"}),
-            (_UncoveredHostsArgs, {}),
+            (_ListUncoveredHostsArgs, {}),
             (_FinaliseReconArgs, {}),
             # Shared workspace acceptance cases. List Run Files takes
             # no parameters; Read Run File needs a relative path.
@@ -147,39 +150,39 @@ class TestSchemaAcceptReject:
     # cannot consume fixtures.
 
     def test_recon_open_ports_accepts_victim_host(self, target_url: str) -> None:
-        """Recon Open Ports accepts a real hostname filter."""
+        """List Open Ports accepts a real hostname filter."""
         host = urlparse(target_url).hostname
-        _ReconOpenPortsArgs.model_validate({"host": host})
+        _ListOpenPortsArgs.model_validate({"host": host})
 
     def test_cert_transparency_accepts_target_apex(self, target_url: str) -> None:
-        """Certificate Transparency takes the apex domain of the in-scope target."""
+        """Discover Subdomains takes the apex domain of the in-scope target."""
         host = urlparse(target_url).hostname or ""
         apex = host.split(".", 1)[-1] if "." in host else host
-        _CertTransparencyArgs.model_validate({"domain": apex})
+        _DiscoverSubdomainsArgs.model_validate({"domain": apex})
 
     def test_historical_urls_accepts_target_apex(self, target_url: str) -> None:
-        """Historical URL Discovery takes the apex domain of the in-scope target."""
+        """Discover Historical URLs takes the apex domain of the in-scope target."""
         host = urlparse(target_url).hostname or ""
         apex = host.split(".", 1)[-1] if "." in host else host
-        _HistoricalUrlsArgs.model_validate({"domain": apex})
+        _DiscoverHistoricalUrlsArgs.model_validate({"domain": apex})
 
     def test_probe_hostnames_accepts_victim_hostname(self, target_url: str) -> None:
-        """Probe Hostnames takes a list of hostnames - no programme handle.
+        """Discover Webpages takes a list of hostnames - no programme handle.
 
         The wrapper-level ``scope_filter`` sources the Programme from
         the workspace (``current_programme()`` -> ``programme.json``),
         so the schema does not require a per-call handle.
         """
-        _ProbeHostnamesArgs.model_validate({"hostnames": [urlparse(target_url).hostname]})
+        _DiscoverWebpagesArgs.model_validate({"hostnames": [urlparse(target_url).hostname]})
 
     def test_detect_takeover_candidates_accepts_bystander_hostname(
         self, bystander_url: str
     ) -> None:
-        """Detect Takeover Candidates models the case where a CNAME dangles to a
+        """Discover Takeover Candidates models the case where a CNAME dangles to a
         bystander - the ``bystander_url`` fixture is the conventional handle
         for an out-of-scope target. The wrapper-level scope filter drops
         the bystander before any DNS traffic fires."""
-        _DetectTakeoverCandidatesArgs.model_validate(
+        _DiscoverTakeoverCandidatesArgs.model_validate(
             {"hostnames": [urlparse(bystander_url).hostname]}
         )
 
@@ -194,13 +197,13 @@ class TestSchemaAcceptReject:
         )
 
     def test_llm_detection_accepts_populated_endpoint_list(self, endpoint) -> None:
-        """LLM Endpoint Detection accepts the realistic ``Endpoint`` shape.
+        """Discover LLM Endpoints accepts the realistic ``Endpoint`` shape.
 
         The conftest ``endpoint`` fixture is the canonical Endpoint instance;
         using it here exercises the Endpoint model's own validation path as
         part of the schema contract.
         """
-        instance = _LlmDetectionArgs.model_validate(
+        instance = _DiscoverLlmEndpointsArgs.model_validate(
             {"endpoints": [endpoint.model_dump(mode="json")]}
         )
         assert len(instance.endpoints) == 1
@@ -211,12 +214,12 @@ class TestSchemaAcceptReject:
     @pytest.mark.parametrize(
         "schema_cls",
         [
-            _CertTransparencyArgs,  # domain required
-            _HistoricalUrlsArgs,  # domain required
-            _LlmDetectionArgs,  # endpoints required
-            _ProbeHostnamesArgs,  # hostnames required (scope_filter sources Programme)
-            _DetectTakeoverCandidatesArgs,  # hostnames required (scope_filter sources Programme)
-            _OsintLookupCweArgs,  # query required
+            _DiscoverSubdomainsArgs,  # domain required
+            _DiscoverHistoricalUrlsArgs,  # domain required
+            _DiscoverLlmEndpointsArgs,  # endpoints required
+            _DiscoverWebpagesArgs,  # hostnames required (scope_filter sources Programme)
+            _DiscoverTakeoverCandidatesArgs,  # hostnames required (scope_filter sources Programme)
+            _OsintLookupCweArgs,  # cwe_id required
             _OsintLookupOwaspArgs,  # query required
             _AnnotateHostArgs,  # hostname / role / priority / notes required
         ],
@@ -246,10 +249,10 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate({**base, "priority": "urgent"})
 
-    # Hostname-typed fields. Every schema below
-    # carries at least one ``Hostname`` field; passing a URL / port / path
+    # FQDN-typed fields. Every schema below
+    # carries at least one ``FQDN`` field; passing a URL / port / path
     # rejects upstream, before the scope filter sees the value.
-    # test_models.py's TestHostname covers the validator exhaustively;
+    # tests/models/test_primitives.py TestFQDN covers the validator exhaustively;
     # this method asserts the OSINT schemas actually wire it, with each
     # malformed case derived from ``target_url`` so the deliberately broken
     # input is recognisably "the in-scope target, mis-shaped" rather than
@@ -257,23 +260,23 @@ class TestSchemaAcceptReject:
     def test_hostname_field_rejects_malformed_input(self, target_url: str) -> None:
         host = urlparse(target_url).hostname or ""
         cases: list[tuple[type[BaseModel], str, object, dict[str, object]]] = [
-            (_CertTransparencyArgs, "domain", f"https://{host}", {}),
-            (_HistoricalUrlsArgs, "domain", f"{host}:8080", {}),
-            (_ReconOpenPortsArgs, "host", f"{host}/path", {}),
-            (_ProbeHostnamesArgs, "hostnames", [f"https://{host}"], {}),
-            (_DetectTakeoverCandidatesArgs, "hostnames", [f"{host}:9000"], {}),
+            (_DiscoverSubdomainsArgs, "domain", f"https://{host}", {}),
+            (_DiscoverHistoricalUrlsArgs, "domain", f"{host}:8080", {}),
+            (_ListOpenPortsArgs, "host", f"{host}/path", {}),
+            (_DiscoverWebpagesArgs, "hostnames", [f"https://{host}"], {}),
+            (_DiscoverTakeoverCandidatesArgs, "hostnames", [f"{host}:9000"], {}),
         ]
         for schema_cls, field, value, base in cases:
             with pytest.raises(ValidationError):
                 schema_cls.model_validate({**base, field: value})
 
     def test_annotate_host_hostname_rejects_url(self, target_url: str) -> None:
-        """Annotate Host's hostname is Hostname-typed; passing the full URL fails."""
+        """Annotate Host's hostname is FQDN-typed; passing the full URL fails."""
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate(_annotate_host_base(target_url))
 
     def test_hostname_fields_lowercase_input(self, target_url: str) -> None:
-        """Hostname validator lowercases - the schema returns the normalised form."""
+        """FQDN validator lowercases - the schema returns the normalised form."""
         host = (urlparse(target_url).hostname or "").upper()
         validated = _AnnotateHostArgs.model_validate(_annotate_host_base(host))
         assert validated.hostname == host.lower()

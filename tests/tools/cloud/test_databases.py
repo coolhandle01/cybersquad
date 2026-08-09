@@ -34,6 +34,49 @@ class TestCheckElasticsearch:
         assert results[0].vuln_class == "ExposedService"
         assert "Elasticsearch" in results[0].title
 
+    def test_probes_health_endpoint_with_pinned_call_args(self):
+        # Pin the outbound call: a mutated URL, timeout, or allow_redirects
+        # silently changes what we probe. The probe hits the cluster-health
+        # endpoint on 9200, with a short timeout and redirects disabled.
+        calls: list[tuple[str, dict]] = []
+
+        def recording_get(url, **kwargs):
+            calls.append((url, kwargs))
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.text = '{"cluster_name":"prod"}'
+            return resp
+
+        with patch("requests.get", side_effect=recording_get):
+            check_elasticsearch("es.example.com")
+
+        assert len(calls) == 1
+        url, kwargs = calls[0]
+        assert url == "http://es.example.com:9200/_cluster/health"
+        assert kwargs["timeout"] == 5
+        assert kwargs["allow_redirects"] is False
+
+    def test_finding_fields_are_fully_pinned(self):
+        # A long body proves evidence carries the response excerpt (and the
+        # exact [:300] truncation boundary), not a fixed string.
+        body = '{"cluster_name":"' + "x" * 400 + '"}'
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = body
+        with patch("requests.get", return_value=mock_resp):
+            results = check_elasticsearch("es.example.com")
+
+        assert len(results) == 1
+        f = results[0]
+        assert f.title == "Unauthenticated Elasticsearch - es.example.com"
+        assert f.target == "http://es.example.com:9200/_cluster/health"
+        assert f.vuln_class == "ExposedService"
+        assert f.tool == "elasticsearch_check"
+        assert f.severity_hint == Severity.CRITICAL
+        assert f.evidence == (
+            f"Elasticsearch responded without authentication.\nResponse: {body[:300]}"
+        )
+
     def test_no_finding_on_403(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 403
@@ -68,6 +111,55 @@ class TestCheckCouchdb:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
         assert "CouchDB" in results[0].title
+
+    def test_no_finding_when_status_200_but_marker_absent(self):
+        # 200 with no database-list marker ("[") must NOT be reported: the
+        # guard is status AND marker, so a bare 200 (e.g. an auth-gated
+        # landing page) is not an unauthenticated listing. Kills the
+        # and->or mutation on the guard.
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "Welcome to Apache CouchDB"  # no '['
+        with patch("requests.get", return_value=mock_resp):
+            assert check_couchdb("couch.example.com") == []
+
+    def test_probes_all_dbs_endpoint_with_pinned_call_args(self):
+        calls: list[tuple[str, dict]] = []
+
+        def recording_get(url, **kwargs):
+            calls.append((url, kwargs))
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.text = '["_users"]'
+            return resp
+
+        with patch("requests.get", side_effect=recording_get):
+            check_couchdb("couch.example.com")
+
+        assert len(calls) == 1
+        url, kwargs = calls[0]
+        assert url == "http://couch.example.com:5984/_all_dbs"
+        assert kwargs["timeout"] == 5
+        assert kwargs["allow_redirects"] is False
+
+    def test_finding_fields_are_fully_pinned(self):
+        body = "[" + "x" * 400  # long, marker-bearing body
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = body
+        with patch("requests.get", return_value=mock_resp):
+            results = check_couchdb("couch.example.com")
+
+        assert len(results) == 1
+        f = results[0]
+        assert f.title == "Unauthenticated CouchDB - couch.example.com"
+        assert f.target == "http://couch.example.com:5984/_all_dbs"
+        assert f.vuln_class == "ExposedService"
+        assert f.tool == "couchdb_check"
+        assert f.severity_hint == Severity.CRITICAL
+        assert f.evidence == (
+            f"CouchDB listed all databases without authentication.\nResponse: {body[:300]}"
+        )
 
     def test_no_finding_on_401(self):
         mock_resp = MagicMock()

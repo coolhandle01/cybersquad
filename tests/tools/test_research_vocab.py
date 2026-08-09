@@ -113,7 +113,7 @@ class TestComposeResearchBriefDoc:
         assert "ssti-jinja2" in composed
 
     def test_picks_up_appended_recon_evidence_kind(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Simulates #45 landing: ASN/CIDR added to ReconResult and registered
+        # Simulates #45 landing: ASN/CIDR added to AttackGraph and registered
         # here, must appear in the composed doc without touching the Finalise
         # Research tool source.
         future_entry = ("asn", "an AS number from recon.asns[*]")

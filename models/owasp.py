@@ -2,10 +2,10 @@
 models/owasp.py - typed OWASP catalogue shapes.
 
 ``OWASPCategory`` is the 2021 Top 10 enum the squad uses for the
-``@owasp(...)`` decorator stamp on pentest probes and for the typed
-``AttackPlanItem.owasp_category`` field. Lives here (not in
-``tools/pentest/owasp.py``) so ``models/attack.py`` can carry the
-typed field without the package-level circular-import trap that
+``@owasp(...)`` decorator stamp on pentest probes. Lives here (not in
+``tools/pentest/owasp.py``) so the typed stamp reader
+``tools/pentest/_stamps.py`` and ``models/framework.py`` can import it
+without the package-level circular-import trap that
 ``from tools.pentest.owasp`` triggers (loading ``tools/pentest/__init__.py``
 which imports a dozen probe modules, each of which imports ``models``).
 

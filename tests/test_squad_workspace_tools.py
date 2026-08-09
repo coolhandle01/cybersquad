@@ -1,7 +1,7 @@
 """
 tests/test_squad_workspace_tools.py - exercise the shared workspace @tool
 wrappers (``read_run_filelist_tool`` / ``read_run_file_tool`` /
-``read_attack_plan_tool``) plus the ``current_programme()`` reader and the
+``read_attack_forest_tool``) plus the ``current_programme()`` reader and the
 ``@cyber_tool`` auto-detected scope-filter mechanism that builds on it.
 
 The wrappers are thin: unmarshal JSON, call into tools/workspace helpers,
@@ -46,23 +46,25 @@ class TestSharedWorkspaceTools:
         with pytest.raises(ValueError, match=r"must not contain '\.\.'"):
             read_run_file_tool.func("../etc/passwd")
 
-    def test_read_attack_plan_tool_returns_typed_plan(self, attack_plan, run_dir) -> None:
-        from models.attack import AttackPlan
-        from squad import read_attack_plan_tool
+    def test_read_attack_forest_tool_returns_typed_plan(self, attack_forest, run_dir) -> None:
+        from models.attack import AttackForest
+        from squad import read_attack_forest_tool
 
-        (run_dir / "attack_plan.json").write_text(attack_plan.model_dump_json(), encoding="utf-8")
-        result = read_attack_plan_tool.func()
-        assert isinstance(result, AttackPlan)
-        assert result.programme_handle == attack_plan.programme_handle
-        assert len(result.items) == len(attack_plan.items)
-        assert result.items[0].probe == attack_plan.items[0].probe
-        assert result.items[0].expected_ceiling == attack_plan.items[0].expected_ceiling
+        (run_dir / "attack_forest.json").write_text(
+            attack_forest.model_dump_json(), encoding="utf-8"
+        )
+        result = read_attack_forest_tool.func()
+        assert isinstance(result, AttackForest)
+        assert result.programme_handle == attack_forest.programme_handle
+        assert len(result.trees) == len(attack_forest.trees)
+        assert result.trees[0].probe == attack_forest.trees[0].probe
+        assert result.trees[0].expected_ceiling == attack_forest.trees[0].expected_ceiling
 
-    def test_read_attack_plan_tool_raises_when_missing(self, run_dir) -> None:
-        from squad import read_attack_plan_tool
+    def test_read_attack_forest_tool_raises_when_missing(self, run_dir) -> None:
+        from squad import read_attack_forest_tool
 
         with pytest.raises(FileNotFoundError, match="attack plan not found"):
-            read_attack_plan_tool.func()
+            read_attack_forest_tool.func()
 
 
 class TestCurrentProgramme:
@@ -75,7 +77,7 @@ class TestCurrentProgramme:
     """
 
     def test_returns_programme_from_run_dir(self, programme, run_dir) -> None:
-        from squad.workspace_tools import current_programme
+        from squad.tools.workspace_tools import current_programme
 
         (run_dir / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
         result = current_programme()
@@ -83,15 +85,15 @@ class TestCurrentProgramme:
         assert result.in_scope == programme.in_scope
 
     def test_raises_when_programme_json_missing(self, run_dir) -> None:
-        from squad.workspace_tools import current_programme
+        from squad.tools.workspace_tools import current_programme
 
         with pytest.raises(FileNotFoundError):
             current_programme()
 
 
-# Scope-guard behavioural coverage lives in ``tests/test_recon_tools.py``
-# ``TestInScopeTypedAliases`` - it exercises the ``TargetHostnames`` /
-# ``TargetEndpoints`` / ``TargetHostname`` / ``TargetEndpoint`` typed
+# Scope-guard behavioural coverage lives in ``tests/tools/recon/test_scope.py``
+# ``TestInScopeTypedAliases`` - it exercises the ``TargetFQDNs`` /
+# ``TargetEndpoints`` / ``TargetFQDN`` / ``TargetEndpoint`` typed
 # aliases that are the scope guard. ``cyber_tool`` itself is a thin
 # args_schema attacher now, exercised end-to-end via every
 # wrapper test.
@@ -103,16 +105,16 @@ class TestCurrentProgramme:
 # this block holds the schema-side contract.
 def _load_workspace_schemas() -> dict[str, type[BaseModel]]:
     """Resolve the schemas lazily so the module imports without the env vars."""
-    from squad.workspace_tools import (
+    from squad.tools.workspace_tools import (
         _ListRunFilesArgs,
-        _ReadAttackPlanArgs,
+        _ReadAttackForestArgs,
         _ReadRunFileArgs,
     )
 
     return {
         "List Run Files": _ListRunFilesArgs,
         "Read Run File": _ReadRunFileArgs,
-        "Read Attack Plan": _ReadAttackPlanArgs,
+        "Read Attack Plan": _ReadAttackForestArgs,
     }
 
 
@@ -144,28 +146,28 @@ class TestWorkspaceArgsSchemas:
 
     def test_list_run_files_accepts_empty_payload(self) -> None:
         """``List Run Files`` takes no parameters; the empty payload is canonical."""
-        from squad.workspace_tools import _ListRunFilesArgs
+        from squad.tools.workspace_tools import _ListRunFilesArgs
 
         instance = _ListRunFilesArgs.model_validate({})
         assert isinstance(instance, _ListRunFilesArgs)
 
-    def test_read_attack_plan_accepts_empty_payload(self) -> None:
+    def test_read_attack_forest_accepts_empty_payload(self) -> None:
         """``Read Attack Plan`` takes no parameters; the empty payload is canonical."""
-        from squad.workspace_tools import _ReadAttackPlanArgs
+        from squad.tools.workspace_tools import _ReadAttackForestArgs
 
-        instance = _ReadAttackPlanArgs.model_validate({})
-        assert isinstance(instance, _ReadAttackPlanArgs)
+        instance = _ReadAttackForestArgs.model_validate({})
+        assert isinstance(instance, _ReadAttackForestArgs)
 
     def test_read_run_file_accepts_relative_path(self) -> None:
         """``Read Run File`` accepts a bare relative-path string."""
-        from squad.workspace_tools import _ReadRunFileArgs
+        from squad.tools.workspace_tools import _ReadRunFileArgs
 
         instance = _ReadRunFileArgs.model_validate({"relative_path": "recon.json"})
         assert instance.relative_path == "recon.json"
 
     def test_read_run_file_rejects_missing_relative_path(self) -> None:
         """``relative_path`` is required - the wrapper has no default."""
-        from squad.workspace_tools import _ReadRunFileArgs
+        from squad.tools.workspace_tools import _ReadRunFileArgs
 
         with pytest.raises(ValidationError):
             _ReadRunFileArgs.model_validate({})

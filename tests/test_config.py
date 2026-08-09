@@ -205,3 +205,17 @@ class TestAppConfig:
 
         c = AppConfig()
         assert c.verbose is False
+
+    def test_output_log_enabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_OUTPUT_LOG", raising=False)
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.output_log_enabled is True
+
+    def test_output_log_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_OUTPUT_LOG", "false")
+        from config import AppConfig
+
+        c = AppConfig()
+        assert c.output_log_enabled is False

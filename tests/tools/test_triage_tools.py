@@ -116,10 +116,10 @@ def _good_assessment(raw: RawFinding, target_apex: str, **overrides) -> TriageAs
         ),
     }
     base.update(overrides)
-    if "severity" in overrides or "severity_hint" in overrides:
-        # severity_decision must agree with the severity vs severity_hint relation
-        if base["severity"] != base["severity_hint"]:
-            base.setdefault("severity_decision", SeverityDecision.RAISE)
+    # severity_decision must agree with the severity vs severity_hint relation
+    severity_touched = "severity" in overrides or "severity_hint" in overrides
+    if severity_touched and base["severity"] != base["severity_hint"]:
+        base.setdefault("severity_decision", SeverityDecision.RAISE)
     return TriageAssessment(**base)
 
 
@@ -408,7 +408,7 @@ class TestDiscardEntry:
             vuln_class=in_scope_raw.vuln_class,
             severity_hint=in_scope_raw.severity_hint,
             reason=DiscardReason.OUT_OF_SCOPE,
-            rationale="Hostname not in structured scope; test asset belonging to vendor.",
+            rationale="FQDN not in structured scope; test asset belonging to vendor.",
         )
         again = DiscardEntry.model_validate_json(d.model_dump_json())
         assert again.reason == DiscardReason.OUT_OF_SCOPE

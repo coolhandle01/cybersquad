@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/coolhandle01/cybersquad/security/advisories/new
+    about: Disclose vulnerabilities privately via GitHub's private reporting. Never file a public issue for a security bug - see SECURITY.md.

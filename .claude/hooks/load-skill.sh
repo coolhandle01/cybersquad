@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude Code PreToolUse hook for Write|Edit.
+# Claude Code PreToolUse hook for Write|Edit|Read.
 #
 # Maps the target file path to a stack of cybersquad skills and injects each
 # matched skill's SKILL.md content into the model context via
@@ -13,8 +13,10 @@
 # layer on top, so the specialist appears later in the context window.
 #
 # Session-scoped sentinel: each skill is injected at most once per session, on
-# the first matching Edit/Write. Subsequent edits in the same session are silent
-# for skills that have already loaded.
+# the first matching Write/Edit/Read. Subsequent matches in the same session are
+# silent for skills that have already loaded. Read is matched as well as
+# Write/Edit so a reviewer - who reads, greps and runs tests but never edits -
+# loads the governing skill too, not only the author.
 #
 # Wired via .claude/settings.json. Silently noops if jq is missing or the
 # expected stdin shape is absent - never blocks the edit.
@@ -32,6 +34,9 @@ session_id=$(echo "$input" | jq -r '.session_id // ""')
 
 [ -z "$file_path" ] && exit 0
 [ -z "$session_id" ] && exit 0
+
+# file_path is absolute (Claude Code sends absolute paths); a relative one
+# matches none of the */dir/* patterns below and harmlessly no-ops - not a bug.
 
 # Repo-root anchor: hook runs from project cwd; resolve skill paths against it.
 repo_root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -57,9 +62,9 @@ esac
 # appears later (more prominent) in context.
 #
 # cybersquad-tool covers any Python file under squad/ at any depth -
-# the catch-all pattern matches the 18+ wrapper files under
-# squad/<member>/<sub>/*.py (probes/, cloud/) alongside the member
-# __init__.py files and the workspace_tools shared layer. Decorator
+# the catch-all pattern matches the wrapper files under
+# squad/<member>/tools/**/*.py (including probes/, cloud/) alongside the
+# member __init__.py files and the squad/tools/ shared layer. Decorator
 # implementation files (_decorator.py) are inclusive false positives:
 # they implement the conventions the skill enforces, so loading is
 # appropriate rather than noisy.
@@ -70,14 +75,14 @@ if [ "$in_tests" = 0 ]; then
             ;;
     esac
     # cybersquad-pentest-tool covers the @pentest_tool wrapper surface
-    # (probes/) and its check_X helper layer (tools/pentest/). Cloud
-    # wrappers use @cyber_tool, not @pentest_tool, so they correctly
-    # stay on the universal skill only.
+    # (squad/penetration_tester/tools/probes/) and its check_X helper
+    # layer (tools/pentest/). Cloud wrappers use @cyber_tool, not
+    # @pentest_tool, so they correctly stay on the universal skill only.
     case "$file_path" in
         */tools/pentest/*.py \
         |*/squad/penetration_tester/__init__.py \
-        |*/squad/penetration_tester/_decorator.py \
-        |*/squad/penetration_tester/probes/*.py)
+        |*/squad/penetration_tester/tools/_decorator.py \
+        |*/squad/penetration_tester/tools/probes/*.py)
             matches+=(cybersquad-pentest-tool)
             ;;
     esac
@@ -99,6 +104,18 @@ fi
 case "$file_path" in
     */models/*.py)
         matches+=(cybersquad-models)
+        ;;
+esac
+
+# cybersquad-oam stacks on cybersquad-models for the OAM asset layer - the
+# asset / property / relation shapes under models/asset/ that implement
+# OWASP amass's Open Asset Model. Generic model rules load first; the OAM
+# specialist (faithful-to-amass, OAM-names-win, properties-as-annotations)
+# layers on top. No in_tests guard, matching cybersquad-models: the OAM
+# contract is relevant when testing the asset shapes too.
+case "$file_path" in
+    */models/asset/*.py)
+        matches+=(cybersquad-oam)
         ;;
 esac
 
@@ -134,7 +151,7 @@ esac
 # on top of the shared-fixture catalogue for BDD edits.
 case "$file_path" in
     */tests/*)
-        matches+=(cybersquad-test-fixtures)
+        matches+=(cybersquad-tests)
         ;;
 esac
 case "$file_path" in

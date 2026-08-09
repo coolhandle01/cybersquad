@@ -5,7 +5,8 @@ The TA's job is to turn a VerifiedVulnerability into an H1-format report that a
 triager accepts on first read. The agent does the writing; this module provides
 the supporting primitives:
 
-* ``calculate_cvss_score(vector)`` - score a CVSS 3.1 vector string.
+* ``calculate_cvss_score(vector)`` - score a CVSS 3.x vector string (via the
+  ``cvss`` library).
 * ``sanitise_evidence(text)`` - redact credentials / cookies / auth headers /
   long base64 blobs from raw tool output so it is safe to inline in a report.
 * ``ReportDraft`` - the working artefact the TA composes per finding.
@@ -22,27 +23,27 @@ the supporting primitives:
 * ``save_report(report)`` - persist a finalised report to the configured
   reports directory (kept for Disclosure Coordinator compatibility).
 
-The CWE / OWASP citation hints come from ``tools/cwe_data.py`` and
-``tools/owasp_data.py`` rather than living inline here. The Technical Author
-looks them up via the dedicated tools.
+CWE enrichment comes from the ``models.mitre.CWE`` type (the bundled MITRE
+corpus) and OWASP cheat-sheet hints from ``tools/owasp_data.py``. The Technical
+Author looks them up via the dedicated tools.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import re
 import textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
+from cvss import CVSS3
+from cvss.exceptions import CVSS3Error
 from pydantic import BaseModel, Field
 
 import runtime
 from config import config
-from models import Severity, VerifiedVulnerability
+from models import CWE, Severity, VerifiedVulnerability
 from models.h1 import DisclosureReport
-from tools.cwe_data import get_by_id as cwe_get_by_id
 
 _SEVERITY_LABELS: dict[Severity, str] = {
     Severity.INFORMATIONAL: "None",
@@ -117,59 +118,19 @@ _REPORT_TEMPLATE = """\
 
 
 def calculate_cvss_score(vector: str) -> float:
-    """Compute the CVSS 3.1 base score from a vector string.
+    """Compute the CVSS 3.x base score from a vector string.
 
-    Implements the CVSS 3.1 specification formula. Returns a value in 0.0-10.0.
-    Raises ValueError for unrecognised metric abbreviations or missing metrics.
+    Delegates to the ``cvss`` library (the canonical RedHat implementation of
+    the CVSS specification) rather than re-deriving the formula by hand.
+    Returns a value in 0.0-10.0. Raises ``ValueError`` for an unparseable
+    vector, an unknown metric value, a missing mandatory metric, or a non-3.x
+    version - preserving the boundary contract the recompute call sites in
+    ``report_tools`` / ``triage_tools`` rely on (they catch ``ValueError``).
     """
-    _AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
-    _AC = {"L": 0.77, "H": 0.44}
-    _PR_U = {"N": 0.85, "L": 0.62, "H": 0.27}
-    _PR_C = {"N": 0.85, "L": 0.68, "H": 0.50}
-    _UI = {"N": 0.85, "R": 0.62}
-    _CIA = {"N": 0.00, "L": 0.22, "H": 0.56}
-
-    parts = vector.split("/")
-    if not parts or parts[0] not in ("CVSS:3.0", "CVSS:3.1"):
-        raise ValueError(f"Unrecognised CVSS version prefix in: {vector!r}")
-
-    metrics: dict[str, str] = {}
-    for part in parts[1:]:
-        if ":" not in part:
-            raise ValueError(f"Malformed metric component: {part!r}")
-        key, val = part.split(":", 1)
-        metrics[key] = val
-
     try:
-        scope = metrics["S"]
-        av = _AV[metrics["AV"]]
-        ac = _AC[metrics["AC"]]
-        pr = (_PR_C if scope == "C" else _PR_U)[metrics["PR"]]
-        ui = _UI[metrics["UI"]]
-        c = _CIA[metrics["C"]]
-        i = _CIA[metrics["I"]]
-        a = _CIA[metrics["A"]]
-    except KeyError as exc:
-        raise ValueError(f"Missing or unknown CVSS metric: {exc}") from exc
-
-    iss = 1.0 - (1.0 - c) * (1.0 - i) * (1.0 - a)
-    if scope == "U":
-        impact = 6.42 * iss
-    else:
-        impact = 7.52 * (iss - 0.029) - 3.25 * ((iss - 0.02) ** 15)
-
-    if impact <= 0:
-        return 0.0
-
-    exploitability = 8.22 * av * ac * pr * ui
-
-    if scope == "U":
-        raw = min(impact + exploitability, 10.0)
-    else:
-        raw = min(1.08 * (impact + exploitability), 10.0)
-
-    rounded = math.ceil(raw * 10) / 10
-    return round(rounded, 1)
+        return float(CVSS3(vector).base_score)
+    except CVSS3Error as exc:
+        raise ValueError(f"invalid CVSS vector {vector!r}: {exc}") from exc
 
 
 # Evidence sanitisation
@@ -530,13 +491,14 @@ def validate_draft(draft: ReportDraft) -> ValidationReport:
             )
 
     # CWE
-    if cwe_get_by_id(draft.cwe_id) is None:
+    if CWE.get(draft.cwe_id) is None:
         issues.append(
             ValidationIssue(
                 section="cwe",
                 severity="warning",
                 message=(
-                    f"CWE-{draft.cwe_id} is not in the local catalogue; double-check via Lookup CWE"
+                    f"CWE-{draft.cwe_id} is not a recognised MITRE CWE id;"
+                    " double-check via Lookup CWE"
                 ),
             )
         )
@@ -550,7 +512,7 @@ def validate_draft(draft: ReportDraft) -> ValidationReport:
 
 def render_draft_markdown(draft: ReportDraft) -> str:
     """Render a draft into H1 markdown using the report template."""
-    cwe = cwe_get_by_id(draft.cwe_id)
+    cwe = CWE.get(draft.cwe_id)
     cwe_name = cwe.name if cwe else "Other"
     steps = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(draft.steps_to_reproduce))
     evidence_block = textwrap.indent(draft.evidence[:_EVIDENCE_LIMIT], "  ")
@@ -606,10 +568,10 @@ def load_drafts() -> list[ReportDraft]:
     dir_ = _drafts_dir()
     if not dir_.is_dir():
         return []
-    drafts: list[ReportDraft] = []
-    for path in sorted(dir_.glob("*.json")):
-        drafts.append(ReportDraft.model_validate_json(path.read_text(encoding="utf-8")))
-    return drafts
+    return [
+        ReportDraft.model_validate_json(path.read_text(encoding="utf-8"))
+        for path in sorted(dir_.glob("*.json"))
+    ]
 
 
 # Verified-finding lookup
@@ -657,14 +619,16 @@ def finalise_drafts(
 
     if failures:
         lines = ["one or more drafts have unresolved errors:"]
-        for idx, issues in failures:
-            for issue in issues:
-                lines.append(f"  - draft {idx} / {issue.section}: {issue.message}")
+        lines.extend(
+            f"  - draft {idx} / {issue.section}: {issue.message}"
+            for idx, issues in failures
+            for issue in issues
+        )
         raise FinalisationError("\n".join(lines))
 
     reports: list[DisclosureReport] = []
     for draft in drafts:
-        cwe = cwe_get_by_id(draft.cwe_id)
+        cwe = CWE.get(draft.cwe_id)
         vuln = VerifiedVulnerability(
             title=draft.title,
             vuln_class=draft.vuln_class,

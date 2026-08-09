@@ -22,7 +22,7 @@ into the agent-visible docstring of each pentest tool.
 
 Append-only contract. When a new exploit family lands (issue #88, the typed
 ``Exploit`` interface), append each canonical ``Exploit.name`` to
-PROBE_VOCABULARY. When ReconResult grows new evidence-bearing fields (issue
+PROBE_VOCABULARY. When AttackGraph grows new evidence-bearing fields (issue
 #45, OWASP Amass adds ASN/CIDR), append the new kinds to
 RECON_EVIDENCE_KINDS. Framework, Cloud, and Service vocabularies are
 read live from their StrEnums - new enum members appear in the

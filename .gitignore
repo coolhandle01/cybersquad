@@ -14,6 +14,7 @@ build/
 .venv/
 venv/
 env/
+uv.lock
 
 # Reports output (contain vuln data - never commit)
 reports/
@@ -26,9 +27,20 @@ junit.xml
 htmlcov/
 coverage.xml
 
+# Mutation testing (mutmut): throwaway per-run artefacts, never committed. The
+# audit recipe writes a temporary [mutmut] setup.cfg and copies a mutants/ tree
+# beside the source; the repo itself keeps all real config in pyproject.toml, so
+# there is no genuine setup.cfg to shadow here.
+mutants/
+setup.cfg
+
 # IDE
 .idea/
-.vscode/
+# .vscode: share the project-level configs, ignore personal overrides
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json
 *.swp
 *.swo
 

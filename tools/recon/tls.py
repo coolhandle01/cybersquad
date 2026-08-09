@@ -96,7 +96,17 @@ def check_tls(endpoints: list[Endpoint]) -> list[RawFinding]:
 
     One run per unique hostname; capped at config.scan.tls_max_targets.
     If testssl.sh is not installed, logs a warning and returns [].
+
+    Skips entirely when ``config.scan.tls_enabled`` is False. testssl
+    fires hundreds of probes per host (cipher suites, protocol versions,
+    known CVEs); it has no "lite" mode that meaningfully shrinks that.
+    STEALTH posture trades the TLS-misconfig signal for the quiet
+    footprint, parallel to the traceroute gate.
     """
+    if not config.scan.tls_enabled:
+        logger.debug("TLS scan disabled by scan_mode posture; skipping")
+        return []
+
     https_eps = [
         ep
         for ep in endpoints

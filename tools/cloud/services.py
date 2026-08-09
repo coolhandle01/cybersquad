@@ -12,7 +12,7 @@ import logging
 from urllib.parse import urlparse, urlunparse
 
 from config import config
-from models import Endpoint, RawFinding, ReconResult, Severity
+from models import AttackGraph, Endpoint, RawFinding, Severity
 from models.service import Service
 from tools import http
 from tools.cloud.databases import (
@@ -150,7 +150,7 @@ def _probe_path(
 # ---------------------------------------------------------------------------
 
 
-def check_unauthenticated_databases(recon: ReconResult) -> list[RawFinding]:
+def check_unauthenticated_databases(recon: AttackGraph) -> list[RawFinding]:
     """Aggregate: run all per-engine database checks for hosts with matching open ports."""
     _port_checks = {
         9200: check_elasticsearch,

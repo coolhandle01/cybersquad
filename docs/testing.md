@@ -8,7 +8,9 @@ H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit
 
 Tests that reload modules for config isolation use `importlib.reload()` - this is the correct pattern for testing env-var-backed dataclasses.
 
-Coverage gates stack: an **absolute floor** of 90% (whole-codebase, set via `fail_under = 90` in `pyproject.toml`) catches large regressions, and a **per-PR ratchet** (`diff-cover` with `--fail-under=100` against the base branch) catches slow drift one line at a time - every line added or modified by a PR must be covered by tests. See `docs/ci.md` for how to read a diff-cover failure and how to run the per-PR gate locally before pushing. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
+Coverage gates stack: an **absolute floor** of 96% (whole-codebase, set via `fail_under = 96` in `pyproject.toml`) catches large regressions, and a **per-PR ratchet** (`diff-cover` with `--fail-under=100` against the base branch) catches slow drift one line at a time - every line added or modified by a PR must be covered by tests. See `docs/ci.md` for how to read a diff-cover failure and how to run the per-PR gate locally before pushing. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
+
+Coverage is a floor, not a measure of quality. It proves a line ran, not that a test would notice it running wrong - a suite can hold this floor and still stay green against a deliberately broken implementation. What a test must *assert*, the ways one goes green for the wrong reason, and mutation testing as the periodic audit that measures it are the test-observability doctrine in the `cybersquad-tests` skill.
 
 ## Layout
 
@@ -27,7 +29,7 @@ Pytest is configured for `--import-mode=importlib`, so subdirs do not require `_
 
 `tests/conftest.py` provides fixtures for all tests. Use them instead of defining local equivalents.
 
-The `cybersquad-test-fixtures` skill at `.claude/skills/cybersquad-test-fixtures/SKILL.md` covers the same material in a form Claude Code can load on demand when editing test files. The reference below is the same information in human-readable prose.
+The `cybersquad-tests` skill at `.claude/skills/cybersquad-tests/SKILL.md` covers the same material - and the test-observability doctrine - in a form Claude Code can load on demand when editing *or reading* test files. The reference below is the same information in human-readable prose.
 
 ## Args-schema contract tests
 

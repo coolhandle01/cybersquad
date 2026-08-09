@@ -75,3 +75,59 @@ class TestBuildCrewMCPDistribution:
         assert captured, "expected build_agent to be called for at least one member"
         for slug, extras in captured.items():
             assert extras == (fake_tool,), f"member {slug!r} did not receive the MCP tool"
+
+    def test_build_crew_forwards_resolved_output_log_file(self, monkeypatch):
+        """``build_crew`` passes ``_resolve_output_log_file()``'s value straight
+        through to ``Crew(output_log_file=...)`` (#167)."""
+        import crew
+
+        captured: dict[str, tuple] = {}
+        _wire_build_crew_mocks(monkeypatch, captured)
+        monkeypatch.setattr(crew, "_resolve_output_log_file", lambda: "/runs/r1/crew.log")
+
+        crew.build_crew()
+
+        _, kwargs = crew.Crew.call_args
+        assert kwargs["output_log_file"] == "/runs/r1/crew.log"
+
+
+class TestResolveOutputLogFile:
+    """``_resolve_output_log_file`` keys on ``run_id`` alone (not the
+    per-programme ``run_dir()``) so it resolves at ``build_crew()`` time, before
+    the PM binds ``programme_handle`` mid-run - see #167."""
+
+    def test_returns_run_scoped_path_and_creates_parent(self, monkeypatch, tmp_path):
+        import crew
+
+        monkeypatch.setattr(crew.config, "output_log_enabled", True)
+        monkeypatch.setattr(crew.config, "reports_dir", str(tmp_path))
+        monkeypatch.setattr("runtime.run_id", "20260531-000000-abc123")
+
+        result = crew._resolve_output_log_file()
+
+        expected = tmp_path / "20260531-000000-abc123" / "crew.log"
+        assert result == str(expected)
+        # Parent created eagerly: CrewAI's FileHandler appends without mkdir,
+        # and the first write lands before any tool makes the run folder.
+        assert expected.parent.is_dir()
+
+    def test_returns_none_when_disabled(self, monkeypatch, tmp_path):
+        import crew
+
+        monkeypatch.setattr(crew.config, "output_log_enabled", False)
+        monkeypatch.setattr(crew.config, "reports_dir", str(tmp_path))
+        monkeypatch.setattr("runtime.run_id", "run-1")
+
+        assert crew._resolve_output_log_file() is None
+        assert not (tmp_path / "run-1").exists()
+
+    def test_returns_none_when_no_run_bound(self, monkeypatch, tmp_path):
+        """Dry-run path: ``build_crew`` runs without ``bind_run_id``, so
+        ``runtime.run_id`` is empty and no log is wired."""
+        import crew
+
+        monkeypatch.setattr(crew.config, "output_log_enabled", True)
+        monkeypatch.setattr(crew.config, "reports_dir", str(tmp_path))
+        monkeypatch.setattr("runtime.run_id", "")
+
+        assert crew._resolve_output_log_file() is None

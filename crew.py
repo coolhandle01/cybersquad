@@ -12,6 +12,7 @@ from crewai import LLM, Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.memory import Memory
 
+import runtime
 from config import config
 from mcp_servers import ProvisionedMCPTools
 from squad import SQUAD_SKILLS_DIR, SquadMember, build_agent
@@ -68,6 +69,33 @@ def _build_long_term_memory() -> Memory | None:
     return Memory(storage="lancedb", root_scope="/long_term")
 
 
+def _resolve_output_log_file() -> str | None:
+    """Resolve the CrewAI event-stream log path for this run, or None (#167).
+
+    Returns ``{reports_dir}/{run_id}/crew.log`` - alongside ``metrics.json``
+    (see ``tools.metrics.save_metrics``) so the log and the run it describes
+    archive as a unit. ``runtime.run_id`` is bound by ``main.py`` before
+    ``build_crew()``; the ``--dry-run`` path leaves it empty, so we return
+    None there (and when ``CYBERSQUAD_OUTPUT_LOG`` is off) rather than wiring
+    a log for a crew that never executes.
+
+    The parent directory is created eagerly: CrewAI's ``FileHandler`` appends
+    without creating it, and the first write lands at the first task's start -
+    before any tool has made the run folder.
+
+    We key on ``run_id`` alone, not ``runtime.run_dir()`` (which also needs
+    ``programme_handle``). The handle is bound mid-run by the PM's Save
+    Selected Programme - long after this resolves, and after the first log
+    line is already written - so the per-programme run dir is unavailable
+    here by construction.
+    """
+    if not config.output_log_enabled or not runtime.run_id:
+        return None
+    log_path = Path(config.reports_dir) / runtime.run_id / "crew.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return str(log_path)
+
+
 def build_crew(
     verbose: bool | None = None,
     mcp_tools: ProvisionedMCPTools | None = None,
@@ -108,4 +136,5 @@ def build_crew(
         memory=memory,
         embedder=None,
         skills=[SQUAD_SKILLS_DIR] if SQUAD_SKILLS_DIR.is_dir() else None,
+        output_log_file=_resolve_output_log_file(),
     )

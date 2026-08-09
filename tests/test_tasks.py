@@ -38,14 +38,20 @@ class _FakeTask:
         description: str,
         expected_output: str,
         agent: object,
+        name: str = "",
         context: list | None = None,
         human_input: bool = False,
+        guardrail: object = None,
+        guardrail_max_retries: int | None = None,
     ) -> None:
+        self.name = name
         self.description = description
         self.expected_output = expected_output
         self.agent = agent
         self.context = context or []
         self.human_input = human_input
+        self.guardrail = guardrail
+        self.guardrail_max_retries = guardrail_max_retries
 
 
 class TestSquadMemberRead:
@@ -62,19 +68,19 @@ class TestSquadMemberRead:
             member.read("role")
 
 
-class TestAttackPlanWiring:
+class TestAttackForestWiring:
     """The typed attack plan is the contract between VR research, PT, and VR
     triage. Both consumers must expose Read Attack Plan."""
 
-    def test_penetration_tester_has_read_attack_plan_tool(self) -> None:
-        from squad import read_attack_plan_tool
+    def test_penetration_tester_has_read_attack_forest_tool(self) -> None:
+        from squad import read_attack_forest_tool
 
-        assert read_attack_plan_tool in PENETRATION_TESTER.tools
+        assert read_attack_forest_tool in PENETRATION_TESTER.tools
 
-    def test_vulnerability_researcher_has_read_attack_plan_tool(self) -> None:
-        from squad import read_attack_plan_tool
+    def test_vulnerability_researcher_has_read_attack_forest_tool(self) -> None:
+        from squad import read_attack_forest_tool
 
-        assert read_attack_plan_tool in VULNERABILITY_RESEARCHER.tools
+        assert read_attack_forest_tool in VULNERABILITY_RESEARCHER.tools
 
 
 class TestBuildTasks:
@@ -101,6 +107,23 @@ class TestBuildTasks:
             assert task.description
             assert task.expected_output
 
+    def test_each_task_has_display_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Every task carries a human-readable ``name`` from its ``name.md``,
+        so a task self-describes when something walks ``crew.tasks``."""
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        tasks = build_tasks(self._agents())
+        for task in tasks:
+            assert task.name, "task is missing a display name"
+            assert "---" not in task.name
+
+    def test_vr_two_tasks_have_distinct_names(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The VR owns both research and triage; per-task ``name.md`` keeps them
+        distinct rather than collapsing to the shared agent role."""
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        _select, _recon, research, _pentest, triage, _write, _submit = build_tasks(self._agents())
+        assert research.name != triage.name
+        assert research.agent is triage.agent  # same agent, different tasks
+
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
@@ -111,6 +134,20 @@ class TestBuildTasks:
         assert triage.context == [pentest, research, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
+
+    def test_select_task_wired_with_guardrail(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from squad.guardrails import validate_select_output
+
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        select, *_rest = build_tasks(self._agents())
+        assert select.guardrail is validate_select_output
+        assert select.guardrail_max_retries == 2
+
+    def test_only_select_task_is_guarded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+        select, *rest = build_tasks(self._agents())
+        assert select.guardrail is not None
+        assert all(t.guardrail is None for t in rest)
 
     def test_human_input_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import importlib

@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from crewai import LLM, Agent, Task
 from crewai.tools import BaseTool, tool
@@ -90,8 +90,8 @@ def cyber_tool(
 
     Scope safety is a Pydantic-native property of the args_schema, not
     of this decorator: agent-facing target fields are typed via the
-    ``TargetHostnames`` / ``TargetEndpoints`` (list, filter) or
-    ``TargetHostname`` / ``TargetEndpoint`` (single, reject) aliases
+    ``TargetFQDNs`` / ``TargetEndpoints`` (list, filter) or
+    ``TargetFQDN`` / ``TargetEndpoint`` (single, reject) aliases
     in ``tools.recon.scope``. The ``AfterValidator`` on each alias
     consults ``current_programme()`` during
     ``args_schema.model_validate(...)`` - CrewAI's tool-call path runs
@@ -108,12 +108,12 @@ def cyber_tool(
 
 
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,
-# because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
+# because ``squad/tools/workspace_tools.py`` decorates with ``@cyber_tool`` and
 # would hit a circular import if pulled in alongside the top-of-module
 # imports. The deferred-import pattern is explicitly endorsed by ruff for
 # this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
-from squad.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
-    read_attack_plan_tool,
+from squad.tools.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
+    read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,
 )
@@ -179,7 +179,10 @@ def build_agent(
     adapter and live outside the ``SquadTool`` Protocol surface by
     design.
     """
-    skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
+    # CrewAI's `skills` field rejects an explicitly-empty list (min_length=1)
+    # but accepts None (its default) - so members without a specialist
+    # skills/ dir pass None rather than [], leaving the field at its default.
+    skills: list[Path] | None = [member.skills_dir] if member.skills_dir.is_dir() else None
     # Static, contract-tested tools first; provisioned-MCP tools spliced
     # on the end. The order is observable in the LLM-visible tool menu -
     # the agent's canonical typed surface opens the menu, MCP-sourced
@@ -210,17 +213,36 @@ def build_task(
     agent: Agent,
     context: list[Task] | None = None,
     human_input: bool = False,
+    *,
+    guardrail: Callable[..., tuple[bool, Any]] | None = None,
+    max_retries: int = 0,
 ) -> Task:
     """Create a Task from the member's task-specific prose files.
 
-    Reads description and expected_output from ``<member.dir>/<task_name>/``.
+    Reads name, description, and expected_output from
+    ``<member.dir>/<task_name>/``. ``task_name`` is the directory slug (a good
+    filename); ``name.md`` carries the human-readable display name stamped onto
+    ``Task.name`` (e.g. ``recon`` -> "Reconnaissance"), so a task self-describes
+    when something walks ``crew.tasks`` - the VR's two tasks (research, triage)
+    stay distinct rather than both collapsing to the agent role.
+
+    ``guardrail`` is an optional CrewAI *function* guardrail
+    (``(TaskOutput) -> (bool, Any)``) that validates the task output and, on
+    failure, feeds the reason back to the agent for a retry. ``max_retries``
+    bounds those retries; pass it alongside a guardrail so failures converge or
+    fail loudly rather than looping. Both default to ``None`` (CrewAI's own
+    defaults), keeping un-guarded tasks byte-for-byte unchanged. See the
+    ``cybersquad-task`` skill's guardrails section and ``squad/guardrails.py``.
     """
     return Task(
+        name=member.read(task_name, "name"),
         description=member.read(task_name, "description"),
         expected_output=member.read(task_name, "expected_output"),
         agent=agent,
         context=context or [],
         human_input=human_input,
+        guardrail=guardrail,
+        guardrail_max_retries=max_retries,
     )
 
 
@@ -230,7 +252,7 @@ __all__ = [
     "build_agent",
     "build_task",
     "cyber_tool",
-    "read_attack_plan_tool",
+    "read_attack_forest_tool",
     "read_run_file_tool",
     "read_run_filelist_tool",
 ]

@@ -8,15 +8,41 @@ version = "0.1.0"
 description = "Autonomous bug bounty pipeline powered by CrewAI"
 requires-python = ">=3.12"
 dependencies = [
-    "crewai[anthropic]>=1.14.0",
-    "crewai-tools>=0.15.0",
+    "crewai[anthropic]>=1.15.6",
+    "crewai-tools>=1.15.6",
     "mcp>=1.0.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
     "beautifulsoup4>=4.12,<5.0",
     "dnspython>=2.6",
+    # email-validator is the canonical Python email validator (the same
+    # library Pydantic's EmailStr uses under the hood). Used by the
+    # ``Email`` primitive in models.primitives - keeps the typed-str
+    # primitive pattern consistent with FQDN / IPAddress / HttpUrl.
+    "email-validator>=2.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0",
+    # CPE (Common Platform Enumeration) parsing + binding normalisation.
+    # nmap -sV emits the legacy CPE 2.2 URI binding (cpe:/a:...); this
+    # library converts it to the canonical CPE 2.3 formatted string so the
+    # typed ``cpe`` fields and the VR's CVE lookup speak one binding.
+    # NOTE: LGPLv3 - the repo's first copyleft dependency. Imported as a
+    # library only (no modification / static linking), so the obligations
+    # are light, but flagging it for the licence record.
+    "cpe>=1.3",
+    # CVSS vector parsing + base-score + severity, the canonical RedHat
+    # implementation of the CVSS spec. Replaces the hand-derived CVSS 3.1
+    # formula in tools/report_tools.calculate_cvss_score and backs the
+    # ``CvssVector`` primitive's validation in models.nvd. Pure-Python, zero
+    # runtime deps. NOTE: LGPLv3+ (same copyleft posture as ``cpe`` above) -
+    # imported as a library only, flagged for the licence record.
+    "cvss>=3.4",
+    # CWE corpus: the full MITRE Common Weakness Enumeration database, bundled
+    # offline (ships the CWE XML inside the wheel - no network). Backs the
+    # ``models.mitre.CWE`` type, which validates a CWE id by corpus membership
+    # and carries MITRE's canonical name/description - no hand-vendored CWE
+    # data anywhere. MIT licence (data under MITRE's CWE Terms of Use).
+    "cwe2>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -39,10 +65,10 @@ mcp = [
     # MCP is constructed - a non-TTY environment (CI, web session, daemon)
     # then crashes the host. Pull the extra explicitly so the dependency is
     # declared, not inferred from "we installed crewai-tools and hoped".
-    "crewai-tools[mcp]>=1.14.5",
+    "crewai-tools[mcp]>=1.15.6",
     # The official Anthropic reference time server.
     # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
-    "mcp-server-time==2026.1.26",
+    "mcp-server-time==2026.7.10",
 ]
 dev = [
     # Testing
@@ -54,7 +80,7 @@ dev = [
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
     # Linting & formatting
-    "ruff>=0.4",
+    "ruff>=0.16",
     "mypy>=1.10",
     "pylint>=4.0",
     "types-requests>=2.32",
@@ -105,7 +131,7 @@ omit = ["tests/*", ".venv/*"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 96
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
@@ -118,6 +144,13 @@ exclude_lines = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# Markdown is out of scope for the formatter. Since 0.16 ruff formats Python
+# inside fenced code blocks, which reaches the SKILL.md files and docs/. Those
+# snippets are hand-wrapped to stay compact: a skill is loaded into an agent's
+# context, so expanding a three-line call to one argument per line costs budget
+# and buys the reader nothing. ruff floats unpinned here, so this exclusion is
+# the only thing holding that scope back - do not drop it to silence a diff.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = [
@@ -131,6 +164,9 @@ select = [
     "S",    # flake8-bandit (security - basic layer)
     "ANN",  # flake8-annotations (type hints)
     "RUF",  # ruff-specific (catches stale noqa, unsorted __all__, mutable defaults)
+    "SIM",  # flake8-simplify (collapsible with-statements, redundant ifs)
+    "PERF", # perflint (manual list comprehensions, dict-iterator footguns)
+    "RET",  # flake8-return (unnecessary else after return, etc.)
 ]
 ignore = [
     "S101",    # use of assert (fine in tests)
@@ -171,14 +207,19 @@ disallow_untyped_defs = false
 
 [tool.pylint.main]
 recursive = true
-ignore = [".venv"]
+# .claude holds agent worktrees - full checkouts of this repo at other commits.
+# git ignores them; a recursive linter does not, and would score a stale second
+# copy of every module into the fail-under gate below. That breaks the CI parity
+# the "Before you commit" stack promises, since CI clones fresh and never has
+# them.
+ignore = [".venv", ".claude"]
 ignore-paths = ["tests/.*"]
-# Locks the current design-rule health (full-repo score ~9.90; the
+# Locks the current design-rule health (full-repo score ~9.91; the
 # agent-orchestration layer alone scores ~9.97) with a small epsilon
 # for typo-grade noise. A new C0302 file-too-big suppression or a
 # handful of new R0913 / R0914 functions slipping in fails CI - either
 # fix the underlying smell or raise this knob deliberately.
-fail-under = 9.85
+fail-under = 9.88
 
 [tool.pylint."messages control"]
 disable = ["all"]
@@ -202,7 +243,9 @@ max-module-lines = 500
 
 [tool.bandit]
 targets = ["."]
-exclude_dirs = ["tests", ".venv"]
+# .claude for the same reason as pylint's ignore: agent worktrees are full
+# checkouts, and scanning them reports every finding twice.
+exclude_dirs = ["tests", ".venv", ".claude"]
 skips = [
     "B404",  # import subprocess - we use it intentionally for binary wrappers
     "B603",  # subprocess without shell=True - correct, we never use shell=True

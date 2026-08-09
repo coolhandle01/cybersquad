@@ -1,5 +1,5 @@
 """
-tools/recon/query.py - slice a saved ReconResult without loading it whole.
+tools/recon/query.py - slice a saved AttackGraph without loading it whole.
 
 The Penetration Tester gets a recon.json path from the OSINT Analyst.
 Reading the entire file inflates its context with material it does not
@@ -12,12 +12,12 @@ so the agent can issue a typed query rather than a brute-force read.
 
 from __future__ import annotations
 
-from models import EndpointPage, ReconResult
+from models import AttackGraph, EndpointPage
 from tools.workspace import resolve_run_path
 
 
-def _load(recon_path: str) -> ReconResult:
-    return ReconResult.model_validate_json(resolve_run_path(recon_path).read_text(encoding="utf-8"))
+def _load(recon_path: str) -> AttackGraph:
+    return AttackGraph.model_validate_json(resolve_run_path(recon_path).read_text(encoding="utf-8"))
 
 
 def recon_subdomains(recon_path: str, host_filter: str | None = None) -> list[str]:

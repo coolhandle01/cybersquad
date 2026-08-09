@@ -13,6 +13,8 @@ python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
+Use Python 3.12 - it is the version CI pins (`.github/workflows/ci.yml`) and the `requires-python` floor.
+
 Then run the full CI stack locally, in this order. All six must pass before pushing - never "push and let CI tell me":
 
 ```bash
@@ -24,6 +26,8 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
+If you apply a `ruff --fix` - especially `--unsafe-fixes` - re-run the whole stack, not just ruff. An autofix can change behaviour ruff itself cannot see, and mypy, the tests, and the coverage gate are what catch it. See "Linter and SAST findings are engineering signal" below for why.
+
 Advisory (not CI-gated): periodically run `vulture` to surface dead code that the import graph cannot see. Pydantic model fields trigger false positives at lower confidence, so 80% is the gospel floor:
 
 ```bash
@@ -33,7 +37,7 @@ Advisory (not CI-gated): periodically run `vulture` to surface dead code that th
 
 Treat findings as candidates for removal, not removal mandates - check the import graph (re-exports, conditional consumers) before deleting.
 
-`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 90% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
+`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 96% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
 
 Never push a change you haven't actually executed. A passing `mypy` run after removing a `# type: ignore` means nothing if the file wasn't reachable.
 
@@ -53,9 +57,9 @@ This discipline is not negotiable for code that ships. Bug-fix PRs without a reg
 
 ### Branch coverage on your diff is 100% or you say why
 
-The 90% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
+The 96% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
 
-Line coverage at 100% does not mean tested. Branch coverage at 100% on your diff means the conditional has been thought about.
+Line coverage at 100% does not mean tested. Branch coverage at 100% on your diff means the conditional has been thought about - but thought-about is not *observed*: a test earns its place only when you can name a wrong implementation it reddens against. Writing tests that observe rather than merely execute - the paper-tiger failure modes, and mutation as the audit that measures them - is the `cybersquad-tests` skill's doctrine; #232 tracks the mutation-audit findings and the diff-scoped CI plan.
 
 ## Universal rules
 
@@ -136,6 +140,8 @@ result = something_dangerous()  # nosec
 
 The flip side: when you encounter a suppression in unfamiliar code, the suppressions are the codebase telling you where the load-bearing assumptions live. The one-line `why` is the original author handing you context the type system or scanner could not encode - read it before you change anything that depends on it.
 
+The same logic runs in reverse for a `ruff --fix`. A finding *flags* an assumption the tool could not verify; an autofix *acts* on one. `ruff check --fix` is safe, but `--fix --unsafe-fixes` rewrites code into a shape ruff judges equivalent on syntax alone - it cannot see runtime types, so an "equivalent" rewrite can silently change behaviour. Re-run the whole stack after any autofix: mypy, the tests, and the branch-coverage ratchet are what verify the rewrite, and a failure there on autofixed code is the signal, not an obstacle to route around.
+
 ### Pylint says split, not suppress
 
 Pylint is scoped (see `[tool.pylint]` in `pyproject.toml`) to the design rules that fire when a module, function, or class outgrows its single responsibility. When it fails on code you edited, split the unit - pull a cohesive piece into its own module, extract a helper. Suppression (`# pylint: disable=...`) is reserved for cases where the unit genuinely is one thing; same grammar as other suppressions, one-line comment explaining why.
@@ -157,7 +163,16 @@ When you find yourself wanting to break a stated rule (rename for clarity in a n
 
 1. Ask. A one-line question is cheap and prevents wrong work.
 2. Note it via FIXME or TODO using the grammar above, and proceed with the original task untouched.
-3. Defer it by opening a follow-up issue and linking it.
+3. Open an issue. Default to a **sub-issue of the parent feature** so it lands in the same PR. Standalone "follow-up" issues need explicit justification of why the concern is orthogonal - name the parent feature or issue number the work belongs under. A feature PR that opens three "follow-on" `feat` issues is the same PR landing with three known gaps; the burnup graph notices.
+
+### Reviewer-surfaced gaps default to blockers
+
+When a PR review surfaces a gap - UA not wired, evidence flow missing, scope guard incomplete, invariant the rest of the codebase enforces this one wrapper does not - the default is **blocker, sub-issue under the parent feature, address before merge**. The exceptions are narrow:
+
+- The gap is genuinely about a different feature. Name it: "this belongs under #N, not the current PR".
+- The cost of holding the PR exceeds the cost of two follow-ups landing later. Justify in the PR thread, not as an unspoken assumption.
+
+If you find yourself reaching for the exception, write down the orthogonal scope explicitly. "Follow-up" as a verbal shrug is the trap this section is closing - the same PR landing with three "follow-on" issues attached is the same PR landing with three known gaps, and the project's issue count grows linearly with features-shipped-with-gaps rather than features-shipped-clean.
 
 ### Tests: derive variants with `model_copy(update=...)`
 
@@ -196,9 +211,15 @@ These exist for reasons that are not obvious from the code alone. Touching any o
 - **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
 - **`default_factory=lambda` in `config.py`** preserves `monkeypatch.setenv` semantics in tests. Do not "simplify" to direct env reads at class-definition time.
 
+## Branches
+
+If you push a branch, please open a pull request for it.
+
 ## Pull requests
 
 If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. Most contributors are auto-subscribed by GitHub; some integrations require an explicit subscribe step.
+
+Never put session URLs (`https://claude.ai/code/session_...`) in a pull request description or a commit message. They link to a private AI-assistant conversation, and a public repository is a durable, indexed, mirrored record - a pasted session link leaks that conversation the day the repo, a fork, or an upstream breach exposes it. The plain `https://claude.ai/code` attribution link carries no session id and is fine. If a tool appends a session footer when the PR is opened, strip it from the description before moving on.
 
 ## Where to find more
 

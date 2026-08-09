@@ -53,6 +53,24 @@ class TestCheckTls:
             results = check_tls([ep])
         assert results == []
 
+    def test_skips_when_tls_disabled(self, monkeypatch, target_url: str):
+        """STEALTH posture flips ``config.scan.tls_enabled`` False.
+
+        Gate fires before endpoint filtering / testssl detection - no
+        subprocess fires when the operator dial is stealth. Parallel
+        to the traceroute gate; both are binary "do this at all" levers
+        because slowing them does not buy quiet.
+        """
+        import tools.recon.tls as tls_mod
+
+        monkeypatch.setattr(tls_mod.config.scan, "tls_enabled", False)
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
+        with patch("shutil.which") as which, patch("tools.recon.tls._run") as run:
+            findings = check_tls([endpoint])
+        assert findings == []
+        which.assert_not_called()
+        run.assert_not_called()
+
     def test_returns_empty_when_no_https_endpoints(self):
         ep = Endpoint(url="http://app.example.com/", status_code=200)
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
@@ -73,9 +91,11 @@ class TestCheckTls:
                 json.dump(report, fh)
             return CompletedProcess(cmd, 0, "", "")
 
-        with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.recon.tls._run", side_effect=fake_run):
-                results = check_tls([ep])
+        with (
+            patch("shutil.which", return_value="/usr/bin/testssl.sh"),
+            patch("tools.recon.tls._run", side_effect=fake_run),
+        ):
+            results = check_tls([ep])
 
         assert len(results) == 2
         titles = [r.title for r in results]
@@ -99,9 +119,11 @@ class TestCheckTls:
                 json.dump(report, fh)
             return CompletedProcess(cmd, 0, "", "")
 
-        with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.recon.tls._run", side_effect=fake_run):
-                results = check_tls([ep])
+        with (
+            patch("shutil.which", return_value="/usr/bin/testssl.sh"),
+            patch("tools.recon.tls._run", side_effect=fake_run),
+        ):
+            results = check_tls([ep])
 
         assert results == []
 
@@ -120,25 +142,31 @@ class TestCheckTls:
                 json.dump([], fh)
             return CompletedProcess(cmd, 0, "", "")
 
-        with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.recon.tls._run", side_effect=fake_run):
-                check_tls(endpoints)
+        with (
+            patch("shutil.which", return_value="/usr/bin/testssl.sh"),
+            patch("tools.recon.tls._run", side_effect=fake_run),
+        ):
+            check_tls(endpoints)
 
         assert call_count == 1
 
     def test_skips_non_200_endpoints(self, target_url: str):
         ep = Endpoint(url=f"{target_url}/", status_code=500)
-        with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.recon.tls._run") as mock_run:
-                results = check_tls([ep])
+        with (
+            patch("shutil.which", return_value="/usr/bin/testssl.sh"),
+            patch("tools.recon.tls._run") as mock_run,
+        ):
+            results = check_tls([ep])
         mock_run.assert_not_called()
         assert results == []
 
     def test_handles_run_exception(self, target_url: str):
         ep = Endpoint(url=f"{target_url}/", status_code=200)
-        with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.recon.tls._run", side_effect=Exception("timeout")):
-                results = check_tls([ep])
+        with (
+            patch("shutil.which", return_value="/usr/bin/testssl.sh"),
+            patch("tools.recon.tls._run", side_effect=Exception("timeout")),
+        ):
+            results = check_tls([ep])
         assert results == []
 
     def test_handles_missing_output_file(self, target_url: str):
@@ -148,9 +176,11 @@ class TestCheckTls:
             # Do not write the JSON file
             return CompletedProcess(cmd, 1, "", "error")
 
-        with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.recon.tls._run", side_effect=fake_run):
-                results = check_tls([ep])
+        with (
+            patch("shutil.which", return_value="/usr/bin/testssl.sh"),
+            patch("tools.recon.tls._run", side_effect=fake_run),
+        ):
+            results = check_tls([ep])
         assert results == []
 
 
@@ -212,27 +242,33 @@ class TestGetDmarc:
 
 class TestCheckDnsEmailSecurity:
     def test_flags_missing_spf(self):
-        with patch("tools.recon.tls._get_spf", return_value=None):
-            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
-                results = check_dns_email_security(["example.com"])
+        with (
+            patch("tools.recon.tls._get_spf", return_value=None),
+            patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"),
+        ):
+            results = check_dns_email_security(["example.com"])
 
         spf_findings = [r for r in results if "SPF" in r.title and "Missing" in r.title]
         assert len(spf_findings) == 1
         assert spf_findings[0].severity_hint == Severity.MEDIUM
 
     def test_flags_permissive_spf(self):
-        with patch("tools.recon.tls._get_spf", return_value="v=spf1 +all"):
-            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
-                results = check_dns_email_security(["example.com"])
+        with (
+            patch("tools.recon.tls._get_spf", return_value="v=spf1 +all"),
+            patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"),
+        ):
+            results = check_dns_email_security(["example.com"])
 
         spf_findings = [r for r in results if "+all" in r.title]
         assert len(spf_findings) == 1
         assert spf_findings[0].severity_hint == Severity.HIGH
 
     def test_flags_missing_dmarc(self):
-        with patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"):
-            with patch("tools.recon.tls._get_dmarc", return_value=None):
-                results = check_dns_email_security(["example.com"])
+        with (
+            patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"),
+            patch("tools.recon.tls._get_dmarc", return_value=None),
+        ):
+            results = check_dns_email_security(["example.com"])
 
         dmarc_findings = [r for r in results if "DMARC" in r.title and "Missing" in r.title]
         assert len(dmarc_findings) == 1
@@ -240,18 +276,22 @@ class TestCheckDnsEmailSecurity:
 
     def test_flags_dmarc_p_none(self):
         dmarc = "v=DMARC1; p=none; rua=mailto:x@y.com"
-        with patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"):
-            with patch("tools.recon.tls._get_dmarc", return_value=dmarc):
-                results = check_dns_email_security(["example.com"])
+        with (
+            patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"),
+            patch("tools.recon.tls._get_dmarc", return_value=dmarc),
+        ):
+            results = check_dns_email_security(["example.com"])
 
         none_findings = [r for r in results if "p=none" in r.title]
         assert len(none_findings) == 1
         assert none_findings[0].severity_hint == Severity.LOW
 
     def test_no_finding_when_spf_and_dmarc_ok(self):
-        with patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"):
-            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
-                results = check_dns_email_security(["example.com"])
+        with (
+            patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"),
+            patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"),
+        ):
+            results = check_dns_email_security(["example.com"])
         assert results == []
 
     def test_deduplicates_subdomains_to_root(self):
@@ -261,9 +301,11 @@ class TestCheckDnsEmailSecurity:
             calls.append(domain)
             return "v=spf1 include:_ ~all"
 
-        with patch("tools.recon.tls._get_spf", side_effect=tracking_spf):
-            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
-                check_dns_email_security(["app.example.com", "api.example.com", "example.com"])
+        with (
+            patch("tools.recon.tls._get_spf", side_effect=tracking_spf),
+            patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"),
+        ):
+            check_dns_email_security(["app.example.com", "api.example.com", "example.com"])
 
         # All three hostnames collapse to example.com - only one DNS call
         assert calls == ["example.com"]

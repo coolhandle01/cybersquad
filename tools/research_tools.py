@@ -7,16 +7,16 @@ attack plan: a list of probe-target hypotheses with expected severity
 ceilings and the recon signals that justified each one. The agent does the
 thinking; this module provides the supporting primitives:
 
-* ``AttackPlan`` / ``AttackPlanItem`` (from ``models.attack``) - the
+* ``AttackForest`` / ``AttackTree`` (from ``models.attack``) - the
   artefact the agent composes.
-* ``validate_attack_plan(plan)`` - quality gate. Returns the issue list
-  (``AttackPlanValidationReport`` from ``models.attack``). Hard errors
+* ``validate_attack_forest(plan)`` - quality gate. Returns the issue list
+  (``AttackForestValidationReport`` from ``models.attack``). Hard errors
   block ``finalise_research``.
-* ``finalise_research(plan)`` - validate, persist ``attack_plan.json`` for
+* ``finalise_research(plan)`` - validate, persist ``attack_forest.json`` for
   the Penetration Tester and re-read at triage time. Raises
-  ``AttackPlanFinalisationError`` (from ``models.attack``) on hard errors.
-* ``load_attack_plan(path)`` - reverse direction. Deserialise
-  ``attack_plan.json`` into a typed ``AttackPlan`` so downstream agents
+  ``AttackForestFinalisationError`` (from ``models.attack``) on hard errors.
+* ``load_attack_forest(path)`` - reverse direction. Deserialise
+  ``attack_forest.json`` into a typed ``AttackForest`` so downstream agents
   (PT, VR at triage) consume a Pydantic model rather than a raw blob.
 
 Mirrors the ``finalise_recon`` / ``finalise_triage`` pattern so the VR's
@@ -30,72 +30,72 @@ from pathlib import Path
 
 import runtime
 from models.attack import (
-    AttackPlan,
-    AttackPlanFinalisationError,
-    AttackPlanValidationIssue,
-    AttackPlanValidationReport,
+    AttackForest,
+    AttackForestFinalisationError,
+    AttackForestValidationIssue,
+    AttackForestValidationReport,
 )
 
-_ATTACK_PLAN_FILENAME = "attack_plan.json"
+_ATTACK_FOREST_FILENAME = "attack_forest.json"
 
 
 # Validation
 
 
-def validate_attack_plan(plan: AttackPlan) -> AttackPlanValidationReport:
-    """Apply quality heuristics to an AttackPlan. Returns the issue list.
+def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
+    """Apply quality heuristics to an AttackForest. Returns the issue list.
 
     Hard errors:
-      * empty ``items`` (no plan is not a plan)
-      * any item missing one of probe / target / rationale (empty after strip)
-      * any item whose ``recon_evidence`` is empty - the plan is supposed
+      * empty ``trees`` (no plan is not a plan)
+      * any tree missing one of probe / target / rationale (empty after strip)
+      * any tree whose ``recon_evidence`` is empty - the plan is supposed
         to be grounded in the OSINT Analyst's signals; an unevidenced
         hypothesis is the agent skipping the research pass.
     """
-    issues: list[AttackPlanValidationIssue] = []
+    issues: list[AttackForestValidationIssue] = []
 
-    if not plan.items:
+    if not plan.trees:
         issues.append(
-            AttackPlanValidationIssue(
-                section="items",
+            AttackForestValidationIssue(
+                section="trees",
                 severity="error",
                 message=(
-                    "attack plan has no items; produce at least one "
+                    "attack plan has no trees; produce at least one "
                     "probe-target hypothesis or explain in the briefing "
                     "why no probes are warranted"
                 ),
             )
         )
 
-    for n, item in enumerate(plan.items, 1):
-        if not item.probe.strip():
+    for n, tree in enumerate(plan.trees, 1):
+        if not tree.probe.strip():
             issues.append(
-                AttackPlanValidationIssue(
-                    section=f"items[{n}].probe",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].probe",
                     severity="error",
                     message="probe is required (CVE id or vulnerability-class name)",
                 )
             )
-        if not item.target.strip():
+        if not tree.target.strip():
             issues.append(
-                AttackPlanValidationIssue(
-                    section=f"items[{n}].target",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].target",
                     severity="error",
                     message="target is required (hostname or URL drawn from recon)",
                 )
             )
-        if not item.rationale.strip():
+        if not tree.rationale.strip():
             issues.append(
-                AttackPlanValidationIssue(
-                    section=f"items[{n}].rationale",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].rationale",
                     severity="error",
                     message="rationale is required (1-2 sentence why and what to look for)",
                 )
             )
-        if not item.recon_evidence:
+        if not tree.recon_evidence:
             issues.append(
-                AttackPlanValidationIssue(
-                    section=f"items[{n}].recon_evidence",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].recon_evidence",
                     severity="error",
                     message=(
                         "recon_evidence must not be empty; cite the recon signals "
@@ -105,40 +105,39 @@ def validate_attack_plan(plan: AttackPlan) -> AttackPlanValidationReport:
             )
 
     ok = not any(i.severity == "error" for i in issues)
-    return AttackPlanValidationReport(ok=ok, issues=issues)
+    return AttackForestValidationReport(ok=ok, issues=issues)
 
 
 # Persistence / finalisation
 
 
-def attack_plan_path() -> Path:
-    """Return the on-disk path of attack_plan.json for the current run."""
-    return runtime.run_dir() / _ATTACK_PLAN_FILENAME
+def attack_forest_path() -> Path:
+    """Return the on-disk path of attack_forest.json for the current run."""
+    return runtime.run_dir() / _ATTACK_FOREST_FILENAME
 
 
-def finalise_research(plan: AttackPlan) -> Path:
-    """Validate ``plan`` and write ``attack_plan.json`` to the run dir.
+def finalise_research(plan: AttackForest) -> Path:
+    """Validate ``plan`` and write ``attack_forest.json`` to the run dir.
 
-    Refuses on any hard validation error (see ``validate_attack_plan``).
+    Refuses on any hard validation error (see ``validate_attack_forest``).
     Returns the path to the written file.
     """
-    report = validate_attack_plan(plan)
+    report = validate_attack_forest(plan)
     if not report.ok:
-        # validate_attack_plan only emits errors today, so no filter; if a
+        # validate_attack_forest only emits errors today, so no filter; if a
         # warning level is added later, surface it the same way.
         lines = ["attack plan has unresolved errors:"]
-        for issue in report.issues:
-            lines.append(f"  - {issue.section}: {issue.message}")
-        raise AttackPlanFinalisationError("\n".join(lines))
+        lines.extend(f"  - {issue.section}: {issue.message}" for issue in report.issues)
+        raise AttackForestFinalisationError("\n".join(lines))
 
-    out_path = attack_plan_path()
+    out_path = attack_forest_path()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
     return out_path
 
 
-def load_attack_plan(path: Path) -> AttackPlan:
-    """Deserialise ``attack_plan.json`` from ``path`` into a typed AttackPlan.
+def load_attack_forest(path: Path) -> AttackForest:
+    """Deserialise ``attack_forest.json`` from ``path`` into a typed AttackForest.
 
     The reader half of the ``finalise_research`` contract: PT loads the plan
     before running probes, and the VR re-loads it at triage time to map
@@ -148,12 +147,12 @@ def load_attack_plan(path: Path) -> AttackPlan:
     """
     if not path.is_file():
         raise FileNotFoundError(f"attack plan not found at {path}")
-    return AttackPlan.model_validate_json(path.read_text(encoding="utf-8"))
+    return AttackForest.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 __all__ = [
-    "attack_plan_path",
+    "attack_forest_path",
     "finalise_research",
-    "load_attack_plan",
-    "validate_attack_plan",
+    "load_attack_forest",
+    "validate_attack_forest",
 ]

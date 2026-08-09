@@ -29,7 +29,7 @@ class TestBrowseProgrammesTool:
             ProgrammePreview(handle="beta", name="Beta", offers_bounties=True),
         ]
         with patch(
-            "squad.programme_manager.h1.browse_programmes",
+            "squad.programme_manager.tools.selection.h1.browse_programmes",
             return_value=previews,
         ) as mbrowse:
             result = browse_programmes_tool.func(offers_bounties=True)
@@ -37,99 +37,98 @@ class TestBrowseProgrammesTool:
         assert result == previews
         # No filter args defaulted, only the one we passed in flight.
         mbrowse.assert_called_once_with(
-            asset_type=None,
             bookmarked=None,
             offers_bounties=True,
             submission_state=None,
-            sort=None,
             limit=None,
         )
 
     def test_forwards_all_filter_args(self, tmp_path) -> None:
-        from models.h1 import ScopeType, SubmissionState
+        from models.h1 import SubmissionState
         from squad.programme_manager import browse_programmes_tool
 
         with patch(
-            "squad.programme_manager.h1.browse_programmes",
+            "squad.programme_manager.tools.selection.h1.browse_programmes",
             return_value=[],
         ) as mbrowse:
             browse_programmes_tool.func(
-                asset_type=ScopeType.WILDCARD,
                 bookmarked=True,
                 offers_bounties=True,
                 submission_state=SubmissionState.OPEN,
-                sort="-launched_at",
                 limit=50,
             )
 
-        # The wrapper uppercases the asset_type StrEnum value to match
-        # H1's filter[asset_type] wire format; submission_state passes
-        # through as its lowercase StrEnum value.
+        # submission_state passes through as its lowercase StrEnum value.
         mbrowse.assert_called_once_with(
-            asset_type="WILDCARD",
             bookmarked=True,
             offers_bounties=True,
             submission_state="open",
-            sort="-launched_at",
             limit=50,
         )
 
 
 class TestHydrateProgrammeTool:
-    def test_caches_hydrated_programme(self, programme, tmp_path) -> None:
+    def test_holds_hydrated_programme_in_memory_not_on_disk(
+        self, programme, tmp_path, monkeypatch
+    ) -> None:
         from squad.programme_manager import hydrate_programme_tool
+        from squad.programme_manager.tools import selection
 
-        cache_path = tmp_path / programme.handle / "programme.json"
+        monkeypatch.setattr(selection, "_hydrated_this_run", {})
 
-        with (
-            patch(
-                "squad.programme_manager.h1.hydrate_programme",
-                return_value=programme,
-            ) as mhydrate,
-            patch(
-                "runtime.programme_cache_path",
-                return_value=cache_path,
-            ),
-        ):
+        with patch(
+            "squad.programme_manager.tools.selection.h1.hydrate_programme",
+            return_value=programme,
+        ) as mhydrate:
             result = hydrate_programme_tool.func(programme.handle)
 
         assert result == programme
         mhydrate.assert_called_once_with(programme.handle)
-        assert cache_path.exists()
+        # Held in memory for save - NOT written to disk. Hydrating N candidates
+        # must not leave N programme.json files; the run gets exactly one (save's).
+        assert selection._hydrated_this_run[programme.handle] == programme
+        assert not list(tmp_path.rglob("programme.json"))
 
 
 class TestProgrammeManagerTools:
-    def test_save_programme_tool_sets_handle_and_copies(self, programme, tmp_path) -> None:
+    def test_save_writes_single_selection_from_memory(
+        self, programme, tmp_path, monkeypatch
+    ) -> None:
         from squad.programme_manager import save_programme_tool
+        from squad.programme_manager.tools import selection
 
-        cache = tmp_path / "cache" / "programme.json"
-        cache.parent.mkdir(parents=True)
-        cache.write_text(programme.model_dump_json(), encoding="utf-8")
         run_dir = tmp_path / "run"
+        # The handle was hydrated this run, so it is in the in-memory set.
+        monkeypatch.setattr(selection, "_hydrated_this_run", {programme.handle: programme})
 
-        with (
-            patch("runtime.run_dir", return_value=run_dir),
-            patch("runtime.programme_cache_path", return_value=cache),
-        ):
+        with patch("runtime.run_dir", return_value=run_dir):
             result = save_programme_tool.func(programme.handle)
 
         assert runtime.programme_handle == programme.handle
         assert result == str(run_dir)
+        # Exactly one programme.json on disk - the selection.
         assert (run_dir / "programme.json").exists()
+        assert len(list(run_dir.rglob("programme.json"))) == 1
 
-    def test_save_programme_tool_skips_copy_when_cache_missing(self, programme, tmp_path) -> None:
+    def test_save_programme_tool_raises_when_not_hydrated(
+        self, programme, tmp_path, monkeypatch
+    ) -> None:
+        # A handle absent from the in-memory hydrated set means hydrate never ran
+        # (or failed) for it, so there is nothing to persist. save must fail loud
+        # - NOT silently create an empty run directory with no programme.json,
+        # which is what let the select task "succeed" with no artefact and then
+        # fail the downstream guardrail with no clear cause.
         from squad.programme_manager import save_programme_tool
+        from squad.programme_manager.tools import selection
 
         run_dir = tmp_path / "run"
-        absent_cache = tmp_path / "cache" / "programme.json"
+        monkeypatch.setattr(selection, "_hydrated_this_run", {})
 
         with (
             patch("runtime.run_dir", return_value=run_dir),
-            patch("runtime.programme_cache_path", return_value=absent_cache),
+            pytest.raises(ValueError, match="No hydrated programme for handle"),
         ):
-            result = save_programme_tool.func(programme.handle)
+            save_programme_tool.func(programme.handle)
 
-        assert runtime.programme_handle == programme.handle
-        assert result == str(run_dir)
-        assert run_dir.exists()
+        # Failed loud before binding or writing anything: no empty run dir.
         assert not (run_dir / "programme.json").exists()

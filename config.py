@@ -174,6 +174,34 @@ class ScanConfig:
     waybackurls_timeout: int = field(
         default_factory=lambda: int(os.getenv("WAYBACKURLS_TIMEOUT", "180"))
     )
+    # Per-mode OA / recon tunings. The OSINT Analyst's active-targeting
+    # tools (httpx, dnsx, subfinder) inherit rate / thread caps from this
+    # config the same way dirfuzz does - one source of truth for the
+    # stealth dial, no per-tool bespoke env reads scattered through the
+    # recon package. Two binary "do this at all" gates round out the
+    # surface: traceroute (ICMP from the operator IP) and testssl (loud
+    # TLS probe) both flip off on STEALTH where slowing-down does not
+    # help - you either send the packet or you don't.
+    httpx_rate_limit: int = field(default_factory=lambda: int(os.getenv("HTTPX_RATE_LIMIT", "150")))
+    httpx_retries: int = field(default_factory=lambda: int(os.getenv("HTTPX_RETRIES", "2")))
+    httpx_threads: int = field(default_factory=lambda: int(os.getenv("HTTPX_THREADS", "50")))
+    dnsx_rate_limit: int = field(default_factory=lambda: int(os.getenv("DNSX_RATE_LIMIT", "500")))
+    dnsx_threads: int = field(default_factory=lambda: int(os.getenv("DNSX_THREADS", "50")))
+    subfinder_rate_limit: int = field(
+        default_factory=lambda: int(os.getenv("SUBFINDER_RATE_LIMIT", "50"))
+    )
+    subfinder_threads: int = field(
+        default_factory=lambda: int(os.getenv("SUBFINDER_THREADS", "10"))
+    )
+    subfinder_active: bool = field(
+        default_factory=lambda: os.getenv("SUBFINDER_ACTIVE", "true").lower() == "true"
+    )
+    traceroute_enabled: bool = field(
+        default_factory=lambda: os.getenv("TRACEROUTE_ENABLED", "true").lower() == "true"
+    )
+    tls_enabled: bool = field(
+        default_factory=lambda: os.getenv("TLS_ENABLED", "true").lower() == "true"
+    )
 
     def __post_init__(self) -> None:
         # Per-mode rate defaults. Explicit env vars always win; this only fills
@@ -186,6 +214,16 @@ class ScanConfig:
                 "dirfuzz_threads": 5,
                 "sqlmap_level": 1,
                 "sqlmap_risk": 1,
+                "httpx_rate_limit": 20,
+                "httpx_retries": 1,
+                "httpx_threads": 10,
+                "dnsx_rate_limit": 50,
+                "dnsx_threads": 10,
+                "subfinder_rate_limit": 10,
+                "subfinder_threads": 5,
+                "subfinder_active": False,
+                "traceroute_enabled": False,
+                "tls_enabled": False,
             },
             ScanMode.NORMAL: {
                 "request_delay": 0.5,
@@ -194,6 +232,16 @@ class ScanConfig:
                 "dirfuzz_threads": 40,
                 "sqlmap_level": 2,
                 "sqlmap_risk": 1,
+                "httpx_rate_limit": 150,
+                "httpx_retries": 2,
+                "httpx_threads": 50,
+                "dnsx_rate_limit": 500,
+                "dnsx_threads": 50,
+                "subfinder_rate_limit": 50,
+                "subfinder_threads": 10,
+                "subfinder_active": True,
+                "traceroute_enabled": True,
+                "tls_enabled": True,
             },
             ScanMode.RAID: {
                 "request_delay": 0.05,
@@ -202,6 +250,16 @@ class ScanConfig:
                 "dirfuzz_threads": 80,
                 "sqlmap_level": 3,
                 "sqlmap_risk": 2,
+                "httpx_rate_limit": 500,
+                "httpx_retries": 3,
+                "httpx_threads": 100,
+                "dnsx_rate_limit": 2000,
+                "dnsx_threads": 100,
+                "subfinder_rate_limit": 200,
+                "subfinder_threads": 20,
+                "subfinder_active": True,
+                "traceroute_enabled": True,
+                "tls_enabled": True,
             },
         }
         _ENV_MAP = {
@@ -211,6 +269,16 @@ class ScanConfig:
             "DIRFUZZ_THREADS": "dirfuzz_threads",
             "SQLMAP_LEVEL": "sqlmap_level",
             "SQLMAP_RISK": "sqlmap_risk",
+            "HTTPX_RATE_LIMIT": "httpx_rate_limit",
+            "HTTPX_RETRIES": "httpx_retries",
+            "HTTPX_THREADS": "httpx_threads",
+            "DNSX_RATE_LIMIT": "dnsx_rate_limit",
+            "DNSX_THREADS": "dnsx_threads",
+            "SUBFINDER_RATE_LIMIT": "subfinder_rate_limit",
+            "SUBFINDER_THREADS": "subfinder_threads",
+            "SUBFINDER_ACTIVE": "subfinder_active",
+            "TRACEROUTE_ENABLED": "traceroute_enabled",
+            "TLS_ENABLED": "tls_enabled",
         }
         mode_vals = _MODES.get(self.scan_mode, _MODES[ScanMode.NORMAL])
         for env_var, attr in _ENV_MAP.items():
@@ -232,6 +300,14 @@ class AppConfig:
     # can reach the operator directly instead of banning the IP. See #46.
     contact_email: str = field(default_factory=lambda: os.environ["CYBERSQUAD_CONTACT_EMAIL"])
     reports_dir: str = field(default_factory=lambda: os.getenv("REPORTS_DIR", "./reports"))
+    # CrewAI writes its task / tool / event stream to this log for post-hoc
+    # inspection (see #167). build_crew() resolves it to
+    # {reports_dir}/{run_id}/crew.log - alongside metrics.json - so the log
+    # and the run it describes archive as a unit. On by default; flip off
+    # with CYBERSQUAD_OUTPUT_LOG=false.
+    output_log_enabled: bool = field(
+        default_factory=lambda: os.getenv("CYBERSQUAD_OUTPUT_LOG", "true").lower() == "true"
+    )
     verbose: bool = field(default_factory=lambda: os.getenv("VERBOSE", "false").lower() == "true")
     human_input: bool = field(
         default_factory=lambda: os.getenv("CYBERSQUAD_HUMAN_INPUT", "true").lower() == "true"

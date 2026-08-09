@@ -209,7 +209,11 @@ class Webpage:
         """
         detected: set[Framework] = set()
 
-        cookie_names = {name.lower() for name in self.response.cookies.keys()}
+        # SIM118 wants `for name in self.response.cookies`, but cookies is a
+        # RequestsCookieJar, not a dict: iterating it yields Cookie objects,
+        # while .keys() yields the name strings we match on. The .keys() call
+        # is load-bearing here, so the rule is suppressed on that line.
+        cookie_names = {name.lower() for name in self.response.cookies.keys()}  # noqa: SIM118
         for fw, signal in _FRAMEWORK_COOKIE_SIGNALS:
             if signal in cookie_names:
                 detected.add(fw)
@@ -244,7 +248,9 @@ class Webpage:
         hidden form inputs - JS reads the cookie and sends its value
         back as a custom request header.
         """
-        for name in self.response.cookies.keys():
+        # .keys() is load-bearing: iterating a RequestsCookieJar yields
+        # Cookie objects, while .keys() yields the name strings we match on.
+        for name in self.response.cookies.keys():  # noqa: SIM118
             if any(frag in name.lower() for frag in _CSRF_NAME_FRAGMENTS):
                 return True
         return False

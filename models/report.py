@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from models.nvd import CvssVector
+
 
 class AuthoredDraft(BaseModel):
     """The LLM-authored half of one report draft.
@@ -101,10 +103,10 @@ class AuthoredDraft(BaseModel):
             " Guidance`` to find the matching URL."
         ),
     )
-    # FIXME #156: type as a ``CvssVector`` primitive in
-    # ``models.primitives`` so malformed vectors reject at args_schema
-    # validation time rather than at score-compute time.
-    cvss_vector: str = Field(
+    # CvssVector validates the vector's *structure* (CVSS:3.x prefix +
+    # well-formed metric tokens) at args_schema time; ``calculate_cvss_score``
+    # in the wrapper remains the source of truth for metric semantics + score.
+    cvss_vector: CvssVector = Field(
         description=(
             "Full CVSS 3.1 vector. The wrapper recomputes ``cvss_score``"
             " and the validator refuses drafts where the score does not"
@@ -112,14 +114,15 @@ class AuthoredDraft(BaseModel):
             " upstream to double-check."
         ),
     )
-    # FIXME #156: type as a ``CweId`` primitive in ``models.primitives``
-    # so unknown ids reject at args_schema validation time rather than
-    # at catalogue-lookup time.
+    # Bare int: the agent authors the id. ``validate_draft`` resolves it
+    # against the corpus (``CWE.get``) and warns on a miss - keeping the draft
+    # args_schema a plain int rather than a nested CWE object the LLM would
+    # have to construct.
     cwe_id: int = Field(
         description=(
             "Numeric CWE identifier matching the entry from ``Lookup"
-            " CWE``. The validator verifies the id resolves to a real"
-            " CWE entry; an unknown id refuses upstream of the H1"
+            " CWE`` (e.g. ``89``). Validated against the MITRE corpus when"
+            " the draft is checked; an unknown id is flagged before H1"
             " submission."
         ),
     )

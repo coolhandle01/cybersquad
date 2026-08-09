@@ -20,7 +20,9 @@ from pydantic import BaseModel
 # in-models rule. Re-exported here so existing ``from tools.recon.dnsx
 # import TakeoverCandidate`` consumers keep working; the canonical
 # import path is ``from models import TakeoverCandidate``.
-from models.dns import TakeoverCandidate
+from config import config
+from models.dns import PtrRecord, TakeoverCandidate
+from models.primitives import IpAddr
 from tools._helpers import _require_binary, _run
 
 logger = logging.getLogger(__name__)
@@ -94,6 +96,10 @@ class DNSRecord(BaseModel):
     hostname: str
     a_records: list[str] = []
     cname: list[str] = []
+    # The response TTL dnsx reports (retryabledns ``ttl``); one value per host
+    # response, carried onto the OAM DNSRecordProperty / RRHeader. 0 when dnsx
+    # omitted it.
+    ttl: int = 0
 
 
 def _match_fingerprint(cname: str) -> str | None:
@@ -121,7 +127,17 @@ def resolve_records(hostnames: list[str]) -> list[DNSRecord]:
         return []
 
     result = _run(
-        [dnsx, "-a", "-cname", "-json", "-silent"],
+        [
+            dnsx,
+            "-a",
+            "-cname",
+            "-json",
+            "-silent",
+            "-rate-limit",
+            str(config.scan.dnsx_rate_limit),
+            "-t",
+            str(config.scan.dnsx_threads),
+        ],
         timeout=180,
         input=input_data,
     )
@@ -143,6 +159,7 @@ def resolve_records(hostnames: list[str]) -> list[DNSRecord]:
                 hostname=hostname,
                 a_records=entry.get("a") or [],
                 cname=entry.get("cname") or [],
+                ttl=max(0, int(entry.get("ttl") or 0)),
             )
         )
     logger.info("dnsx resolved %d/%d hosts", len(records), len(hostnames))
@@ -189,9 +206,85 @@ def detect_takeover_candidates(hostnames: list[str]) -> list[TakeoverCandidate]:
     return candidates
 
 
+def resolve_ptr(ips: list[IpAddr]) -> list[PtrRecord]:
+    """Reverse-DNS lookup for ``ips`` via dnsx.
+
+    Maps each IP to whatever name(s) the in-addr.arpa zone publishes
+    for it (the inverse of an A record). Returns one ``PtrRecord`` per
+    input IP that dnsx emitted output for; IPs with no PTR drop
+    silently from the result.
+
+    Defensive: degrades to an empty list on subprocess failure or no
+    valid output rather than raising into the recon path. Hostnames
+    that trip the FQDN validator (RFC 1123 violations from oddly-shaped
+    PTR records) drop the record - the PTR signal is only useful when
+    the resolved name is itself a valid hostname.
+    """
+    if not ips:
+        return []
+
+    dnsx = _require_binary("dnsx")
+    input_data = "\n".join(ip.strip() for ip in ips if ip.strip())
+    if not input_data:
+        return []
+
+    try:
+        result = _run(
+            [
+                dnsx,
+                "-ptr",
+                "-resp",
+                "-json",
+                "-silent",
+                "-rate-limit",
+                str(config.scan.dnsx_rate_limit),
+                "-t",
+                str(config.scan.dnsx_threads),
+            ],
+            timeout=180,
+            input=input_data,
+        )
+    except Exception as exc:
+        logger.warning("dnsx PTR lookup failed: %s", exc)
+        return []
+
+    records: list[PtrRecord] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError as exc:
+            logger.debug("Skipping dnsx PTR line: %s (%s)", line[:80], exc)
+            continue
+        ip = (entry.get("host") or "").strip()
+        ptr_raw = entry.get("ptr") or []
+        if not ip or not isinstance(ptr_raw, list):
+            continue
+        hostnames = [h.rstrip(".") for h in ptr_raw if isinstance(h, str)]
+        try:
+            records.append(PtrRecord(ip=ip, hostnames=hostnames))
+        except ValueError as exc:
+            # A hostname tripped the FQDN validator or the IP failed
+            # ``IpAddr`` shape. Retry without the optional hostnames -
+            # an IP-only PtrRecord still carries the "we asked, got
+            # nothing legible" signal vs the silent drop above.
+            logger.debug("dnsx PTR row degraded (dropping hostnames): %s", exc)
+            try:
+                records.append(PtrRecord(ip=ip))
+            except ValueError as exc2:
+                logger.debug("dnsx PTR row skipped (IP rejected): %s", exc2)
+                continue
+    logger.info("dnsx PTR resolved %d/%d IPs", len(records), len(ips))
+    return records
+
+
 __all__ = [
     "DNSRecord",
+    "PtrRecord",
     "TakeoverCandidate",
     "detect_takeover_candidates",
+    "resolve_ptr",
     "resolve_records",
 ]
