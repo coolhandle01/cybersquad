@@ -45,6 +45,7 @@ class Service(StrEnum):
     # Databases
     couchdb = "couchdb"
     elasticsearch = "elasticsearch"
+    mariadb = "mariadb"
     mongodb = "mongodb"
     mysql = "mysql"
     postgresql = "postgresql"
