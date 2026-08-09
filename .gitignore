@@ -33,7 +33,6 @@ coverage.xml
 # there is no genuine setup.cfg to shadow here.
 mutants/
 setup.cfg
-.mutmut-cache
 
 # IDE
 .idea/
