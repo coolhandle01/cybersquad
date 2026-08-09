@@ -31,8 +31,8 @@ coverage.xml
 # audit recipe writes a temporary [mutmut] setup.cfg and copies a mutants/ tree
 # beside the source; the repo itself keeps all real config in pyproject.toml, so
 # there is no genuine setup.cfg to shadow here.
-/mutants/
-/setup.cfg
+mutants/
+setup.cfg
 .mutmut-cache
 
 # IDE
