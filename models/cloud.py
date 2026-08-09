@@ -2,7 +2,7 @@
 models/cloud.py - typed shape for cloud providers the squad targets.
 
 The ``Cloud`` StrEnum is the canonical vocabulary the recon pass cites,
-the Vulnerability Researcher references in an attack plan, and the
+the Vulnerability Researcher reasons over during research, and the
 provider-specific cloud probes stamp via ``@cloud(...)`` from
 ``tools/pentest/cloud.py``. Sibling to ``models/framework.py`` - the
 two enums together carry the asset-property vocabulary the agent

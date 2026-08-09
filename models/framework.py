@@ -3,16 +3,16 @@ models/framework.py - typed shape for web application frameworks the
 squad detects, cites, and targets.
 
 The ``Framework`` StrEnum is the canonical vocabulary the recon pass
-emits, the Vulnerability Researcher cites in an attack plan, and the
-Penetration Tester probes consume. Member values are the kebab-case
+emits, the Vulnerability Researcher reasons over during research, and
+the Penetration Tester probes consume. Member values are the kebab-case
 identifiers httpx's ``-tech-detect`` and Wappalyzer surface, so a
 ``coerce_frameworks`` helper (``tools/framework.py``) can normalise
 recon strings into enum members without bespoke per-framework casing.
 
 Why ``models/`` rather than ``tools/pentest/framework.py`` (where the
 ``@framework(...)`` decorator lives, mirroring ``tools/pentest/owasp.py``):
-the enum is consumed across layers - recon emits it, the attack plan
-references it, multiple pentest probes target it. ``OWASPCategory``
+the enum is consumed across layers - recon emits it, the Vulnerability
+Researcher reasons over it, multiple pentest probes target it. ``OWASPCategory``
 lives next to ``@owasp`` because it never crosses the recon boundary;
 ``Framework`` does.
 
@@ -46,8 +46,8 @@ class Framework(StrEnum):
     the underlying version safe.
 
     Append-only catalogue. New frameworks land as new members; never
-    rename an existing one - downstream attack plans, probe stamps,
-    and persisted recon JSON cite the literal string value.
+    rename an existing one - downstream probe stamps and persisted
+    recon JSON cite the literal string value.
     """
 
     # Server-side
