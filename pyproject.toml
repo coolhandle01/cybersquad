@@ -76,6 +76,7 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-mock>=3.14",
     "pytest-bdd>=7.2",
+    "pytest-socket>=0.7",   # fail-closed network guard (unit tier is egress-proof)
     "respx>=0.21",          # mock httpx/requests at transport level
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
@@ -115,6 +116,12 @@ addopts = [
     "--tb=short",
     "-q",
     "--import-mode=importlib",
+    # Fail-closed network guard: a stray unpatched test ERRORS instead of firing
+    # real traffic (and mutmut's hundreds of `-m unit` re-runs stay egress-proof).
+    # Loopback stays allowed for tests that stand up a local fixture server;
+    # integration tests that need real I/O opt in with @pytest.mark.enable_socket.
+    "--disable-socket",
+    "--allow-hosts=127.0.0.1,::1",
 ]
 markers = [
     "unit: fast, no I/O, no external calls",
