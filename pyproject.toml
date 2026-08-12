@@ -76,7 +76,7 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-mock>=3.14",
     "pytest-bdd>=7.2",
-    "pytest-socket>=0.7",   # fail-closed network guard (unit tier is egress-proof)
+    "pytest-socket>=0.8",   # fail-closed network guard (unit tier is egress-proof)
     "respx>=0.21",          # mock httpx/requests at transport level
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
