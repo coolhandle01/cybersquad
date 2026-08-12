@@ -94,6 +94,38 @@ def make_response():
 
 
 @pytest.fixture()
+def imds_metadata_body() -> str:
+    """A fabricated-but-realistic AWS instance-metadata listing - the body a
+    server vulnerable to SSRF echoes back when coerced into fetching
+    ``http://169.254.169.254/latest/meta-data/``.
+
+    Fabricated, never gathered: this is the real *shape* of the ``/latest/
+    meta-data/`` key listing (many canonical keys on their own lines) with no
+    real host contacted. Used by the SSRF tests so detection is exercised
+    against genuine metadata rather than a bare marker literal.
+    """
+    return (
+        "ami-id\n"
+        "ami-launch-index\n"
+        "ami-manifest-path\n"
+        "block-device-mapping/\n"
+        "hostname\n"
+        "iam/\n"
+        "instance-action\n"
+        "instance-id\n"
+        "instance-type\n"
+        "local-hostname\n"
+        "local-ipv4\n"
+        "mac\n"
+        "placement/\n"
+        "public-hostname\n"
+        "public-ipv4\n"
+        "reservation-id\n"
+        "security-groups\n"
+    )
+
+
+@pytest.fixture()
 def clean_response_body() -> str:
     """An HTML response body verified to contain none of the strings any
     pentest probe uses as a positive detection marker. Use this for tests

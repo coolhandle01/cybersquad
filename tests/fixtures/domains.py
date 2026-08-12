@@ -34,6 +34,15 @@ def callback_url() -> str:
 
 
 @pytest.fixture()
+def metadata_ip() -> str:
+    """The cloud instance-metadata service address (AWS/Azure/GCP all answer on
+    the same link-local IP). Tests that assert an SSRF payload targets metadata
+    take this fixture instead of retyping the literal, so the expected address
+    is stated once and independently of the source constant it pins."""
+    return "169.254.169.254"
+
+
+@pytest.fixture()
 def target_apex(target_url: str) -> str:
     """Apex domain derived from ``target_url``.
 
