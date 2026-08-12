@@ -47,6 +47,7 @@ def make_response():
         headers: dict | None = None,
         cookies: dict | None = None,
         json: object = None,
+        url: str = "https://mock.invalid/",
     ) -> MagicMock:
         # spec=requests.Response so a read of an attribute the real Response
         # does not have (a production typo like `resp.stauts_code`, or an
@@ -65,6 +66,10 @@ def make_response():
         # reading headers.get("content-type") in the fixture but fail live.
         resp.headers = CaseInsensitiveDict(headers or {})
         resp.cookies = cookies or {}
+        # ``resp.url`` is a real string by default so ``urljoin(resp.url, ...)``
+        # in Webpage form-action resolution does not trip on the MagicMock
+        # auto-attribute. Tests that need a specific page URL pass ``url=``.
+        resp.url = url
         if json is not None:
             resp.json.return_value = json
         # Faithful to requests.Response.raise_for_status(): raise HTTPError

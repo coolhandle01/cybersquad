@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import pytest
 
+from models.cloud import Cloud
+from models.framework import Framework
 from tools.research_vocab import (
     PROBE_VOCABULARY,
     RECON_EVIDENCE_KINDS,
@@ -46,6 +48,12 @@ class TestReconEvidenceKindsBaseline:
         kinds = {kind for kind, _ in RECON_EVIDENCE_KINDS}
         assert {"host", "tech", "port", "endpoint"} <= kinds
 
+    def test_carries_framework_and_cloud(self) -> None:
+        # The framework-aware-PT refactor (#83) added these so the VR can
+        # cite typed Framework / Cloud values in recon_evidence strings.
+        kinds = {kind for kind, _ in RECON_EVIDENCE_KINDS}
+        assert {"framework", "cloud"} <= kinds
+
     def test_every_entry_has_description(self) -> None:
         for kind, where in RECON_EVIDENCE_KINDS:
             assert kind.strip(), "recon evidence kind has empty name"
@@ -56,14 +64,19 @@ class TestReconEvidenceKindsBaseline:
 
 
 class TestComposeResearchBriefDoc:
-    def test_appends_both_sections_after_base_doc(self) -> None:
+    def test_appends_all_four_sections_after_base_doc(self) -> None:
         composed = compose_research_brief_doc("base doc body")
         assert composed.startswith("base doc body")
         assert "Probe vocabulary" in composed
         assert "Recon evidence kinds" in composed
-        # Probe section appears before recon section (matches the order the
-        # agent fills the dict in).
-        assert composed.index("Probe vocabulary") < composed.index("Recon evidence kinds")
+        assert "Framework vocabulary" in composed
+        assert "Cloud vocabulary" in composed
+        # Sections appear in the order: probe -> recon -> framework -> cloud.
+        idx_p = composed.index("Probe vocabulary")
+        idx_r = composed.index("Recon evidence kinds")
+        idx_f = composed.index("Framework vocabulary")
+        idx_c = composed.index("Cloud vocabulary")
+        assert idx_p < idx_r < idx_f < idx_c
 
     def test_lists_every_probe_vocabulary_entry(self) -> None:
         composed = compose_research_brief_doc("")
@@ -76,6 +89,16 @@ class TestComposeResearchBriefDoc:
         for kind, where in RECON_EVIDENCE_KINDS:
             assert kind in composed
             assert where in composed
+
+    def test_lists_every_framework_member(self) -> None:
+        composed = compose_research_brief_doc("")
+        for fw in Framework:
+            assert fw.value in composed
+
+    def test_lists_every_cloud_member(self) -> None:
+        composed = compose_research_brief_doc("")
+        for cl in Cloud:
+            assert cl.value in composed
 
     def test_picks_up_appended_probe_entry(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Simulates #88 landing: a new canonical Exploit name appended to the
@@ -111,3 +134,5 @@ class TestComposeResearchBriefDoc:
         composed = compose_research_brief_doc("")
         assert "Probe vocabulary" in composed
         assert "Recon evidence kinds" in composed
+        assert "Framework vocabulary" in composed
+        assert "Cloud vocabulary" in composed

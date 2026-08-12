@@ -18,7 +18,9 @@ import logging
 import re
 
 from models import Endpoint, RawFinding, Severity
+from models.cloud import Cloud
 from tools import http
+from tools.pentest.cloud import cloud
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ _CONTAINER_NAMES = [
 _SAS_RE = re.compile(r"[?&](sv|se|sig|sr|sp)=", re.I)
 
 
+@cloud(Cloud.azure)
 def check_azure_blob_containers(hostnames: list[str]) -> list[RawFinding]:
     """
     Check each supplied Azure Blob hostname for publicly listable
@@ -82,6 +85,7 @@ def check_azure_blob_containers(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@cloud(Cloud.azure)
 def check_azure_sas_tokens(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Scan each supplied endpoint URL for embedded Azure SAS-token query

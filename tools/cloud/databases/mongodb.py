@@ -6,12 +6,15 @@ import logging
 import socket
 
 from models import RawFinding, Severity
+from models.service import Service
+from tools.pentest.service import service
 
 logger = logging.getLogger(__name__)
 
 PORT = 27017
 
 
+@service(Service.mongodb)
 def check_mongodb(host: str) -> list[RawFinding]:
     """Return a CRITICAL finding if MongoDB on port 27017 answers isMaster without auth."""
     try:
