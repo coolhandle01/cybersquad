@@ -6,12 +6,15 @@ import logging
 import socket
 
 from models import RawFinding, Severity
+from models.service import Service
+from tools.pentest.service import service
 
 logger = logging.getLogger(__name__)
 
 PORT = 6379
 
 
+@service(Service.redis)
 def check_redis(host: str) -> list[RawFinding]:
     """Return a CRITICAL finding if Redis on port 6379 responds to PING without auth."""
     try:

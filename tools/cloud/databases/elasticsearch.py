@@ -5,13 +5,16 @@ from __future__ import annotations
 import logging
 
 from models import RawFinding, Severity
+from models.service import Service
 from tools import http
+from tools.pentest.service import service
 
 logger = logging.getLogger(__name__)
 
 PORT = 9200
 
 
+@service(Service.elasticsearch)
 def check_elasticsearch(host: str) -> list[RawFinding]:
     """Return a CRITICAL finding if Elasticsearch on port 9200 responds without auth."""
     url = f"http://{host}:{PORT}/_cluster/health"
