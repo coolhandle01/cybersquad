@@ -43,7 +43,7 @@ Two more worth checking for, easy to miss because they read as thorough: a pure 
 
 Coverage is a floor the gate already enforces; mutation is the *observation* axis, the one number a suite cannot earn by visiting lines. Run it as a **periodic, per-module audit - never a merge gate.**
 
-- **How to run it.** `mutmut` 3.7 against the **deterministic unit layer only** - the BDD layer hits a real LLM and would flap. Drop a temporary, untracked `setup.cfg` beside the run (remove it and the generated `mutants/` tree before committing - neither is ever staged):
+- **How to run it.** `mutmut` against the **deterministic unit layer only** - the BDD layer hits a real LLM and would flap. The version is owned by the `dev` extra in `pyproject.toml`, not restated here - `pip install -e ".[dev]"` brings it, and the `setup.cfg` keys below assume the major that extra pins (bump the pin and re-check these keys against that release's docs). Drop a temporary, untracked `setup.cfg` beside the run (remove it and the generated `mutants/` tree before committing - neither is ever staged):
 
   ```ini
   [mutmut]
