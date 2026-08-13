@@ -7,6 +7,18 @@ description: The cybersquad test-observability doctrine - observe don't just exe
 
 This skill carries the **test-observability doctrine** - how to write a test that *watches* behaviour rather than merely runs it. It governs every test and every review, so it loads whenever a test file is touched. The **shared-fixture catalogue** it is applied with - which fixtures exist, what each provides, the in-scope derivation rule - is a lookup layer an author reaches for mid-write, not something a reviewer needs, so it lives one hop away in [`references/fixtures.md`](references/fixtures.md) and loads on demand.
 
+## Test-first, then one turn further: observe the red
+
+The discipline underneath everything here is **red -> green -> refactor**, test-first, one behaviour at a time: write the failing test that names the behaviour, watch it fail *for the right reason* (an assertion, not an import error), write the minimum code to pass, then refactor with the bar green. The test is the spec, written first so the design is shaped by how the code is *used*. "See it fail before you make it pass" is the whole game - a test that has never failed proves nothing.
+
+cybersquad runs a **richer** loop than the bare cycle, because a probe's contract is *observation*, not merely execution: a green test can run a line without watching what it did. Three intensifications of the red step, each a section below:
+
+- **Red, mechanised.** "A test that never failed proves nothing" is a promise you can *verify* after the fact: `mutmut` breaks the code a hundred ways and checks the suite reddens. A kill-rate far below coverage is the batch of reds the suite never wrote - the red step applied to a suite that is already green. (See *Mutation testing*.)
+- **Refactor, in service of observation.** The refactor step is not only tidy-up. A decorated `check_X` body `mutmut` cannot see is lifted into an undecorated `_impl` it can - the whole-body lift - so the control flow becomes *observable*, taking an honest board from a paper-tiger ~100% down to a real ~70-75%. Refactor to make the behaviour watchable, then write the reds the lift exposes. (See *Mutation testing* on the `_impl` lift.)
+- **Red, at review time.** The sharpest red is not a missing assertion but a wrong feature: after "is the behaviour observed?" comes "is the observed behaviour what the feature *promises*?" A green test can faithfully pin a broken feature. When it does, the deliverable is a red test named for the intended behaviour - the red step used as a bug report - and then you make the feature work. (See *The green test that ratifies a bug*.)
+
+So the loop for a probe under audit: **`mutmut` to find the unobserved behaviour -> refactor to observe it and write the reds that carry the board to ~70-75% -> ask whether the now-pinned behaviour is *correct* -> if not, a red test and a fix -> the feature documented.** Green that skipped the red only proved the code does what it does.
+
 ## Observe, don't just execute
 
 Coverage asks *did this line run?* The question that decides whether a test is worth anything is *would anyone notice if it were wrong?* A suite can sit near 100% branch coverage and still stay green against a deliberately broken implementation - running is not observing. Where observation is thin, mutation testing exposes it as a kill-rate far below the coverage number, and closing that gap means adding the assertions that were missing, not touching the code.
