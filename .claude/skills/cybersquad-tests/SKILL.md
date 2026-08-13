@@ -39,6 +39,14 @@ Named ways a test goes green for the wrong reason. The mutation you can't kill i
 
 Two more worth checking for, easy to miss because they read as thorough: a pure tautology (an assertion that cannot fail against any implementation), and a missing adversarial case on an LLM-facing free-text field.
 
+## The green test that ratifies a bug
+
+The taxonomy above is green-for-the-wrong-reason. There is a worse failure it does not cover, because it is green for the *right* reason: a test that observes the code faithfully, kills its mutants, reads as thorough - and pins behaviour that is *wrong*. The test is correct about what the code does; the code does the wrong thing; the test locks the defect in as the spec. Mutation testing cannot catch this - a ratifying test has no missing assertion to expose. Only the face-value pass catches it: after "is the behaviour observed?" comes "is the observed behaviour *what the feature promises*?"
+
+When that second question answers no, the deliverable is a **red test named for the intended behaviour** - a failing repro that reports the feature does not work - plus the defect, **never** a green test that encodes the broken behaviour as correct. A refactor whose board is green but never once tried to make the feature fail is not finished; it has only proved the code does what it does. Hunt for the input on which the feature *should* produce a result and does not, and write the test that goes red on it - a limitation you narrate is a green test's excuse; a limitation you prove with a red test is a defect that gets fixed.
+
+Worked example - the ssrf loopback oracle. The probe ships `localhost-ipv4` / `localhost-ipv6` payloads advertised as exposing "internal services, Redis, admin panels", but confirmation (`_confirms_ssrf`) recognises only AWS-IMDS bodies, so a loopback probe that genuinely reaches an internal service returns no finding - the advertised feature cannot fire. The suite carried a green `test_only_reachable_targets_confirm` that *ratified* this (loopback -> no finding, asserted as correct). The honest artefact is the inverse: inject `127.0.0.1`, return a realistic internal-service body, assert a finding - a test that goes red and names the defect, so it becomes a fix (a non-IMDS confirmation signal) rather than a footnote in a review.
+
 ## Mutation testing - the audit signal
 
 Coverage is a floor the gate already enforces; mutation is the *observation* axis, the one number a suite cannot earn by visiting lines. Run it as a **periodic, per-module audit - never a merge gate.**
