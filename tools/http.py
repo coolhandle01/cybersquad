@@ -15,6 +15,7 @@ operator without having to ban the IP first. See issue #46.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
 from requests.structures import CaseInsensitiveDict
@@ -122,3 +123,65 @@ def patch(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Respo
 def options(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
     _timeout = config.recon.http_timeout if timeout is None else timeout
     return requests.options(url, timeout=_timeout, **_inject_headers(kwargs))
+
+
+def inject_query_param(url: str, name: str, value: str) -> str:
+    """Splice ``name=value`` into ``url``'s query string so the *server* receives it.
+
+    A probe that injects a payload into a URL query has two ways to build a
+    silently-broken request, and this helper closes both. It is the single
+    shared implementation the injection probes call rather than assembling a
+    query with an f-string; keep the safety in one place so every probe
+    inherits it.
+
+    URL query-component grammar is RFC 3986 section 3.4
+    (https://www.rfc-editor.org/rfc/rfc3986.html#section-3.4); percent-encoding
+    is section 2.1.
+
+    **A second ``?`` never registers the parameter.** The naive
+    ``f"{url}?{name}={value}"`` produces ``...?a=1?name=value`` when ``url``
+    already carries a query string. There is only one query component - it
+    begins at the first ``?`` and runs to the end (or the fragment) - so the
+    literal second ``?`` and everything after it is read as part of the
+    *previous* parameter's value. The injected parameter never appears as its
+    own key, the probe's payload never reaches the server as a parameter, and
+    the probe reports nothing on exactly the endpoints most worth probing (the
+    ones that already take parameters). This helper splits the URL with
+    ``urlsplit``, and when a query is already present it joins the new pair on
+    with ``&`` - the query-component separator - never a second ``?``.
+
+    **Query-significant bytes must survive to the server.** A raw payload
+    containing query metacharacters is mangled in transit unless it is
+    percent-encoded: ``#`` opens the fragment (the payload after it is dropped
+    before the request is even sent), ``&`` starts the next parameter
+    (truncating the value), ``+`` decodes to a space under
+    ``application/x-www-form-urlencoded``, and ``;`` / space / ``( ) *`` are
+    likewise reserved or delimiting in practice. ``name`` and ``value`` are
+    percent-encoded with ``quote(..., safe="")`` - an empty ``safe`` so even
+    ``/`` is encoded - so each of these bytes reaches the server as the literal
+    character the payload intended, not as query structure.
+
+    The function is pure: it reads ``url``/``name``/``value`` and returns a new
+    URL string, issuing no request and mutating nothing. Appending a parameter
+    whose name already occurs is intentional and preserved - both pairs survive
+    in order (e.g. an HPP probe adding a second ``p=2`` to an existing ``p=1``
+    yields ``...?p=1&p=2``), because the query is spliced textually rather than
+    merged into a dict that would collapse the duplicate.
+
+    Args:
+        url: The target URL, with or without an existing query string. Any
+            fragment is preserved and the parameter is placed in the query
+            component ahead of it.
+        name: The parameter name to inject. Percent-encoded before splicing.
+        value: The parameter value to inject. Percent-encoded before splicing,
+            so query-significant bytes reach the server intact.
+
+    Returns:
+        ``url`` with ``name=value`` appended to its query component - joined
+        with ``&`` when a query already exists, introduced with ``?`` when it
+        did not.
+    """
+    pair = f"{quote(name, safe='')}={quote(value, safe='')}"
+    parts = urlsplit(url)
+    query = f"{parts.query}&{pair}" if parts.query else pair
+    return urlunsplit(parts._replace(query=query))
