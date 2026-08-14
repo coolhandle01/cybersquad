@@ -25,6 +25,7 @@ from crewai import LLM
 from crewai.tools import tool
 
 from squad import build_agent
+from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
 from squad.programme_manager import MEMBER as PROGRAMME_MANAGER
 
 
@@ -99,6 +100,26 @@ class TestBuildAgentSpliceUnit:
 
         assert list(captured["tools"]) == list(PROGRAMME_MANAGER.tools)
 
+    def test_skilled_member_passes_skills_dir(self, monkeypatch):
+        """A member with a ``skills/`` dir hands CrewAI a one-element list
+        carrying that dir, so ``crewai.skills`` discovers its specialist
+        SKILL.md folders."""
+        captured = self._capture_agent_kwargs(monkeypatch)
+
+        build_agent(PROGRAMME_MANAGER, MagicMock(name="llm"))
+
+        assert captured["skills"] == [PROGRAMME_MANAGER.skills_dir]
+
+    def test_skill_less_member_passes_none_not_empty_list(self, monkeypatch):
+        """A member without a ``skills/`` dir passes ``skills=None``, not
+        ``[]`` - CrewAI's Agent rejects an explicitly-empty skills list
+        (min_length=1) but accepts None (its default)."""
+        captured = self._capture_agent_kwargs(monkeypatch)
+
+        build_agent(DISCLOSURE_COORDINATOR, MagicMock(name="llm"))
+
+        assert captured["skills"] is None
+
 
 @pytest.fixture
 def real_llm() -> LLM:
@@ -107,7 +128,7 @@ def real_llm() -> LLM:
     BaseLLM``. Constructing the LLM makes no network call; only the Agent
     constructor would, and ``_disable_crewai_telemetry`` gates that. Scoped to
     the integration tests so the unit run constructs no real CrewAI objects."""
-    return LLM(model="anthropic/claude-sonnet-4-20250514", temperature=0.0, max_tokens=1)
+    return LLM(model="anthropic/claude-sonnet-4-6", temperature=0.0, max_tokens=1)
 
 
 @pytest.mark.integration
@@ -134,3 +155,13 @@ class TestBuildAgentMCPSpliceIntegration:
         agent = build_agent(PROGRAMME_MANAGER, real_llm)
 
         assert len(agent.tools) == len(PROGRAMME_MANAGER.tools)
+
+    def test_skill_less_member_builds_real_agent(self, real_llm):
+        """A member without a ``skills/`` dir constructs a real Agent. The
+        signal the unit layer cannot give: CrewAI's Agent rejects an
+        explicitly-empty skills list (min_length=1), so build_agent must pass
+        None - four of six members have no skills dir and this is the path the
+        dry-run exercises for them."""
+        agent = build_agent(DISCLOSURE_COORDINATOR, real_llm)
+
+        assert len(agent.tools) == len(DISCLOSURE_COORDINATOR.tools)

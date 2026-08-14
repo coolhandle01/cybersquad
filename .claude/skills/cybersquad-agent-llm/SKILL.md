@@ -25,10 +25,10 @@ The model name must carry its litellm provider prefix:
 
 ```python
 # correct
-config.llm.model == "anthropic/claude-sonnet-4-20250514"
+config.llm.model == "anthropic/claude-sonnet-4-6"
 
 # wrong - litellm cannot route this
-config.llm.model == "claude-sonnet-4-20250514"
+config.llm.model == "claude-sonnet-4-6"
 ```
 
 If you change the default model in `config.py`, keep the `anthropic/` (or other provider) prefix. `tools/metrics.py` strips everything up to and including the first `/` before its pricing-table lookup - do not regress that code path.
