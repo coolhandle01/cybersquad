@@ -79,6 +79,12 @@ dev = [
     "respx>=0.21",          # mock httpx/requests at transport level
     "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
+    # Mutation audit - a periodic, per-module observation tool, never a merge
+    # gate (run recipe in the cybersquad-tests skill). Pinned to 3.7 so the
+    # setup.cfg keys that skill documents (source_paths, only_mutate,
+    # pytest_add_cli_args*) match the installed CLI.
+    "mutmut>=3.7",
+
     # Linting & formatting
     "ruff>=0.16",
     "mypy>=1.10",
