@@ -194,13 +194,18 @@ class _HppArgs(BaseModel):
 def hpp_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Detect HTTP Parameter Pollution by sending a baseline request
-    (`?param=1`) and a polluted request (`?param=1&param=2`) and comparing
-    status code + body length. A status-code change confirms alone; a
-    body-length change confirms only once it exceeds the bytes the duplicated
-    parameter itself adds (so a page that merely echoes its query string is not
-    flagged). A confirmed divergence means the server treats duplicate values
-    as distinguishable from a single value - the pre-condition for WAF bypass
-    and access-control bypass exploits.
+    (`?param=1`) and duplicated requests in both precedence orders - appended
+    (`?param=1&param=2`) and prepended (`?param=2&param=1`) - then comparing the
+    responses by a content-aware diff: each response has its reflected request
+    URL stripped and the residual bodies are compared, so a same-length value
+    swap is seen while a page that merely echoes its query string is not
+    flagged, however many times it echoes. Testing both orders catches a
+    first-value-precedence server an append-only probe would miss. A bare
+    status-code change with an otherwise-identical body is corroborated by a
+    baseline re-request before it confirms, so a transient 429 or cold-cache
+    flip the duplicate did not cause is not reported. A confirmed divergence
+    means the server treats duplicate values as distinguishable from a single
+    value - the pre-condition for WAF bypass and access-control bypass exploits.
 
     endpoints: list of endpoint objects. Prioritise endpoints
       where any of the following apply:
