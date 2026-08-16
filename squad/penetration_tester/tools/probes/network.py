@@ -88,9 +88,10 @@ def open_redirect_tool(
     payloads: list[OpenRedirectPayload] | None = None,
 ) -> list[RawFinding]:
     """
-    Inject external URL payloads (https, protocol-relative, backslash, userinfo)
-    into URL parameters and check whether the response Location, Refresh header,
-    or meta-refresh tag points to the canary host.
+    Inject external URL payloads (https, protocol-relative, backslash,
+    backslash-scheme, userinfo) into URL parameters and check whether the
+    response Location, Refresh header, or meta-refresh tag points to the canary
+    host.
 
     endpoints: list of endpoint objects. Prioritise endpoints that have
       parameters AND where any of the following apply:
