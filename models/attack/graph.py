@@ -63,3 +63,29 @@ class AttackGraph(BaseModel):
     # (additive: empty when the WEB_INVENTORY pass did not run).
     tls_certificates: list[TLSCertificate] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ReconSearchResult(BaseModel):
+    """The vector-search slice of ``recon.json`` (the #169 spike's return shape).
+
+    Sibling of ``EndpointPage`` / ``OpenPortsMap`` (the *typed*-query result
+    shapes): where those carry a schema-filtered slice the agent asked for by
+    axis, this carries the *semantically* retrieved slice the agent asked for in
+    prose. ``matches`` is the concatenated relevant-chunk text JSONSearchTool
+    returned - free-text, not re-parsed back into the asset shapes, because the
+    whole point of the vector path is to surface cross-cutting material the typed
+    slicers cannot express as a filter.
+
+    ``matches`` is tool-captured recon content (httpx/nmap banners et al. already
+    live in ``recon.json``); it is a retrieved *subset* of an artefact the agents
+    already read wholesale via Read Run File, so it opens no injection surface the
+    typed readers do not - defence 3 (the field travels no further than the agent
+    that queried) applies, same as Read Run File's ``content``.
+    """
+
+    query: str = Field(description="The natural-language query that was run.")
+    recon_path: str = Field(description="The recon.json the query was run against.")
+    matches: str = Field(
+        default="",
+        description="The concatenated relevant-chunk text vector search retrieved.",
+    )

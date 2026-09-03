@@ -40,7 +40,9 @@ DO NOT use `output_pydantic=SomeModel` on tasks for inter-agent flow. Three reas
 2. **Prose-coercion cost.** `output_pydantic` constrains the agent to JSON-only output. Agents naturally want to produce "Here is my reasoning, then the JSON" and JSON parsing breaks on the prose. Suppressing the prose reliably takes non-trivial prompt engineering.
 3. **Both-and.** Workspace files let the task's textual output be reasoning-narrative (which the next agent uses to orient) AND the typed artefact be the structured contract (which downstream code consumes). `output_pydantic` collapses these into one.
 
-For the tool-side conventions (writer/reader pair, return types, where shared tools live), load `cybersquad-tool`.
+A consumer agent does not have to re-read the whole artefact to use it. The typed slicers (`Recon Endpoints` / `Recon Open Ports` / `Recon Subdomains`) pull narrow schema-filtered views on demand, and `Recon Semantic Search` (the #169 spike, `squad/tools/recon_search.py`) lets an agent *query* `recon.json` in natural language - a vector search over the same file - without loading it whole. Both are the size argument (reason 1) applied at read time: the workspace file is the contract, the slicer/search is how a downstream agent samples it cheaply. The vector path complements the typed slicers (it catches cross-cutting questions a filter cannot phrase); it is size-dependent, so reach for the typed slicer first when the question fits an axis.
+
+For the tool-side conventions (writer/reader pair, return types, where shared tools live, wrapping CrewAI built-ins like `JSONSearchTool`), load `cybersquad-tool`.
 
 ## When `output_pydantic` is acceptable
 

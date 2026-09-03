@@ -161,7 +161,16 @@ The reader returns the typed model; downstream agents work against the schema, n
 ## Where tools live
 
 - **Per-agent**: the wrapper modules live under `squad/<agent>/tools/` (one module per cohesive responsibility - e.g. `discovery.py` / `curation.py`, `probes/` / `cloud/`, `selection.py`, `submission.py`, `authoring.py`). The agent's `squad/<agent>/__init__.py` imports each wrapper, assembles the `MEMBER.tools` list, and re-exports the wrappers + their args_schema classes so consumers keep importing `from squad.<agent> import ...`.
-- **Shared between agents**: `squad/tools/workspace_tools.py`. Re-export through `squad/__init__.py` (`__all__` and the explicit re-export) so consumers `from squad import read_attack_forest_tool`, not from the deeper path.
+- **Shared between agents**: `squad/tools/workspace_tools.py` (and siblings like `squad/tools/recon_search.py`). Re-export through `squad/__init__.py` (`__all__` and the explicit re-export) so consumers `from squad import read_attack_forest_tool`, not from the deeper path.
+
+## CrewAI built-in tools are first-class
+
+A `crewai_tools` built-in (`JSONSearchTool`, `ScrapeWebsiteTool`, ...) is a legitimate `MEMBER.tools` entry - it already satisfies the `SquadTool` Protocol (`name` / `description` / `args_schema` / `func`). Two ways to register one:
+
+- **Register the instance directly** when it needs no run-context: construct it, drop it in `MEMBER.tools`. The agent passes whatever the built-in's own `args_schema` declares.
+- **Wrap it through `@cyber_tool`** when it needs *workspace-aware path resolution* or a *typed return*. The built-ins take absolute paths the agent should never see; a wrapper resolves the relative artefact name via `resolve_run_path` (lazily, at call time - `run_dir()` binds mid-run) and hands the resolved path to the built-in inside the body. This keeps the "agents pass relative paths" invariant true and lets the wrapper return a typed model instead of the built-in's raw string.
+
+`recon_semantic_search_tool` (`squad/tools/recon_search.py`, the #169 spike) is the worked example: it wraps `JSONSearchTool` so the agent queries `recon.json` by relative name, defaults to a local no-key/no-spend `onnx` embedder (the built-in's own default is OpenAI, which this project carries no key for), and returns a typed `ReconSearchResult`. Note the size-dependence it documents: vector retrieval only discriminates once the document spans many chunks, so it complements - does not replace - the typed `Recon *` slicers. The atomic per-host `assets/<fqdn>/*.json` store is *not* a valid target for a single-document RAG tool (each facet is tiny and the host lives in the dir name, not the body); the typed `load_host_*` readers own that store.
 
 ## Where models live
 

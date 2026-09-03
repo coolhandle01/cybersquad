@@ -29,7 +29,7 @@ from models.attack.forest import (
     AttackForestValidationIssue,
     AttackForestValidationReport,
 )
-from models.attack.graph import AttackGraph
+from models.attack.graph import AttackGraph, ReconSearchResult
 from models.attack.tree import AttackTree
 
 __all__ = [
@@ -39,4 +39,5 @@ __all__ = [
     "AttackForestValidationReport",
     "AttackGraph",
     "AttackTree",
+    "ReconSearchResult",
 ]

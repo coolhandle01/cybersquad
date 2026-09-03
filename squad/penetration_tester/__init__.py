@@ -28,6 +28,7 @@ from squad import (
     read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,
+    recon_semantic_search_tool,
 )
 from squad.penetration_tester.tools._decorator import (
     _parse_endpoints,
@@ -145,6 +146,7 @@ from squad.penetration_tester.tools.recon import (
     recon_open_ports_tool,
     recon_subdomains_tool,
 )
+from squad.tools.recon_search import _ReconSemanticSearchArgs
 from squad.tools.workspace_tools import (
     _ListRunFilesArgs,
     _ReadAttackForestArgs,
@@ -208,6 +210,7 @@ MEMBER = SquadMember(
         recon_subdomains_tool,
         recon_endpoints_tool,
         recon_open_ports_tool,
+        recon_semantic_search_tool,
         save_findings_tool,
         # Shared workspace wrappers
         read_attack_forest_tool,
@@ -269,6 +272,7 @@ MEMBER = SquadMember(
         "Recon Subdomains": _PtReconSubdomainsArgs,
         "Recon Endpoints": _PtReconEndpointsArgs,
         "Recon Open Ports": _PtReconOpenPortsArgs,
+        "Recon Semantic Search": _ReconSemanticSearchArgs,
         "Save Findings": _SaveFindingsArgs,
         # Shared workspace wrappers (re-exported via squad.tools.workspace_tools)
         "List Run Files": _ListRunFilesArgs,
