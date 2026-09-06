@@ -52,11 +52,13 @@ from squad.penetration_tester.tools.probes.external import (
 )
 from squad.penetration_tester.tools.probes.headers import (
     _CookieCheckArgs,
+    _CorsCheckArgs,
     _CsrfCheckArgs,
     _HeaderInjectionArgs,
     _HostHeaderArgs,
     _HppArgs,
     cookie_check_tool,
+    cors_check_tool,
     csrf_check_tool,
     header_injection_tool,
     host_header_tool,
@@ -112,11 +114,13 @@ __all__ = [  # noqa: RUF022 - grouped by probe-family sub-module, not alphabetis
     "nuclei_scan_tool",
     # headers
     "_CookieCheckArgs",
+    "_CorsCheckArgs",
     "_CsrfCheckArgs",
     "_HeaderInjectionArgs",
     "_HostHeaderArgs",
     "_HppArgs",
     "cookie_check_tool",
+    "cors_check_tool",
     "csrf_check_tool",
     "header_injection_tool",
     "host_header_tool",

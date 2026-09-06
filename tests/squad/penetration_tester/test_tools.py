@@ -164,6 +164,26 @@ class TestEndpointProbeScopeGuard:
         assert passed_endpoints == []
         assert oos_host not in [urlparse(str(ep.url)).hostname for ep in passed_endpoints]
 
+    def test_cors_check_forwards_in_scope_endpoint(
+        self, programme_in_workspace, endpoint, raw_finding_low, invoke_tool
+    ) -> None:
+        from squad.penetration_tester import cors_check_tool
+
+        with patch(
+            "squad.penetration_tester.tools.probes.headers.check_cors_misconfiguration",
+            return_value=[raw_finding_low],
+        ) as mcheck:
+            result = invoke_tool(
+                cors_check_tool,
+                endpoints=[endpoint.model_dump(mode="json")],
+                probe_names=None,
+            )
+
+        assert result == [raw_finding_low]
+        mcheck.assert_called_once()
+        passed_endpoints = mcheck.call_args.args[0]
+        assert [ep.url for ep in passed_endpoints] == [endpoint.url]
+
 
 class TestReconPathProbeForwarding:
     """The header / cookie / CSRF probe wrappers take a ``recon_path``

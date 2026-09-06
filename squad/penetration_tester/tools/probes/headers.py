@@ -14,6 +14,7 @@ from squad.penetration_tester.tools._decorator import (
     pentest_tool,
 )
 from tools.pentest.cookies import check_cookies
+from tools.pentest.cors import CorsProbe, check_cors_misconfiguration
 from tools.pentest.csrf import check_csrf
 from tools.pentest.hpp import check_hpp
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
@@ -48,6 +49,58 @@ def cookie_check_tool(recon_path: str) -> list[RawFinding]:
     """
     recon = _recon_from_path(recon_path)
     return list(check_cookies(recon.endpoints))
+
+
+class _CorsCheckArgs(BaseModel):
+    """Explicit args_schema for the CORS Misconfiguration Check tool."""
+
+    endpoints: TargetEndpoints = Field(
+        description=(
+            "Endpoint objects to probe - prioritise API endpoints and any route"
+            " that serves authenticated content or reads a session cookie, where"
+            " a cross-origin read is worth the most."
+        ),
+    )
+    probe_names: list[CorsProbe] | None = Field(
+        default=None,
+        description=(
+            "Optional list of Origin probes to send; omit or pass null to try"
+            " all. Pass ['null-origin'] to test only the sandboxed-iframe / data:"
+            " URL null origin, ['reflected-origin'] to test only naive Origin"
+            " reflection."
+        ),
+    )
+
+
+@pentest_tool(
+    "CORS Misconfiguration Check",
+    check_fn=check_cors_misconfiguration,
+    args_schema=_CorsCheckArgs,
+)
+def cors_check_tool(
+    endpoints: list[Endpoint],
+    probe_names: list[CorsProbe] | None = None,
+) -> list[RawFinding]:
+    """
+    Probe endpoints for exploitable CORS by sending an untrusted cross-origin
+    Origin header and reading the Access-Control-Allow-Origin / -Credentials
+    response. Findings are tiered by chainability (one per endpoint, highest
+    tier wins):
+
+    - HIGH: a reflected untrusted origin with Access-Control-Allow-Credentials:
+      true - a browser exposes the credentialed response cross-origin (direct
+      theft of authenticated data).
+    - LOW: a reflected untrusted origin without credentials - any origin can
+      read the uncredentialed response (a chain enabler; the VR decides whether
+      it composes into a real exploit at triage).
+    - INFORMATIONAL: Access-Control-Allow-Origin: * - no credentialed read, but
+      any origin can still read uncredentialed responses.
+
+    Two variants: reflected-origin (naive Origin reflection) and null-origin
+    (servers allow-listing the null origin). Omit probe_names to run both;
+    narrow to one to save a request per endpoint.
+    """
+    return list(check_cors_misconfiguration(_parse_endpoints(endpoints), probe_names))
 
 
 class _CsrfCheckArgs(BaseModel):
