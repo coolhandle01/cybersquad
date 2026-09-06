@@ -58,10 +58,13 @@ jobs:
           echo "${changed}"
           # Paths that cannot affect the build: all markdown (docs, and every
           # agent-facing role/goal/backstory/task/SKILL prose file, which are
-          # all .md), and everything under .claude/ (hooks, settings, skills).
-          # If the changeset is nothing but these, code stays false and the
-          # heavy jobs skip.
-          build_relevant="$(printf '%s\n' "${changed}" | grep -vE '(\.md$|^\.claude/)' || true)"
+          # all .md), everything under .claude/ (hooks, settings, skills), and
+          # the spec-driven-development trees .specify/ (vendored Spec Kit -
+          # templates, sh/json/yml tooling the product never imports) and
+          # docs/design/ (feature specifications and their plan/tasks/contract
+          # artifacts). If the changeset is nothing but these, code stays false
+          # and the heavy jobs skip.
+          build_relevant="$(printf '%s\n' "${changed}" | grep -vE '(\.md$|^\.claude/|^\.specify/|^docs/design/)' || true)"
           if [ -n "${build_relevant}" ]; then
             echo "code=true" >> "${GITHUB_OUTPUT}"
           else

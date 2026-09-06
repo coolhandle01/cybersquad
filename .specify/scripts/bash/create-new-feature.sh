@@ -188,7 +188,9 @@ REPO_ROOT=$(get_repo_root) || exit 1
 
 cd "$REPO_ROOT"
 
-SPECS_DIR="$REPO_ROOT/specs"
+# Feature specs live under docs/design/<slug> (this repo's design-doc home),
+# not the upstream default specs/<NNN>-<slug>. See .specify/templates/overrides/README.md.
+SPECS_DIR="$REPO_ROOT/docs/design"
 if [ "$DRY_RUN" != true ]; then
     mkdir -p "$SPECS_DIR"
 fi
@@ -326,7 +328,9 @@ if [ "$BRANCH_NAME" != "$ORIGINAL_BRANCH_NAME" ]; then
     >&2 echo "[specify] Truncated to: $BRANCH_NAME (${#BRANCH_NAME} bytes)"
 fi
 
-FEATURE_DIR="$SPECS_DIR/$BRANCH_NAME"
+# Directory is the bare slug (no NNN- prefix); BRANCH_NAME keeps the number
+# for callers that use it as a git branch label.
+FEATURE_DIR="$SPECS_DIR/$BRANCH_SUFFIX"
 SPEC_FILE="$FEATURE_DIR/spec.md"
 
 if [ "$DRY_RUN" != true ]; then
