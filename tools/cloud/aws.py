@@ -12,11 +12,14 @@ from __future__ import annotations
 import logging
 
 from models import RawFinding, Severity
+from models.cloud import Cloud
 from tools import http
+from tools.pentest.cloud import cloud
 
 logger = logging.getLogger(__name__)
 
 
+@cloud(Cloud.aws)
 def check_s3_buckets(hostnames: list[str]) -> list[RawFinding]:
     """
     Check each supplied S3 hostname for public listing or accessibility.
