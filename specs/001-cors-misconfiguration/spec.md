@@ -44,7 +44,7 @@ For an untrusted probed origin `O` (a non-resolving canary origin, or the litera
 
 - **Request shape**: `GET ep.url` with header `Origin: <O>`, redirects disabled; read only the `Access-Control-Allow-Origin` and `Access-Control-Allow-Credentials` response headers (case-insensitive lookup).
 
-## Payload / Variant Catalogue *(if multi-variant)*
+## Payload / Variant Catalogue *(if multi-variant; else "single probe, no variants")*
 
 | Variant | Payload (`Origin` header) | Defeats |
 |---|---|---|
