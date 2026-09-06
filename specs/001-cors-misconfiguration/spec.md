@@ -38,18 +38,18 @@ For an untrusted probed origin `O` (a non-resolving canary origin, or the litera
 - **LOW** - `ACAO == O` and `ACAC` absent / not `true`: any origin can read the *uncredentialed* response. Not authenticated-data theft on its own, but a chain enabler (reading a token, or data that feeds a later step).
 - **INFORMATIONAL** - `ACAO == "*"`: browsers refuse to send credentials to a wildcard, so no credentialed read; any origin can still read uncredentialed responses (same chain caveat). Ubiquitous on public APIs, hence the lowest tier.
 
+- **A finding is raised when**: an untrusted probed origin `O` is reflected in `ACAO` (or `ACAO == "*"`), per the tiers above.
 - **NOT a finding** (each of these SHALL stay clean):
   - No `Access-Control-Allow-Origin` header (no CORS granted).
   - `ACAO` echoing an origin *other* than `O` (a same-origin or allow-listed origin) - the server validated the origin.
-
 - **Request shape**: `GET ep.url` with header `Origin: <O>`, redirects disabled; read only the `Access-Control-Allow-Origin` and `Access-Control-Allow-Credentials` response headers (case-insensitive lookup).
 
 ## Payload / Variant Catalogue *(if multi-variant; else "single probe, no variants")*
 
-| Variant | Payload (`Origin` header) | Defeats |
+| Variant | Payload | Defeats |
 |---|---|---|
-| `reflected_origin` | `https://<canary-host>` (a non-resolving RFC 2606 `.invalid` origin) | Servers that reflect any request Origin into `Access-Control-Allow-Origin`. |
-| `null_origin` | `null` | Servers that allow-list the `null` origin (reachable by an attacker from a sandboxed iframe / `data:` document). |
+| `reflected_origin` | `Origin: https://<canary-host>` (a non-resolving RFC 2606 `.invalid` origin) | Servers that reflect any request Origin into `Access-Control-Allow-Origin`. |
+| `null_origin` | `Origin: null` | Servers that allow-list the `null` origin (reachable by an attacker from a sandboxed iframe / `data:` document). |
 
 (`ACAO: *` is not a payload - it is a wildcard *response* that either variant can elicit; it is scored at the `INFORMATIONAL` tier above.)
 
