@@ -14,7 +14,7 @@ from squad.penetration_tester.tools._decorator import (
     pentest_tool,
 )
 from tools.pentest.cookies import check_cookies
-from tools.pentest.cors import check_cors_misconfiguration
+from tools.pentest.cors import CorsProbe, check_cors_misconfiguration
 from tools.pentest.csrf import check_csrf
 from tools.pentest.hpp import check_hpp
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
@@ -54,10 +54,19 @@ def cookie_check_tool(recon_path: str) -> list[RawFinding]:
 class _CorsCheckArgs(BaseModel):
     """Explicit args_schema for the CORS Misconfiguration Check tool."""
 
-    recon_path: str = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
-            "Relative path to recon.json in the run directory. CORS"
-            " misconfigurations are probed against every live endpoint."
+            "Endpoint objects to probe - prioritise API endpoints and routes"
+            " that serve authenticated content, where a cross-origin read is"
+            " worth the most."
+        ),
+    )
+    probe_names: list[CorsProbe] | None = Field(
+        default=None,
+        description=(
+            "Which Origin probes to send; omit to send all. Pass"
+            " ['null-origin'] to test only the null origin, ['attacker-origin']"
+            " to test only reflection of an untrusted origin."
         ),
     )
 
@@ -67,15 +76,20 @@ class _CorsCheckArgs(BaseModel):
     check_fn=check_cors_misconfiguration,
     args_schema=_CorsCheckArgs,
 )
-def cors_check_tool(recon_path: str) -> list[RawFinding]:
+def cors_check_tool(
+    endpoints: list[Endpoint],
+    probe_names: list[CorsProbe] | None = None,
+) -> list[RawFinding]:
     """
-    Check all live endpoints for CORS misconfigurations: origin reflection,
-    null origin acceptance, and overly permissive Access-Control-Allow-Origin headers.
-    Relevant wherever the target exposes an API or serves authenticated content.
-    Pass the path to the recon.json file in the run directory.
+    Probe endpoints for CORS misconfigurations by sending an untrusted
+    cross-origin Origin header and reading the Access-Control-Allow-Origin /
+    Access-Control-Allow-Credentials response. Reports one finding per endpoint,
+    graded by severity: HIGH when an untrusted origin is reflected with
+    credentials allowed, LOW when reflected without credentials, INFORMATIONAL
+    when any origin is allowed. Omit probe_names to send both the attacker
+    origin and the null origin.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_cors_misconfiguration(recon.endpoints))
+    return list(check_cors_misconfiguration(_parse_endpoints(endpoints), probe_names))
 
 
 class _CsrfCheckArgs(BaseModel):
