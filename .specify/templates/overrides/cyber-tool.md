@@ -35,15 +35,15 @@
 
 **Refusal / empty outcomes**
 
-- IF [precondition not met], the tool MUST [return empty / no-op / raise X], not [the wrong outcome].
+- IF [precondition not met], the tool SHALL [return empty / no-op / raise X], not [the wrong outcome].
 
 ## Requirements *(mandatory)*
 
 <!-- Tool-specific behaviour only, each independently testable. -->
 
-- **FR-001**: The tool MUST [capability].
-- **FR-002**: WHEN [trigger], the tool MUST [response].
-- **FR-003**: IF [error / edge], the tool MUST [safe outcome].
+- **FR-001**: The tool SHALL [capability].
+- **FR-002**: WHEN [trigger], the tool SHALL [response].
+- **FR-003**: IF [error / edge], the tool SHALL [safe outcome].
 
 ## Observable Behaviour (test oracles) *(mandatory)*
 
