@@ -177,8 +177,9 @@ class TestSchemaAcceptReject:
             (_XssArgs, {"endpoints": []}),
             (_HppArgs, {"endpoints": []}),
             (_ErrorDisclosureArgs, {"endpoints": []}),
+            (_CorsCheckArgs, {"endpoints": []}),
+            (_CorsCheckArgs, {"endpoints": [], "probe_names": ["null-origin"]}),
             (_CookieCheckArgs, {"recon_path": "recon.json"}),
-            (_CorsCheckArgs, {"recon_path": "recon.json"}),
             (_CsrfCheckArgs, {"recon_path": "recon.json"}),
             (_HeaderInjectionArgs, {"recon_path": "recon.json"}),
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
@@ -308,6 +309,7 @@ class TestSchemaAcceptReject:
             _XssArgs,
             _HppArgs,
             _ErrorDisclosureArgs,
+            _CorsCheckArgs,
             # @cyber_tool cloud wrappers that take endpoints
             *_ENDPOINTS_CLOUD_SCHEMAS,
         ],
@@ -352,7 +354,6 @@ class TestSchemaAcceptReject:
         "schema_cls",
         [
             _CookieCheckArgs,
-            _CorsCheckArgs,
             _CsrfCheckArgs,
             _HeaderInjectionArgs,
             _HostHeaderArgs,
