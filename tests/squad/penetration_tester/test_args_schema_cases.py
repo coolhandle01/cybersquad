@@ -26,7 +26,6 @@ from squad.penetration_tester import (
     _ConsulVaultPathArgs,
     _ConsulVaultPortArgs,
     _CookieCheckArgs,
-    _CorsCheckArgs,
     _CouchdbCheckArgs,
     _CpanelArgs,
     _CsrfCheckArgs,
@@ -178,7 +177,6 @@ class TestSchemaAcceptReject:
             (_HppArgs, {"endpoints": []}),
             (_ErrorDisclosureArgs, {"endpoints": []}),
             (_CookieCheckArgs, {"recon_path": "recon.json"}),
-            (_CorsCheckArgs, {"recon_path": "recon.json"}),
             (_CsrfCheckArgs, {"recon_path": "recon.json"}),
             (_HeaderInjectionArgs, {"recon_path": "recon.json"}),
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
@@ -352,7 +350,6 @@ class TestSchemaAcceptReject:
         "schema_cls",
         [
             _CookieCheckArgs,
-            _CorsCheckArgs,
             _CsrfCheckArgs,
             _HeaderInjectionArgs,
             _HostHeaderArgs,

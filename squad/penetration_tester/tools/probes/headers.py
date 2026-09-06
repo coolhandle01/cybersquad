@@ -14,7 +14,6 @@ from squad.penetration_tester.tools._decorator import (
     pentest_tool,
 )
 from tools.pentest.cookies import check_cookies
-from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.csrf import check_csrf
 from tools.pentest.hpp import check_hpp
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
@@ -49,33 +48,6 @@ def cookie_check_tool(recon_path: str) -> list[RawFinding]:
     """
     recon = _recon_from_path(recon_path)
     return list(check_cookies(recon.endpoints))
-
-
-class _CorsCheckArgs(BaseModel):
-    """Explicit args_schema for the CORS Misconfiguration Check tool."""
-
-    recon_path: str = Field(
-        description=(
-            "Relative path to recon.json in the run directory. CORS"
-            " misconfigurations are probed against every live endpoint."
-        ),
-    )
-
-
-@pentest_tool(
-    "CORS Misconfiguration Check",
-    check_fn=check_cors_misconfiguration,
-    args_schema=_CorsCheckArgs,
-)
-def cors_check_tool(recon_path: str) -> list[RawFinding]:
-    """
-    Check all live endpoints for CORS misconfigurations: origin reflection,
-    null origin acceptance, and overly permissive Access-Control-Allow-Origin headers.
-    Relevant wherever the target exposes an API or serves authenticated content.
-    Pass the path to the recon.json file in the run directory.
-    """
-    recon = _recon_from_path(recon_path)
-    return list(check_cors_misconfiguration(recon.endpoints))
 
 
 class _CsrfCheckArgs(BaseModel):

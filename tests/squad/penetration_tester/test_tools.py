@@ -187,19 +187,6 @@ class TestReconPathProbeForwarding:
         assert result == [raw_finding_low]
         mcheck.assert_called_once_with(recon_result.endpoints)
 
-    def test_cors_check_tool(self, recon_result, raw_finding_low, run_dir, invoke_tool) -> None:
-        from squad.penetration_tester import cors_check_tool
-
-        stage_model_json(run_dir, "recon.json", recon_result)
-        with patch(
-            "squad.penetration_tester.tools.probes.headers.check_cors_misconfiguration",
-            return_value=[raw_finding_low],
-        ) as mcheck:
-            result = invoke_tool(cors_check_tool, recon_path="recon.json")
-
-        assert result == [raw_finding_low]
-        mcheck.assert_called_once_with(recon_result.endpoints)
-
     def test_csrf_check_tool(self, recon_result, raw_finding_low, run_dir, invoke_tool) -> None:
         from squad.penetration_tester import csrf_check_tool
 
