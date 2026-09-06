@@ -38,7 +38,7 @@ For an untrusted probed origin `O` (a non-resolving canary origin, or the litera
 - **LOW** - `ACAO == O` and `ACAC` absent / not `true`: any origin can read the *uncredentialed* response. Not authenticated-data theft on its own, but a chain enabler (reading a token, or data that feeds a later step).
 - **INFORMATIONAL** - `ACAO == "*"`: browsers refuse to send credentials to a wildcard, so no credentialed read; any origin can still read uncredentialed responses (same chain caveat). Ubiquitous on public APIs, hence the lowest tier.
 
-- **NOT a finding** (each MUST stay clean):
+- **NOT a finding** (each of these SHALL stay clean):
   - No `Access-Control-Allow-Origin` header (no CORS granted).
   - `ACAO` echoing an origin *other* than `O` (a same-origin or allow-listed origin) - the server validated the origin.
 
@@ -55,13 +55,13 @@ For an untrusted probed origin `O` (a non-resolving canary origin, or the litera
 
 ## Requirements *(mandatory)*
 
-- **FR-001**: WHEN `ACAO == O` and `ACAC == "true"` (case-insensitive), the probe MUST emit a `HIGH` finding for that endpoint.
-- **FR-002**: WHEN `ACAO == O` and `ACAC` is absent or not `true`, the probe MUST emit a `LOW` finding whose evidence names the chain vector.
-- **FR-003**: WHEN `ACAO == "*"`, the probe MUST emit an `INFORMATIONAL` finding whose evidence names the chain vector.
-- **FR-004**: IF there is no `Access-Control-Allow-Origin`, or it echoes an origin other than `O` and is not `*`, THEN the probe MUST NOT emit a finding.
-- **FR-005**: The probe MUST emit at most one finding per endpoint URL; when more than one variant/tier would fire, the **highest** severity tier wins.
-- **FR-006**: The probe MUST send the `Origin` header exactly as the variant specifies and MUST issue the request with redirects disabled.
-- **FR-007**: The probe MUST throttle between requests via `adaptive_sleep`, and a network error on one endpoint/variant MUST be logged and skipped without aborting the run.
+- **FR-001**: WHEN `ACAO == O` and `ACAC == "true"` (case-insensitive), the probe SHALL emit a `HIGH` finding for that endpoint.
+- **FR-002**: WHEN `ACAO == O` and `ACAC` is absent or not `true`, the probe SHALL emit a `LOW` finding whose evidence names the chain vector.
+- **FR-003**: WHEN `ACAO == "*"`, the probe SHALL emit an `INFORMATIONAL` finding whose evidence names the chain vector.
+- **FR-004**: IF there is no `Access-Control-Allow-Origin`, or it echoes an origin other than `O` and is not `*`, THEN the probe SHALL NOT emit a finding.
+- **FR-005**: The probe SHALL emit at most one finding per endpoint URL; WHEN more than one variant/tier would fire, the **highest** severity tier wins.
+- **FR-006**: The probe SHALL send the `Origin` header exactly as the variant specifies and SHALL issue the request with redirects disabled.
+- **FR-007**: The probe SHALL throttle between requests via `adaptive_sleep`, and IF a network error occurs on one endpoint/variant, THEN it SHALL be logged and skipped without aborting the run.
 
 ## Observable Behaviour (test oracles) *(mandatory)*
 
