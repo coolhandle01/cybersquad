@@ -1,6 +1,6 @@
 # Pentest Probe Specification: CORS Misconfiguration
 
-**Feature Branch**: `001-cors-misconfiguration`
+**Feature Branch**: `cors-misconfiguration`
 **Created**: 2026-09-06
 **Status**: Draft
 **Input**: User description: "Detect exploitable CORS misconfiguration: reflected untrusted Origin or null origin with credentials"
