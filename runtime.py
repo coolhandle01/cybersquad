@@ -81,10 +81,3 @@ def run_dir() -> Path:
             "bind_programme / bind_run_id) before run_dir()"
         )
     return Path(config.reports_dir) / "programs" / programme_handle / run_id
-
-
-def programme_cache_path(handle: str) -> Path:
-    """Return {reports_dir}/programs/{handle}/programme.json"""
-    from config import config
-
-    return Path(config.reports_dir) / "programs" / handle / "programme.json"

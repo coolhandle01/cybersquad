@@ -80,21 +80,3 @@ class TestBindProgramme:
         with pytest.raises(RuntimeError, match="#128"):
             runtime.bind_programme("globex")
         assert runtime.programme_handle == "acme"
-
-
-class TestProgrammeCachePath:
-    def test_returns_correct_path(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("config.config.reports_dir", str(tmp_path))
-
-        result = runtime.programme_cache_path("acme")
-
-        assert result == tmp_path / "programs" / "acme" / "programme.json"
-
-    def test_uses_provided_handle_not_global(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("config.config.reports_dir", str(tmp_path))
-        runtime.programme_handle = "other"
-
-        result = runtime.programme_cache_path("acme")
-
-        assert "acme" in str(result)
-        assert "other" not in str(result)

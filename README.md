@@ -103,7 +103,7 @@ CYBERSQUAD_CONTACT_EMAIL=you@example.com
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CREWAI_MODEL` | `anthropic/claude-sonnet-4-20250514` | LLM model (litellm format) |
+| `CREWAI_MODEL` | `anthropic/claude-sonnet-4-6` | LLM model (litellm format) |
 | `H1_MIN_BOUNTY` | `500` | Minimum max-bounty in USD to consider a programme |
 | `H1_MAX_PROGRAMMES` | `10` | Number of programmes evaluated per run |
 | `MIN_SEVERITY` | `medium` | Discard findings below this severity |

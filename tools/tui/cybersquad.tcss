@@ -1,0 +1,40 @@
+/* cybersquad's theme layer, loaded after crewui's default.tcss (see
+   tools/tui/__init__.py's CSS_PATH). crewui ships the structural CSS; this
+   file carries only cybersquad's visual preferences and wins on ties. Keep it
+   to look-and-feel - structure and behaviour stay in crewui. */
+
+/* Slimmer scrollbars: half Textual's default vertical width (2 -> 1), so the
+   bar reads as a hairline rather than a slab, in every scrollable pane. */
+#agent-session, #crew-log, #sidebar {
+    scrollbar-size-vertical: 1;
+}
+
+/* Breathing room between the turn boxes and the scrollbar. The gap goes on the
+   *boxes* (margin), not the scroll container (padding): container padding drags
+   the scrollbar inward with the content - misaligning it from the log pane's
+   bar and leaving no visible gap - whereas box margin shrinks the box alone, so
+   the bar stays at the pane edge, aligned, with clear air to its left.
+   Measured in tests/test_tui.py. */
+.agent-turn, .you-box, .gate-box, .finish-rule {
+    margin-right: 1;
+}
+
+/* Align the human-input box's right edge with the chat boxes above it. crewui
+   wraps the input in a full-width container so this margin insets the box alone
+   (a margin on the bare input shrinks the whole pane, dragging the scrollbar
+   out of alignment). Two columns: one for the scroll pane's gutter, one for the
+   box margin above. */
+#human-input {
+    margin-right: 2;
+}
+
+/* A focused/clicked collapsible (tool call, reasoning) must not fill with the
+   blue block-cursor slab - it reads as selected text rather than an expandable
+   box. Keep it dim like its resting state, with a bold cue for focus, so a
+   click just opens it. */
+.tool-call CollapsibleTitle:focus,
+.reasoning-box CollapsibleTitle:focus {
+    background: transparent;
+    color: $text-muted;
+    text-style: bold;
+}

@@ -110,6 +110,6 @@ Spike-detection assertions are useful but optional:
 ```python
 @then("the agent completes within a reasonable token budget")
 def check_token_budget(pm_output, log_token_cost):
-    cost = log_token_cost(pm_output, "anthropic/claude-sonnet-4")
+    cost = log_token_cost(pm_output, "anthropic/claude-sonnet-4-6")
     assert cost < 0.10, f"Agent cost ${cost:.4f} - possible prompt regression"
 ```

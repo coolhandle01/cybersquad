@@ -34,15 +34,50 @@ class TestEstimateCost:
         cost = estimate_cost("claude-sonnet-4-20250514", 1_000_000, 1_000_000)
         assert cost == 18.0
 
-    def test_opus_pricing(self) -> None:
-        # (15.00 + 75.00) is exactly 90.0 and representable, so `==` pins the
-        # divisor for opus too, not just sonnet.
+    def test_legacy_opus_pricing(self) -> None:
+        # Opus 4 (base, deprecated): $15 in + $75 out per 1M. (15.00 + 75.00)
+        # is exactly 90.0 and representable, so `==` pins the divisor for opus
+        # too, not just sonnet.
         cost = estimate_cost("claude-opus-4-20250514", 1_000_000, 1_000_000)
         assert cost == 90.0
 
+    def test_current_opus_pricing_does_not_collide_with_legacy(self) -> None:
+        # Opus 4.5+ is $5 in + $25 out; the longest-prefix match must beat the
+        # shorter legacy "claude-opus-4" key rather than billing $90.
+        cost = estimate_cost("claude-opus-4-5", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(30.00)
+
+    def test_longest_prefix_wins_independent_of_pricing_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The real _PRICING happens to list every specific key before its
+        # shorter legacy prefix, so a first-match loop would coincidentally pass
+        # the case above. Pin the actual max(..., key=len) tie-break with an
+        # adversarial table: the *shorter* prefix is inserted FIRST, so a naive
+        # first-match iteration bills the wrong ($9) rate. Assert both orderings
+        # resolve to the longer key, so the resolution is order-independent.
+        from tools import metrics
+
+        short_first = {"brand-x": (9.0, 0.0), "brand-x-pro": (1.0, 0.0)}
+        monkeypatch.setattr(metrics, "_PRICING", short_first)
+        assert metrics.estimate_cost("brand-x-pro-mini", 1_000_000, 0) == pytest.approx(1.0)
+
+        long_first = {"brand-x-pro": (1.0, 0.0), "brand-x": (9.0, 0.0)}
+        monkeypatch.setattr(metrics, "_PRICING", long_first)
+        assert metrics.estimate_cost("brand-x-pro-mini", 1_000_000, 0) == pytest.approx(1.0)
+
     def test_haiku_pricing(self) -> None:
+        # Haiku 4.5: $1 in + $5 out per 1M (not the legacy 3.5 rate).
         cost = estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(4.80)
+        assert cost == pytest.approx(6.00)
+
+    def test_future_haiku_4_build_falls_back_to_the_family_rate(self) -> None:
+        # A haiku-4 build newer than the pinned 4-5 (e.g. a 4-6) must still price
+        # via the bare claude-haiku-4 family key rather than silently costing $0 -
+        # matching how opus and sonnet already carry a bare-family fallback. The
+        # specific 4-5 rate still wins for a 4-5 string via longest-prefix.
+        cost = estimate_cost("claude-haiku-4-6", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(6.00)
 
     def test_zero_tokens(self) -> None:
         assert estimate_cost("claude-sonnet-4-20250514", 0, 0) == 0.0
@@ -113,7 +148,10 @@ class TestSaveMetrics:
     def test_writes_valid_json(self, tmp_path: Path) -> None:
         started = datetime.now(UTC) - timedelta(seconds=5)
         m = build_run_metrics("test-run", started, "claude-sonnet-4-20250514", 100, 50)
-        out = save_metrics(m, str(tmp_path))
+        out = save_metrics(m, tmp_path)
+        # metrics.json lands directly in the run dir it is handed - alongside
+        # programme.json - not in a nested reports/<run_id>/ folder.
+        assert out == tmp_path / "metrics.json"
         assert out.exists()
         assert out.name == "metrics.json"
         text = out.read_text()
@@ -128,17 +166,17 @@ class TestSaveMetrics:
     def test_creates_parent_dirs(self, tmp_path: Path) -> None:
         started = datetime.now(UTC) - timedelta(seconds=1)
         m = build_run_metrics("nested-run", started, "claude-haiku-4-5-20251001", 0, 0)
-        out = save_metrics(m, str(tmp_path / "new" / "dir"))
+        out = save_metrics(m, tmp_path / "new" / "dir")
         assert out.exists()
 
     def test_resave_same_run_overwrites(self, tmp_path: Path) -> None:
-        # Second save reuses the already-created <run_id> directory, so the
-        # mkdir must tolerate an existing parent (exist_ok=True). A dropped or
+        # Second save reuses the already-created run directory, so the mkdir
+        # must tolerate an existing parent (exist_ok=True). A dropped or
         # falsified exist_ok raises FileExistsError on the second call.
         started = datetime.now(UTC) - timedelta(seconds=5)
         m = build_run_metrics("dup-run", started, "claude-sonnet-4-20250514", 100, 50)
-        first = save_metrics(m, str(tmp_path))
-        second = save_metrics(m, str(tmp_path))
+        first = save_metrics(m, tmp_path)
+        second = save_metrics(m, tmp_path)
         assert second == first
         assert second.exists()
 

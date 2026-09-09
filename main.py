@@ -2,9 +2,11 @@
 main.py - Bounty Squad pipeline entrypoint.
 
 Usage:
-    python main.py             # single run, settings from .env / env vars
+    python main.py             # single run in the Textual TUI (needs a terminal)
+    python main.py --headless  # run on the plain CLI, no TUI (pipes / CI)
     python main.py --verbose   # verbose LLM output
-    python main.py --dry-run   # show crew layout without executing
+    python main.py --dry-run   # preview the pipeline without executing (dry-run TUI;
+                               #   with --headless, prints the crew-layout tables)
 
 Environment variables (see config.py for full list):
     H1_API_USERNAME     HackerOne API username         (required)
@@ -56,7 +58,12 @@ def parse_args() -> argparse.Namespace:
         epilog=__doc__,
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
-    parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the pipeline without executing (tables under --headless)",
+    )
+    parser.add_argument("--headless", action="store_true", help="Run without the Textual TUI")
     return parser.parse_args()
 
 
@@ -69,8 +76,25 @@ def check_env() -> None:
         sys.exit(1)
 
 
-def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrapped by the time the CLI sees it; tighter type buys nothing
-    """Render the crew layout as rich tables without executing."""
+def warn_if_telemetry_enabled() -> None:
+    """Warn when CrewAI telemetry is left on.
+
+    CrewAI phones home to telemetry.crewai.com; when that host is unreachable its
+    exporter threads hang the process for up to 300s on exit, and either way run
+    metadata leaves the box. Mirrors CrewAI's own opt-out check so the warning
+    matches what actually disables it (see .env.example).
+    """
+    opt_outs = ("OTEL_SDK_DISABLED", "CREWAI_DISABLE_TELEMETRY", "CREWAI_DISABLE_TRACKING")
+    if not any(os.getenv(v, "").lower() == "true" for v in opt_outs):
+        logger.warning(
+            "CrewAI telemetry is enabled: it phones home to telemetry.crewai.com "
+            "and can hang shutdown up to 300s if that host is unreachable. Set "
+            "OTEL_SDK_DISABLED=true (see .env.example) to disable it."
+        )
+
+
+def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Render the crew layout as rich tables without executing (the dry-run view)."""
     console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
     console.print()
 
@@ -86,39 +110,131 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrap
 
     tasks_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
     tasks_table.add_column("#", style="dim", width=3)
-    tasks_table.add_column("Agent", style="cyan")
-    tasks_table.add_column("Task")
+    tasks_table.add_column("Task", style="cyan")
+    tasks_table.add_column("Agent")
     tasks_table.add_column("Human review")
-    for i, task in enumerate(crew.tasks):
+    for i, task in enumerate(crew.tasks, start=1):
         review_cell = "[yellow]> pauses for feedback[/yellow]" if task.human_input else ""
-        tasks_table.add_row(
-            str(i + 1),
-            task.agent.role,
-            task.description[:72].strip() + "...",
-            review_cell,
-        )
+        tasks_table.add_row(str(i), task.name or task.agent.role, task.agent.role, review_cell)
     console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))
     console.print()
 
 
-def main() -> None:
-    args = parse_args()
-    check_env()
+def _new_run_id() -> str:
+    """Return a fresh run identifier: UTC timestamp plus a short random suffix."""
+    return datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
 
-    # Import crew after env check
+
+def _persist_run_metrics(metrics: Any) -> None:  # noqa: ANN401 - RunMetrics; a top-level import buys nothing
+    """Persist run metrics, tolerating a run where no programme was selected.
+
+    Both run surfaces (headless and the TUI) call this so their no-programme
+    handling cannot drift apart. ``runtime.run_dir()`` raises ``RuntimeError``
+    when no programme was bound - a normal outcome (every candidate programme
+    out of scope) - in which case there is nowhere to persist; warn and return
+    rather than surfacing the internal ``bind_*`` invariant string. A genuine
+    write failure (``OSError``) is deliberately not caught, so each caller can
+    treat it as the real error it is: headless exits 1, the TUI surfaces it in
+    the pipeline log.
+    """
+    import runtime
+    from tools.metrics import save_metrics
+
+    try:
+        save_metrics(metrics, runtime.run_dir())
+    except RuntimeError:
+        logger.warning(
+            "Run metrics were not persisted: no programme was selected this run, "
+            "so there is no run directory to save into."
+        )
+
+
+def _interactive_tty() -> bool:
+    """Return whether both stdin and stdout are attached to a real terminal.
+
+    The Textual TUI needs an interactive terminal to draw and read keys; piped
+    or run under CI, one or both streams are redirected, so the default TUI
+    path is refused in favour of ``--headless`` rather than crashing inside
+    Textual.
+    """
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _run_tui(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Run, or on a dry run preview, the crew in the Textual TUI.
+
+    The single TUI construction site. The TUI package knows only CrewAI +
+    Textual; the cybersquad-specific bits - binding the run id, persisting run
+    metrics, estimating USD cost - are passed in as callbacks, and the run id
+    surfaces only as the human-readable ``pipeline_name`` title. On a dry run
+    nothing kicks off, so the callbacks never fire; the run id is still bound
+    (it's cheap and unique, not worth special-casing).
+    """
     import runtime
     from config import config
-    from crew import build_crew
-    from mcp_servers import provisioned_mcp_tools
-    from tools.metrics import build_run_metrics, print_metrics, save_metrics
+    from tools.metrics import build_run_metrics, estimate_cost
 
-    # Dry-run bypasses MCP startup - the agent menu is shown from a no-MCP
-    # build so dry-run does not pull in uvx / subprocess deps.
-    if args.dry_run:
-        dry_run_summary(build_crew(verbose=args.verbose))
+    # tools.tui pulls in crewui at import time. A partial install (crewui
+    # absent) would otherwise surface a raw ImportError traceback here; catch it
+    # and point the operator at the terminal-free surface instead.
+    try:
+        from tools.tui import CybersquadTUI
+    except ImportError:
+        logger.error(
+            "The Textual TUI is unavailable (crewui failed to import). Re-run with --headless."
+        )
+        sys.exit(1)
+
+    runtime.bind_run_id(_new_run_id())
+    # Seeded so a freakishly fast run can't race on_start; on_start overwrites
+    # it right before kickoff for an accurate duration.
+    state: dict[str, datetime] = {"started_at": datetime.now(UTC)}
+
+    def on_start() -> None:
+        state["started_at"] = datetime.now(UTC)
+
+    def on_complete(result: object) -> None:
+        usage = getattr(result, "token_usage", None)
+        if usage is None:
+            return
+        metrics = build_run_metrics(
+            run_id=runtime.run_id,
+            started_at=state["started_at"],
+            llm_model=config.llm.model,
+            input_tokens=getattr(usage, "prompt_tokens", 0),
+            output_tokens=getattr(usage, "completion_tokens", 0),
+        )
+        _persist_run_metrics(metrics)
+
+    def get_token_cost(input_tokens: int, output_tokens: int) -> float:
+        return estimate_cost(config.llm.model, input_tokens, output_tokens)
+
+    CybersquadTUI(
+        crew=crew,
+        record_prefix="cybersquad",
+        pipeline_name=f"Bug Bounty #{runtime.run_id}",
+        dry_run=dry_run,
+        on_start=on_start,
+        on_complete=on_complete,
+        get_token_cost=get_token_cost,
+    ).run()
+
+
+def _run_headless(crew: Any, *, dry_run: bool) -> None:  # noqa: ANN401 - decorator-wrapped Crew; tighter type buys nothing
+    """Kick off the crew on the CLI - or, on a dry run, print the pipeline and stop.
+
+    Verbosity is a crew-level knob applied once at ``build_crew(verbose=...)`` in
+    ``main`` (for both surfaces), so it is not re-threaded here.
+    """
+    import runtime
+    from config import config
+    from tools.metrics import build_run_metrics, print_metrics
+
+    if dry_run:
+        dry_run_summary(crew)
         return
 
-    runtime.bind_run_id(datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6])
+    runtime.bind_run_id(_new_run_id())
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")
@@ -131,10 +247,7 @@ def main() -> None:
     )
 
     try:
-        with provisioned_mcp_tools() as mcp_tools:
-            crew = build_crew(verbose=args.verbose, mcp_tools=mcp_tools)
-            result = crew.kickoff()
-
+        result = crew.kickoff()
         console.print()
         console.print(
             Panel(
@@ -144,7 +257,6 @@ def main() -> None:
                 padding=(1, 2),
             )
         )
-
         usage = getattr(result, "token_usage", None)
         if usage is not None:
             metrics = build_run_metrics(
@@ -155,14 +267,43 @@ def main() -> None:
                 output_tokens=getattr(usage, "completion_tokens", 0),
             )
             print_metrics(metrics)
-            save_metrics(metrics, config.reports_dir)
-
+            _persist_run_metrics(metrics)
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(0)
     except Exception:
         console.print_exception()
         sys.exit(1)
+
+
+def main() -> None:
+    args = parse_args()
+    check_env()
+    warn_if_telemetry_enabled()
+
+    # The TUI is the default surface but needs an interactive terminal. Refuse
+    # early - before build_crew opens the MCP scope - so a piped or CI run gets
+    # a clear pointer rather than a crash deep inside Textual. cybersquad fires
+    # on live targets, so a silent fall-back to headless would run the pipeline
+    # unseen; the operator opts in explicitly with --headless.
+    if not args.headless and not _interactive_tty():
+        logger.error(
+            "No interactive terminal detected (stdin/stdout is not a TTY); "
+            "the Textual TUI needs one. Re-run with --headless."
+        )
+        sys.exit(1)
+
+    # Deferred until after check_env so a run missing required credentials
+    # fails with check_env's clear message rather than an import-time error
+    # from config. build_crew opens the provisioned-MCP scope and yields a ready
+    # crew; that scope spans the renderer (dry-run still provisions).
+    from crew import build_crew
+
+    with build_crew(verbose=args.verbose) as crew:
+        if args.headless:
+            _run_headless(crew, dry_run=args.dry_run)
+        else:
+            _run_tui(crew, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ echo ""
 echo "==> Installing apt packages..."
 sudo apt-get update -qq
 
-for pkg in nmap sqlmap; do
+for pkg in nmap sqlmap traceroute; do
   if need "${pkg}"; then
     echo "[skip] ${pkg} already installed"
   else
