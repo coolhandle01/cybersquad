@@ -85,6 +85,16 @@ Rules:
 - Tests for a wrapper with an `Target*` field need `programme_in_workspace` (the conftest fixture) so the validator's `current_programme()` lookup resolves. Tests that exercise the OOS-drop path take `bystander_url` and pass its hostname; tests that invoke a wrapper end-to-end use the `invoke_tool` fixture (mirrors CrewAI's `args_schema.model_validate(...).model_dump()` -> `func(**dumped)` path so the validator actually runs - direct `.func(...)` calls bypass args_schema).
 - Do not duplicate the validator inside the body. The whole point of the typed alias is that scope-safety lives in the type signature - the body trusts the validated input.
 
+## The framework decorator is a seam, not a home
+
+`@cyber_tool` - and the `@pentest_tool` / `@research_brief_tool` specialists layered on it - is the one place in a tool that knows it is running under CrewAI. Treat that decorator as a **seam**: the binding to the framework, not the home for the tool's logic. The algorithm the tool exposes lives in plain, undecorated functions that know nothing about CrewAI - the wrapper parses the agent's input at the `args_schema` boundary and then delegates to an ordinary function (`_impl`, or a `check_X` / `load_X` helper) that takes typed arguments and returns a typed value.
+
+This is dependency inversion applied at the framework edge - Clean Architecture's "the framework is a detail." The policy (what the tool actually does) must not depend on the delivery mechanism (CrewAI); the dependency runs the other way, and CrewAI stays quarantined to the decorated one-liner. Swap or move the framework and the seam is the only thing that changes. `probe_hostnames_tool` above is the shape: `return list(probe_endpoints_impl(hostnames))`, and nothing else in the decorated body.
+
+Portability and observability are the same property seen from two sides. A plain function is drivable from a test and reachable by tooling *because* it is not fused to the framework; a decorated body is neither - a test has to reconstruct CrewAI's call path to reach it, and `mutmut` skips a decorated function's body outright (see `cybersquad-tests`). So the decoupling that lets the framework be replaced is the same decoupling that lets the algorithm be unit-tested and mutation-observed. You do not trade one for the other; the shape buys both.
+
+Well-designed tools are born this way - a signature-thin wrapper over an `_impl` that carries the logic. When you inherit a tool that is *not* this shape - detection logic fused into the decorated body - lifting the whole body into an undecorated `_impl` behind a one-line delegator is the corrective. Name it honestly: that lift is **paying down design debt, not the feature you were asked for**. It is worth doing when you are already in the file and it is the precondition for testing the logic at all, but it is retrofit, and the skill should not dress it up as the target workflow. Build the tool framework-at-the-edge in the first place and there is no debt to pay.
+
 ## Typed string primitives
 
 `models.primitives` carries the typed-string layer every higher-level model composes:

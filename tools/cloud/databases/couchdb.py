@@ -5,13 +5,16 @@ from __future__ import annotations
 import logging
 
 from models import RawFinding, Severity
+from models.service import Service
 from tools import http
+from tools.pentest.service import service
 
 logger = logging.getLogger(__name__)
 
 PORT = 5984
 
 
+@service(Service.couchdb)
 def check_couchdb(host: str) -> list[RawFinding]:
     """Return a CRITICAL finding if CouchDB on port 5984 lists databases without auth."""
     url = f"http://{host}:{PORT}/_all_dbs"

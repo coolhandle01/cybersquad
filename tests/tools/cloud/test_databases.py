@@ -289,14 +289,21 @@ class TestCheckMysql:
             results = check_mysql("db.example.com")
         assert len(results) == 1
         assert results[0].severity_hint == Severity.MEDIUM
-        assert "MySQL" in results[0].title
+        # A plain MySQL greeting is reported as MySQL, not lumped with MariaDB.
+        assert "MySQL Exposed" in results[0].title
+        assert "MariaDB" not in results[0].title
+        assert "8.0.28" in results[0].evidence
 
     def test_detects_mariadb_string(self):
         mariadb_data = b"\x20\x00\x00\x00" + b"\xff" + b"5.5.5-10.6.0-MariaDB\x00" + b"\x00" * 20
         with patch("socket.create_connection", return_value=_mock_socket(mariadb_data)):
             results = check_mysql("db.example.com")
         assert len(results) == 1
-        assert "MySQL" in results[0].title
+        # A MariaDB greeting is named as MariaDB so the VR/PT targets the
+        # right advisory stream - not reported as MySQL.
+        assert "MariaDB Exposed" in results[0].title
+        assert "MySQL" not in results[0].title
+        assert "MariaDB" in results[0].evidence
 
     def test_no_finding_on_unrecognised_response(self):
         with patch("socket.create_connection", return_value=_mock_socket(b"\xff\xff\xff\xff")):

@@ -20,6 +20,8 @@ across every consumer.
 |                          | ``RdapRecord`` |
 | ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
+| ``models.cloud`` | ``Cloud`` |
+| ``models.framework`` | ``Framework`` |
 | ``models.nvd`` | ``CVE``, ``CvssVector``, ``Severity`` |
 | ``models.mitre`` | ``CWE`` |
 | ``models.owasp`` | ``OWASPEntry`` |
@@ -88,8 +90,10 @@ from models.attack import (
     AttackGraph,
     AttackTree,
 )
+from models.cloud import Cloud
 from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
+from models.framework import Framework
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
     HostAnnotation,
@@ -136,6 +140,7 @@ __all__ = [
     "AutnumRecord",
     "AutonomousSystem",
     "Cidr",
+    "Cloud",
     "Contact",
     "ContactRecord",
     "ContactRole",
@@ -145,6 +150,7 @@ __all__ = [
     "Email",
     "Endpoint",
     "EndpointPage",
+    "Framework",
     "HostAnnotation",
     "HostInsight",
     "HostPriority",

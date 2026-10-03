@@ -13,6 +13,7 @@ from urllib.parse import urlparse, urlunparse
 
 from config import config
 from models import AttackGraph, Endpoint, RawFinding, Severity
+from models.service import Service
 from tools import http
 from tools.cloud.databases import (
     check_couchdb,
@@ -22,6 +23,7 @@ from tools.cloud.databases import (
     check_postgresql,
     check_redis,
 )
+from tools.pentest.service import service
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +229,7 @@ def check_admin_panels(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.cpanel)
 def check_cpanel(hostnames: list[str]) -> list[RawFinding]:
     """Check for exposed cPanel (ports 2082/2083) and WHM (ports 2086/2087)."""
     findings: list[RawFinding] = []
@@ -241,6 +244,7 @@ def check_cpanel(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.plesk)
 def check_plesk(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Plesk control panel (ports 8880/8443)."""
     findings = _probe_panel(hostnames, "http", 8880, "/", "Plesk", "Plesk", "plesk_check")
@@ -251,6 +255,7 @@ def check_plesk(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.directadmin)
 def check_directadmin(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed DirectAdmin control panel (port 2222)."""
     findings = _probe_panel(
@@ -260,6 +265,7 @@ def check_directadmin(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.webmin)
 def check_webmin(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Webmin administration panel (port 10000)."""
     findings = _probe_panel(hostnames, "https", 10000, "/", "Webmin", "Webmin", "webmin_check")
@@ -267,6 +273,7 @@ def check_webmin(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.grafana)
 def check_grafana_ports(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Grafana instance on port 3000."""
     findings = _probe_panel(hostnames, "http", 3000, "/", "Grafana", "Grafana", "grafana_check")
@@ -274,6 +281,7 @@ def check_grafana_ports(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.grafana)
 def check_grafana_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     """Check for Grafana reverse-proxied at /grafana on existing endpoints."""
     findings = _probe_path(
@@ -283,6 +291,7 @@ def check_grafana_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.kibana)
 def check_kibana_ports(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Kibana instance on port 5601."""
     findings = _probe_panel(hostnames, "http", 5601, "/", "Kibana", "Kibana", "kibana_check")
@@ -290,6 +299,7 @@ def check_kibana_ports(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.kibana)
 def check_kibana_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     """Check for Kibana reverse-proxied at /kibana on existing endpoints."""
     findings = _probe_path(
@@ -299,6 +309,7 @@ def check_kibana_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.portainer)
 def check_portainer_ports(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Portainer Docker management UI on port 9000."""
     findings = _probe_panel(
@@ -308,6 +319,7 @@ def check_portainer_ports(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.portainer)
 def check_portainer_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     """Check for Portainer reverse-proxied at /portainer on existing endpoints."""
     findings = _probe_path(
@@ -317,6 +329,7 @@ def check_portainer_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.consul, Service.vault)
 def check_consul_vault_ports(hostnames: list[str]) -> list[RawFinding]:
     """Check for exposed Consul UI (port 8500) and Vault UI (port 8200)."""
     findings = _probe_panel(
@@ -329,6 +342,7 @@ def check_consul_vault_ports(hostnames: list[str]) -> list[RawFinding]:
     return findings
 
 
+@service(Service.consul, Service.vault)
 def check_consul_vault_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
     """Check for Consul / Vault reverse-proxied at /consul/ui or /vault/ui."""
     origins = _unique_origins(endpoints)

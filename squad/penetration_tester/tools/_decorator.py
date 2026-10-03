@@ -37,31 +37,37 @@ def pentest_tool(
     check_fn: object = None,
     args_schema: type[BaseModel],
 ) -> Callable[[_PentestFn], _PentestTool]:
-    """Pentest-specialised wrapper. Composes ``cyber_tool`` plus OWASP injection.
+    """Pentest-specialised wrapper. Composes ``cyber_tool`` plus classification injection.
 
     ``cyber_tool`` handles the schema override (and the auto-detected
-    typed-target scope guard); ``pentest_tool`` layers the OWASP
-    categories from ``check_fn.owasp_categories`` into the agent-facing
-    docstring. Every pentest probe goes through this wrapper, never
-    bare ``@tool`` and never raw ``@cyber_tool`` - the OWASP framing is
-    what the PT agent's role.md teaches it to reason against.
+    typed-target scope guard); ``pentest_tool`` layers four
+    categorisation streams from the underlying check function into the
+    agent-facing docstring:
 
-    FIXME(#88): both ``check_fn=`` and the helper-side ``@owasp`` that
-    stamps ``owasp_categories`` onto it are interim plumbing. The
-    redesign in #88 replaces this whole layer with ``@attack(name=,
-    requires={Label.X, ...})`` on typed ``Exploit`` classes - the
-    OWASP / cheat-sheet label catalogue becomes the source of truth,
-    queryable for precondition filtering, and the per-helper docstring
-    stamp goes away. Don't simplify the indirection here in the
-    meantime; #88 rewrites the surface.
+    * ``check_fn.owasp_categories`` (from ``@owasp(...)``)
+    * ``check_fn.frameworks`` (from ``@framework(...)``)
+    * ``check_fn.clouds`` (from ``@cloud(...)``)
+    * ``check_fn.services`` (from ``@service(...)``)
+
+    Every pentest probe goes through this wrapper, never bare ``@tool``
+    and never raw ``@cyber_tool`` - the OWASP framing is what the PT
+    agent's role.md teaches it to reason against, with framework /
+    cloud / service stamps layered on for the probes that target a
+    specific stack, provider, or named product.
     """
 
     def decorator(fn: _PentestFn) -> _PentestTool:
         if check_fn is not None:
-            cats = getattr(check_fn, "owasp_categories", ())
-            if cats:
-                lines = "\n".join(f"  - {c}" for c in cats)
-                fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
+            for attr, heading in (
+                ("owasp_categories", "OWASP Top 10"),
+                ("frameworks", "Frameworks targeted"),
+                ("clouds", "Cloud providers targeted"),
+                ("services", "Services targeted"),
+            ):
+                values = getattr(check_fn, attr, ())
+                if values:
+                    lines = "\n".join(f"  - {v}" for v in values)
+                    fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\n{heading}:\n{lines}\n"
         wrapped = cyber_tool(name, args_schema=args_schema)(fn)
         return cast(_PentestTool, wrapped)
 
